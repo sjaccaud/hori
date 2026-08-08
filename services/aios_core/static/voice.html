@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="AIOS">
+    <meta name="apple-mobile-web-app-title" content="HORI">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-    <title>AIOS Voice</title>
+    <title>HORI Voice</title>
     <style>
         * {
             margin: 0;
@@ -278,7 +278,7 @@
     <div id="aths-banner" style="display:none; background:#141414; border:1px solid #333; border-radius:12px; padding:14px 16px; margin-bottom:16px; width:100%; max-width:600px; font-size:14px; line-height:1.5;">
         <div style="display:flex; justify-content:space-between; align-items:start;">
             <div>
-                <strong style="color:#7c9eff;">Add AIOS to Home Screen</strong><br>
+                <strong style="color:#7c9eff;">Add HORI to Home Screen</strong><br>
                 <span style="color:#888;">Tap the Share button, then "Add to Home Screen" for one-tap voice access.</span>
             </div>
             <button onclick="document.getElementById('aths-banner').style.display='none'; localStorage.setItem('aths_dismissed','1');" style="background:none; border:none; color:#555; font-size:20px; padding:0 4px; cursor:pointer;">x</button>
@@ -296,7 +296,7 @@
     })();
     </script>
     <div class="header">
-        <h1>AIOS</h1>
+        <h1>HORI</h1>
         <div class="status">
             <span class="status-dot connecting" id="status-dot"></span>
             <span id="status-text">Connecting...</span>
@@ -319,7 +319,7 @@
 
         <div class="text-section">
             <div class="text-hint" id="text-hint">Tap below and use the keyboard mic to speak</div>
-            <input type="text" id="text-input" placeholder="Ask AIOS anything..." onkeydown="if(event.key==='Enter')sendText()" autofocus>
+            <input type="text" id="text-input" placeholder="Ask HORI anything..." onkeydown="if(event.key==='Enter')sendText()" autofocus>
             <button class="send-button" id="send-button" onclick="sendText()">Send</button>
         </div>
 
@@ -533,7 +533,7 @@ function initPresence() {
                 text.textContent = 'Thinking...';
             } else if (data.state === 'has_nudge') {
                 dot.className = 'status-dot has_nudge';
-                text.textContent = 'AIOS has something to say';
+                text.textContent = 'HORI has something to say';
                 if (chimeEnabled) playChime();
             }
         } catch (e) { /* ignore parse errors */ }
@@ -645,7 +645,7 @@ function createRecognition() {
 }
 
 function toggleMic() {
-    if (isBusy) return;  // don't start listening while AIOS is responding
+    if (isBusy) return;  // don't start listening while HORI is responding
     if (!checkSpeechSupport()) return;
 
     // Unlock audio on first interaction - critical for iOS
@@ -888,7 +888,7 @@ function addHistory(question, answer) {
     const item = document.createElement('div');
     item.className = 'history-item';
     item.innerHTML = '<div class="q">You: ' + escapeHtml(question) + '</div>' +
-                     '<div class="a">AIOS: ' + escapeHtml(answer.substring(0, 200)) + (answer.length > 200 ? '...' : '') + '</div>';
+                     '<div class="a">HORI: ' + escapeHtml(answer) + '</div>';
     history.insertBefore(item, history.firstChild);
     while (history.children.length > 10) {
         history.removeChild(history.lastChild);

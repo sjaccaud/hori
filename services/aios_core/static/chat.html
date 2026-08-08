@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIOS Chat</title>
+    <title>HORI Chat</title>
     <style>
         * {
             margin: 0;
@@ -120,14 +120,14 @@
 </head>
 <body>
     <div class="header">
-        <h1>AIOS <span class="presence-dot idle" id="presence-dot"></span></h1>
+        <h1>HORI <span class="presence-dot idle" id="presence-dot"></span></h1>
         <a href="/voice">Voice</a>
     </div>
 
     <div id="conversation"></div>
 
     <div class="input-area">
-        <textarea id="text-input" autofocus placeholder="Ask AIOS anything..." rows="1"></textarea>
+        <textarea id="text-input" autofocus placeholder="Ask HORI anything..." rows="1"></textarea>
         <div class="hint">Enter to send - Shift+Enter for newline</div>
     </div>
 
@@ -169,7 +169,7 @@ async function sendText() {
     }
 
     isBusy = true;
-    input.placeholder = 'AIOS is thinking...';
+    input.placeholder = 'HORI is thinking...';
 
     // Create assistant message element for streaming
     const assistantDiv = document.createElement('div');
