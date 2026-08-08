@@ -427,7 +427,7 @@ less and let the soak tell you what you need.
   10) — it should produce work orders that are genuinely useful, not
   noise. Risk: low — separate service, own unit tests, not in soak
   gate. Traces to: PoC 10.1–10.3.)
-- [ ] **STRAT-8: Memory Consolidation Quality Metrics** `[A]` (The
+- [x] **STRAT-8: Memory Consolidation Quality Metrics** `[A]` (The
   Sleep & Dream cycle (nightly systemd timer, PoC 8.5) needs quality
   measurement. Add: consolidation fidelity metrics (how much
   information is preserved vs. lost in distillation), promotion rate
