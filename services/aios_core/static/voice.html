@@ -643,15 +643,17 @@ function playChime() {
 initPresence();
 
 // Warm up microphone permission once on page load.
-// This uses getUserMedia to trigger the iOS permission prompt a single time,
-// then immediately releases the stream. iOS remembers the permission for
-// the session, so Web Speech API won't re-prompt on every refresh.
+// This uses getUserMedia to trigger the permission prompt a single time.
+// We keep the stream alive (not stopped) because desktop Chrome's Web Speech
+// API can be flaky if the mic stream is released — it may fire no-speech
+// immediately. Keeping the stream open ensures the mic is ready when
+// SpeechRecognition.start() is called.
+let micStream = null;
 async function warmUpMicPermission() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         micPermissionGranted = true;
-        console.log('Mic permission warmed up');
+        console.log('Mic permission warmed up, stream kept alive');
     } catch (e) {
         console.log('Mic permission warmup failed:', e.message);
         // Not fatal - Web Speech API will still try to prompt on its own
@@ -711,7 +713,7 @@ function createRecognition() {
     };
 
     rec.onerror = function(event) {
-        console.error('Recognition error:', event.error);
+        console.error('Recognition error:', event.error, event.message || '');
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
             document.getElementById('mic-label').textContent = 'Mic access denied - check browser settings';
         } else if (event.error === 'no-speech') {
@@ -721,6 +723,9 @@ function createRecognition() {
             document.getElementById('mic-label').textContent = 'No microphone found';
         } else if (event.error === 'network') {
             document.getElementById('mic-label').textContent = 'Network error - check connection';
+        } else if (event.error === 'aborted') {
+            // Normal — user tapped stop or we aborted before restarting
+            console.log('Recognition aborted (normal)');
         } else {
             document.getElementById('mic-label').textContent = 'Error: ' + event.error;
         }
