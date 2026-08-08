@@ -66,6 +66,7 @@ def _apply_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
         "HORI_EMBED_MODEL": ("embedding", "model"),
         "HORI_EMBED_DIM": ("embedding", "dim"),
         "HORI_QDRANT_URL": ("memory", "qdrant_url"),
+        "HORI_MEMORY_BACKEND": ("memory", "backend"),
         "HORI_TTS_BACKEND": ("tts", "backend"),
         "HORI_KOKORO_MODEL_PATH": ("tts", "kokoro", "model_path"),
         "HORI_KOKORO_VOICES_PATH": ("tts", "kokoro", "voices_path"),
@@ -164,6 +165,7 @@ EMBED_MODEL = config["embedding"]["model"]
 EMBED_DIM = config["embedding"]["dim"]
 
 # Memory
+MEMORY_BACKEND = config["memory"].get("backend", "qdrant")
 QDRANT_URL = config["memory"]["qdrant_url"]
 COLLECTION_WORKING = config["memory"]["collection_working"]
 COLLECTION_PROJECT = config["memory"]["collection_project"]

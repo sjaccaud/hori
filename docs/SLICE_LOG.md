@@ -5,16 +5,33 @@
 
 ## Current Slice
 
-(none — SLICE-05 complete, ready for SLICE-06)
+(none — SLICE-06 complete, ready for SLICE-07)
 
 ## Slice Queue
 
 Proposed order (adjustable at any retro):
 
-1. **SLICE-06: SQLite memory backend** — HORI works with zero external deps beyond Python. Demo: chat with HORI using SQLite instead of Qdrant.
-2. **SLICE-07: README + LICENSE + CONTRIBUTING** — public repo ready. Demo: stranger can clone and understand the project.
+1. **SLICE-07: README + LICENSE + CONTRIBUTING** — public repo ready. Demo: stranger can clone and understand the project.
 
 ## Completed Slices
+
+### SLICE-06: SQLite memory backend — COMPLETE
+- Branch: slice/06-sqlite-memory
+- What was built: `hori/sqlite_memory.py` (SQLite backend with cosine similarity),
+  `hori/test_sqlite_memory.py` (24 tests). Refactored `services/aios_core/memory.py`
+  to dispatch to either Qdrant or SQLite backend based on `memory.backend` config.
+  Updated `intent_graph.py` to use `scroll_all()` instead of direct Qdrant client.
+  Updated `_retrieve_memory_batch` in main.py to use the backend-agnostic API.
+  Added `memory.backend` to `hori/config.py` and `config.reference.yaml`.
+- Surprises: The memory.py refactor was straightforward — the interface was already
+  clean. The main.py `_retrieve_memory_batch` was directly importing qdrant_client,
+  which needed to be refactored to use the public `retrieve_memory` API instead.
+  The intent_graph.py `build_from_qdrant` had nested loop indentation that needed
+  careful untangling when switching from scroll() to scroll_all().
+- Skipped: `memory_consolidation.py` still uses Qdrant directly — it's a standalone
+  script, not part of the hot path. Will be updated when consolidation is refactored.
+- Demo: Set `memory.backend: sqlite` in hori.yaml, chat with HORI — memories stored
+  and retrieved from `~/.local/share/hori/memory.db` with no Qdrant running.
 
 ### SLICE-05: hori detect — COMPLETE
 - Branch: slice/05-hori-detect
