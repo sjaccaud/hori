@@ -1119,7 +1119,10 @@ async def openai_chat_completions(req: OAIChatRequest):
             return _oai_response(response_text, req.model, conv_id)
 
     # Build system prompt (trimmed if no memory hits)
-    system_prompt = _build_system_prompt(state_context, memory_context)
+    tools_available = get_tool_client().is_available()
+    system_prompt = _build_system_prompt(
+        state_context, memory_context, tools_enabled=tools_available,
+    )
     if system_status_context:
         system_prompt += f"\n\n=== CURRENT SYSTEM STATUS ===\n{system_status_context}"
 
@@ -1169,8 +1172,18 @@ async def openai_chat_completions(req: OAIChatRequest):
 
     # Non-streaming: single async LLM call
     response_text = await _call_llm_with_messages(system_prompt, trimmed_messages)
+
+    # PoC 16.1: Check for tool calls and execute if found
+    tool_was_called = False
+    if tools_available:
+        response_text, tool_was_called = await _maybe_call_tool(
+            response_text, system_prompt, trimmed_messages, conv_id=conv_id,
+        )
+        # Safety net: strip any tool-call artifacts that leaked into the response
+        response_text = strip_tool_call_artifacts(response_text)
+
     # Anti-hallucination gate (PoC 15.14): intercept hallucinated action claims
-    response_text = verify_and_log(response_text, tool_was_called=False,
+    response_text = verify_and_log(response_text, tool_was_called=tool_was_called,
                                    conversation_id=conv_id, endpoint="/v1/chat/completions")
     # Persist in background - don't block the response
     asyncio.create_task(_persist_raw_async(user_text, response_text, conv_id, None))

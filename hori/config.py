@@ -81,6 +81,7 @@ def _apply_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
         "HORI_SAFETY_EVENTS_LOG": ("paths", "safety_events_log"),
         "HORI_TOOL_SOCKET": ("paths", "tool_socket"),
         "HORI_ADMIN_TOKEN": ("admin", "token"),
+        "HORI_ALLOWED_READ_PATHS": ("paths", "allowed_read_paths"),
         # Legacy env var compatibility (existing systemd services use these)
         "LLM_API_URL": ("llm", "api_url"),
         "LLM_MODEL": ("llm", "model"),
@@ -118,6 +119,9 @@ def _apply_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
             d[final_key] = env_val.lower() in ("true", "1", "yes")
         elif isinstance(current, int):
             d[final_key] = int(env_val)
+        elif isinstance(current, list):
+            # Comma-separated env var → list
+            d[final_key] = [v.strip() for v in env_val.split(",") if v.strip()]
         else:
             d[final_key] = env_val
 

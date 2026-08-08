@@ -120,7 +120,7 @@ fi
 HORI_USER="${SUDO_USER:-$(logname 2>/dev/null || echo $USER)}"
 HORI_HOME=$(getent passwd "$HORI_USER" | cut -d: -f6)
 
-sed "s|%h/Projects/hori|$PROJECT_DIR|g; s|%h/.config|$HORI_HOME/.config|g; s|%i|$HORI_USER|g" "$SERVICE_SRC" > "$SERVICE_DST"
+sed "s|%h/Projects/hori|$PROJECT_DIR|g; s|%h/.config|$HORI_HOME/.config|g; s|%h/Projects|$HORI_HOME/Projects|g; s|%i|$HORI_USER|g" "$SERVICE_SRC" > "$SERVICE_DST"
 chown root:root "$SERVICE_DST"
 chmod 0644 "$SERVICE_DST"
 echo "   Installed: $SERVICE_DST (user=$HORI_USER, dir=$PROJECT_DIR)"

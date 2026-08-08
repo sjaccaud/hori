@@ -17,6 +17,10 @@ Environment=AIOS_AUDIT_LOG=/var/log/hori/tool_audit.jsonl
 # to the real config location. ProtectHome=read-only allows reading this.
 # The install script replaces %h with the actual home dir.
 Environment=XDG_CONFIG_HOME=%h/.config
+# Allowed read paths: the tool daemon runs as aios-worker (home=/nonexistent)
+# so ~/Projects in the default config expands wrong. Set absolute paths here.
+# The install script replaces %h with the real home dir.
+Environment=HORI_ALLOWED_READ_PATHS=%h/Projects
 
 # The tool daemon applies its own Landlock + seccomp restrictions
 # (PoC 15.0b/c/d). systemd's NoNewPrivileges is required for both.
