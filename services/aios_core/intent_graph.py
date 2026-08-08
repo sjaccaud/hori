@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient  # kept for fallback; not used when SQLite backend is active
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -86,102 +86,87 @@ class IntentGraph:
                     break
 
     def build_from_qdrant(self):
-        """Scan all Qdrant points and build the graph from edges + topics."""
-        client = QdrantClient(url=QDRANT_URL)
+        """Scan all memory points and build the graph from edges + topics.
+
+        Works with both Qdrant and SQLite backends — uses the memory
+        module's scroll_all() which dispatches to the active backend.
+        """
+        from .memory import scroll_all
         total_points = 0
 
-        for collection in COLLECTIONS:
-            tier = collection.replace("aios_", "")
-            offset = None
-            while True:
-                result = client.scroll(
-                    collection_name=collection,
-                    limit=100,
-                    offset=offset,
-                    with_payload=True,
-                    with_vectors=False,
-                )
-                points, next_offset = result
-                if not points:
-                    break
+        for payload in scroll_all():
+            total_points += 1
+            pid = payload.get("id", "")
+            tier = payload.get("tier", "working")
 
-                for point in points:
-                    total_points += 1
-                    pid = str(point.id)
-                    payload = point.payload or {}
+            # Add memory node
+            role = payload.get("role", "unknown")
+            content = payload.get("content", "")[:80]
+            conv_id = payload.get("conversation_id", "")
 
-                    # Add memory node
-                    role = payload.get("role", "unknown")
-                    content = payload.get("content", "")[:80]
-                    conv_id = payload.get("conversation_id", "")
+            self.add_node(GraphNode(
+                id=pid,
+                type="memory",
+                label=content,
+                tier=tier,
+                metadata={
+                    "role": role,
+                    "conversation_id": conv_id,
+                    "surface": payload.get("surface", ""),
+                },
+            ))
 
-                    self.add_node(GraphNode(
-                        id=pid,
-                        type="memory",
-                        label=content,
-                        tier=tier,
-                        metadata={
-                            "role": role,
-                            "conversation_id": conv_id,
-                            "surface": payload.get("surface", ""),
-                        },
+            # Add conversation node and link
+            if conv_id:
+                conv_node_id = f"conv:{conv_id}"
+                self.add_node(GraphNode(
+                    id=conv_node_id,
+                    type="conversation",
+                    label=f"Conversation {conv_id[:8]}",
+                    metadata={"tier": tier},
+                ))
+                self.add_edge(GraphEdge(
+                    source=conv_node_id,
+                    target=pid,
+                    type="contains",
+                ))
+
+            # Add topic nodes and link
+            topics = payload.get("topics", [])
+            for topic in topics:
+                topic_id = f"topic:{topic.lower()}"
+                self.add_node(GraphNode(
+                    id=topic_id,
+                    type="topic",
+                    label=topic,
+                ))
+                self.add_edge(GraphEdge(
+                    source=pid,
+                    target=topic_id,
+                    type="has_topic",
+                ))
+
+                # Co-occurrence: topics that appear together are related
+                for other_topic in topics:
+                    if other_topic != topic:
+                        other_id = f"topic:{other_topic.lower()}"
+                        self.add_edge(GraphEdge(
+                            source=topic_id,
+                            target=other_id,
+                            type="co_occurs_with",
+                        ))
+
+            # Process explicit edges from payload
+            edges = payload.get("edges", [])
+            for edge in edges:
+                target = edge.get("target", "")
+                etype = edge.get("type", "relates_to")
+                if target:
+                    self.add_edge(GraphEdge(
+                        source=pid,
+                        target=target,
+                        type=etype,
                     ))
-
-                    # Add conversation node and link
-                    if conv_id:
-                        conv_node_id = f"conv:{conv_id}"
-                        self.add_node(GraphNode(
-                            id=conv_node_id,
-                            type="conversation",
-                            label=f"Conversation {conv_id[:8]}",
-                            metadata={"tier": tier},
-                        ))
-                        self.add_edge(GraphEdge(
-                            source=conv_node_id,
-                            target=pid,
-                            type="contains",
-                        ))
-
-                    # Add topic nodes and link
-                    topics = payload.get("topics", [])
-                    for topic in topics:
-                        topic_id = f"topic:{topic.lower()}"
-                        self.add_node(GraphNode(
-                            id=topic_id,
-                            type="topic",
-                            label=topic,
-                        ))
-                        self.add_edge(GraphEdge(
-                            source=pid,
-                            target=topic_id,
-                            type="has_topic",
-                        ))
-
-                        # Co-occurrence: topics that appear together are related
-                        for other_topic in topics:
-                            if other_topic != topic:
-                                other_id = f"topic:{other_topic.lower()}"
-                                self.add_edge(GraphEdge(
-                                    source=topic_id,
-                                    target=other_id,
-                                    type="co_occurs_with",
-                                ))
-
-                    # Process explicit edges from payload
-                    edges = payload.get("edges", [])
-                    for edge in edges:
-                        target = edge.get("target", "")
-                        etype = edge.get("type", "relates_to")
-                        if target:
-                            self.add_edge(GraphEdge(
-                                source=pid,
-                                target=target,
-                                type=etype,
-                            ))
-
-                offset = next_offset
-                if not next_offset:
-                    break
 
         logger.info(f"Built graph: {len(self.nodes)} nodes, {len(self.edges)} edges from {total_points} points")
 

@@ -1861,12 +1861,8 @@ async def voice_chat_audio(req: VoiceChatRequest):
 async def _retrieve_memory_batch(query: str) -> list:
     """Retrieve from all 3 tiers using a single embedding call."""
     try:
-        from .memory import get_embedding, get_client, _tier_to_collection
-        from qdrant_client.http import models as qmodels
-        # Single embedding call for the query
-        vector = get_embedding(query)
-        client = get_client()
-        # Query all 3 tiers in parallel with the same vector
+        from .memory import retrieve_memory
+        # Query all 3 tiers with appropriate thresholds
         tiers = [
             ("working", 0.3, 3),
             ("project", 0.5, 3),
@@ -1874,14 +1870,8 @@ async def _retrieve_memory_batch(query: str) -> list:
         ]
         results = []
         for tier, threshold, limit in tiers:
-            collection = _tier_to_collection(tier)
-            r = client.query_points(
-                collection_name=collection,
-                query=vector,
-                limit=limit,
-                score_threshold=threshold,
-            )
-            results.extend(point.payload for point in r.points if point.payload)
+            hits = retrieve_memory(query, tier=tier, limit=limit, score_threshold=threshold)
+            results.extend(hits)
         return results
     except Exception as e:
         logger.warning(f"Memory retrieval failed: {e}")

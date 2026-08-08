@@ -30,8 +30,12 @@ embedding:
   model: "nomic-embed-text-v1.5.Q8_0"
   dim: 768
 
-# --- Memory (Qdrant vector database) ---
+# --- Memory (vector database for semantic recall) ---
 memory:
+  # Backend: "qdrant" (default, requires Qdrant server) or "sqlite"
+  # (zero external deps, uses ~/.local/share/hori/memory.db).
+  # SQLite is slower for large datasets but works out of the box.
+  backend: "qdrant"
   qdrant_url: "http://localhost:6333"
   # Collection names. These are schema, not user config — but exposed here
   # for advanced users who want to namespace multiple HORI instances.
