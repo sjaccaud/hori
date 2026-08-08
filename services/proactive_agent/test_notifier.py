@@ -39,7 +39,7 @@ def sample_work_orders():
 def test_format_proposals_includes_all_fields(sample_work_orders):
     """The notification body should include title, priority, rationale, and first steps."""
     body = format_proposals(sample_work_orders)
-    assert "AIOS has new work-order proposals" in body
+    assert "HORI has new work-order proposals" in body
     assert "Implement reward function auditing" in body
     assert "Integrate AirLLM for efficient inference" in body
     assert "HIGH" in body
@@ -133,15 +133,70 @@ def test_notify_proposals_empty_list_returns_false():
 
 
 def test_notify_proposals_falls_through_to_ntfy(sample_work_orders, tmp_path, monkeypatch):
-    """If Telegram and HASS both fail/unconfigured, ntfy should be tried."""
+    """If Telegram, HASS, and webhook all fail/unconfigured, ntfy should be tried."""
     monkeypatch.setattr(notifier, "NOTIFIED_LEDGER_PATH", tmp_path / "notified.json")
     fake_resp = MagicMock()
     fake_resp.ok = True
     with patch.object(notifier, "TELEGRAM_BOT_TOKEN", ""), patch.object(notifier, "TELEGRAM_CHAT_ID", ""), \
          patch.object(notifier, "HASS_URL", ""), patch.object(notifier, "HASS_TOKEN", ""), \
-         patch.object(notifier, "NTFY_TOPIC", "aios-test"), \
+         patch.object(notifier, "WEBHOOK_URL", ""), \
+         patch.object(notifier, "NTFY_TOPIC", "hori-test"), \
          patch("services.proactive_agent.notifier.requests.post", return_value=fake_resp) as mock_post:
         assert notify_proposals(sample_work_orders) is True
         # The ntfy call posts to the topic URL.
         called_url = mock_post.call_args.args[0]
-        assert "aios-test" in called_url
+        assert "hori-test" in called_url
+
+
+def test_send_webhook_skipped_without_url():
+    """_send_webhook should return False if no URL is configured."""
+    with patch.object(notifier, "WEBHOOK_URL", ""):
+        assert notifier._send_webhook("test") is False
+
+
+def test_send_webhook_success():
+    """_send_webhook should return True on a successful POST."""
+    fake_resp = MagicMock()
+    fake_resp.ok = True
+    with patch.object(notifier, "WEBHOOK_URL", "https://hooks.example.com/abc"), \
+         patch("services.proactive_agent.notifier.requests.post", return_value=fake_resp) as mock_post:
+        assert notifier._send_webhook("test message") is True
+        # Should send JSON with text and username
+        sent_json = mock_post.call_args.kwargs["json"]
+        assert sent_json["text"] == "test message"
+        assert sent_json["username"] == "HORI"
+
+
+def test_send_webhook_failure():
+    """_send_webhook should return False on a failed POST."""
+    fake_resp = MagicMock()
+    fake_resp.ok = False
+    fake_resp.status_code = 500
+    fake_resp.text = "Internal Server Error"
+    with patch.object(notifier, "WEBHOOK_URL", "https://hooks.example.com/abc"), \
+         patch("services.proactive_agent.notifier.requests.post", return_value=fake_resp):
+        assert notifier._send_webhook("test message") is False
+
+
+def test_notify_proposals_uses_webhook(sample_work_orders, tmp_path, monkeypatch):
+    """If Telegram and HASS are unconfigured, webhook should be tried before ntfy."""
+    monkeypatch.setattr(notifier, "NOTIFIED_LEDGER_PATH", tmp_path / "notified.json")
+    fake_resp = MagicMock()
+    fake_resp.ok = True
+    with patch.object(notifier, "TELEGRAM_BOT_TOKEN", ""), patch.object(notifier, "TELEGRAM_CHAT_ID", ""), \
+         patch.object(notifier, "HASS_URL", ""), patch.object(notifier, "HASS_TOKEN", ""), \
+         patch.object(notifier, "WEBHOOK_URL", "https://hooks.example.com/abc"), \
+         patch.object(notifier, "NTFY_TOPIC", "hori-test"), \
+         patch("services.proactive_agent.notifier.requests.post", return_value=fake_resp) as mock_post:
+        assert notify_proposals(sample_work_orders) is True
+        # Should have called the webhook URL, not ntfy
+        called_url = mock_post.call_args.args[0]
+        assert "hooks.example.com" in called_url
+        assert "hori-test" not in called_url
+
+
+def test_format_proposals_says_hori(sample_work_orders):
+    """format_proposals should say HORI, not AIOS."""
+    text = notifier.format_proposals(sample_work_orders)
+    assert "HORI" in text
+    assert "AIOS" not in text

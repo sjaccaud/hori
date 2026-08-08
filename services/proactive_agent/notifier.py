@@ -53,6 +53,9 @@ HASS_NOTIFY_SERVICE = os.getenv("HASS_NOTIFY_SERVICE", "notify.mobile_app")
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "")
 NTFY_SERVER = os.getenv("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 
+# Webhook channel (generic JSON POST — works with Slack, Discord, custom endpoints)
+WEBHOOK_URL = os.getenv("HORI_WEBHOOK_URL", "")
+
 # Telegram caps a single message at 4096 chars. We leave headroom for the
 # header and per-proposal formatting.
 TELEGRAM_MAX_CHARS = 4000
@@ -65,7 +68,7 @@ def format_proposals(work_orders: List[dict]) -> str:
     The message is prefixed with a header so the user knows it's from AIOS
     and can distinguish a "Yes, AND" proposal from a direct message.
     """
-    lines = ["AIOS has new work-order proposals for you:\n"]
+    lines = ["HORI has new work-order proposals for you:\n"]
     for wo in work_orders:
         priority = wo.get("priority", "?")
         title = wo.get("title", "(untitled)")
@@ -127,7 +130,7 @@ def _send_hass(text: str) -> bool:
     return False
 
 
-def _send_ntfy(text: str, title: str = "AIOS Proposals") -> bool:
+def _send_ntfy(text: str, title: str = "HORI Proposals") -> bool:
     """Send a notification via an ntfy.sh server. Returns True on success."""
     if not NTFY_TOPIC:
         return False
@@ -140,6 +143,29 @@ def _send_ntfy(text: str, title: str = "AIOS Proposals") -> bool:
         logger.warning("ntfy publish failed: %s %s", resp.status_code, resp.text[:200])
     except requests.RequestException as e:
         logger.warning("ntfy request failed: %s", e)
+    return False
+
+
+def _send_webhook(text: str) -> bool:
+    """Send a notification via a generic webhook (JSON POST).
+
+    Works with Slack incoming webhooks, Discord webhooks, or any endpoint
+    that accepts a JSON body with a 'text' field. Returns True on success.
+    """
+    if not WEBHOOK_URL:
+        return False
+    try:
+        resp = requests.post(
+            WEBHOOK_URL,
+            json={"text": text, "username": "HORI"},
+            timeout=10,
+        )
+        if resp.ok:
+            logger.info("Notification sent via webhook.")
+            return True
+        logger.warning("Webhook failed: %s %s", resp.status_code, resp.text[:200])
+    except requests.RequestException as e:
+        logger.warning("Webhook request failed: %s", e)
     return False
 
 
@@ -190,7 +216,7 @@ def notify_proposals(work_orders: List[dict]) -> bool:
             if _send_telegram(body[i : i + TELEGRAM_MAX_CHARS]):
                 delivered = True
     else:
-        for sender in (_send_telegram, _send_hass):
+        for sender in (_send_telegram, _send_hass, _send_webhook):
             if sender(body):
                 delivered = True
                 break
