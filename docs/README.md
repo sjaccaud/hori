@@ -1,5 +1,9 @@
 # HORI Documentation Index
 
+> **New here?** Start with the [root README](../README.md) for a project
+> overview, quickstart, and architecture diagram. This index is the
+> detailed reference for all documentation.
+
 This is the single source of truth for HORI documentation. All docs are
 listed here with their purpose and canonical status. If a doc is marked
 SUPERSEDED, do not follow its guidance - use the replacement.
