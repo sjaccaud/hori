@@ -102,7 +102,7 @@ fully integrated, self-healing mesh.
 
 - [x] **PoC 10.1: Landscape Survey** `[A]` (GitHub trending, Hacker News, RSS feeds -> scored by relevance to user interests + projects)
 - [x] **PoC 10.2: Opportunity Proposer** `[A]` (LLM proposes 1-3 concrete work orders from top opportunities, grounded in user_model + project_state)
-- [ ] **PoC 10.3: Notification Pipeline** `[A]` → *moved to Tier 1B (Core Stabilization)*
+- [x] **PoC 10.3: Notification Pipeline** `[A]` → *moved to Tier 1B (Core Stabilization)*
 
 ## Phase 11: Graph-RAG / Intent Graph (The Soul, Deepened)
 *Goal: Relational low-entropy recall at scale - the ultimate defense against groundhog's day over months/years.*
