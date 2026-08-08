@@ -1,0 +1,19 @@
+[Unit]
+Description=HORI Safe Self-Update
+# Runs the safe self-update script: pulls latest code, runs tests, restarts
+# hori-core only if tests pass. Rolls back on failure.
+# Traces to: docs/roadmap.md Tier 1B, PoC 12.4.
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+# WorkingDirectory is set by the install script.
+# The install script replaces %h/Projects/hori with the actual path.
+WorkingDirectory=%h/Projects/hori
+ExecStart=%h/Projects/hori/scripts/hardening/safe_self_update.sh
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal
+# Don't restart automatically — this is triggered manually or via hori-core.
+Restart=no

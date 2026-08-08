@@ -1,0 +1,17 @@
+[Unit]
+Description=AIOS Memory Consolidation — nightly timer
+# Triggers the consolidation service at 03:00 local time nightly.
+# This is when the system is least likely to be in active use, so the
+# LLM distillation calls won't compete with user-facing voice/chat.
+# Traces to: docs/roadmap.md Tier 1B, PoC 8.5.
+
+[Timer]
+# Run at 03:00 every night.
+OnCalendar=*-*-* 03:00:00
+# If the machine was off at 03:00, run once shortly after boot.
+Persistent=true
+# Random delay 0-5 min to avoid thundering herd with other timers.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

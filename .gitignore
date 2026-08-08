@@ -1,0 +1,81 @@
+# AIOS Core Gitignore
+
+# --- AI/ML Models ---
+# Ignore large model files and directories to keep the repo lightweight
+*.gguf
+*.bin
+*.pth
+*.onnx
+ollama/models/
+models/
+
+# --- Data & Memory ---
+# Ignore large RAG indices and vector database files
+*.db
+*.sqlite
+*.index
+*.parquet
+vector_db/
+chroma_db/
+qdrant_data/
+
+# --- Secrets & Credentials ---
+# NEVER commit secrets
+.env
+.env.bak
+.env.*
+*.key
+*.pem
+*.crt
+*.p12
+secrets/
+credentials/
+
+# --- System & OS ---
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# --- Logs & Temp ---
+*.log
+tmp/
+temp/
+dist/
+build/
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# --- Service Data & Temp Files ---
+*.sqlite-shm
+*.sqlite-wal
+**/n8n_data/
+**/qdrant_data/
+**/observability/
+**/home-assistant/
+logs/
+**/qdrant/
+.coverage
+services/aios_core/certs/
+
+# --- Compiled binaries ---
+services/sherpa/sherpa
+
+# --- State backups ---
+core/state/*.bak.*
+
+tests/stress/results/
+core/state/*.json
+core/state/proposed_work_orders/
+!core/state/.gitkeep
+services/n8n/n8n_data/

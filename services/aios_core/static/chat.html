@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIOS Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #0a0a0a;
+            color: #e0e0e0;
+            font-family: -apple-system, system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0 20px;
+            border-bottom: 1px solid #1a1a1a;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            color: #7c9eff;
+        }
+        .header a {
+            color: #555;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .header a:hover { color: #7c9eff; }
+        .header .presence-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4caf50;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        .header .presence-dot.idle { animation: breath 3s ease-in-out infinite; }
+        .header .presence-dot.thinking { background: #ff9800; animation: pulse 1s ease-in-out infinite; }
+        .header .presence-dot.has_nudge { background: #7c9eff; animation: glow 2s ease-in-out infinite; }
+        @keyframes breath { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes glow { 0%, 100% { box-shadow: 0 0 4px rgba(124,158,255,0.3); } 50% { box-shadow: 0 0 12px rgba(124,158,255,0.8); } }
+
+        #conversation {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .msg {
+            max-width: 100%;
+            padding: 14px 18px;
+            border-radius: 14px;
+            font-size: 16px;
+            line-height: 1.6;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        .msg.user {
+            background: #141414;
+            color: #7c9eff;
+            align-self: flex-end;
+            max-width: 80%;
+        }
+        .msg.assistant {
+            background: #111;
+            color: #ccc;
+            align-self: flex-start;
+            max-width: 90%;
+        }
+        .msg.assistant.streaming {
+            border-left: 2px solid #7c9eff;
+        }
+
+        .input-area {
+            padding: 16px 0 10px;
+            border-top: 1px solid #1a1a1a;
+        }
+        #text-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: #141414;
+            border: 1px solid #333;
+            border-radius: 14px;
+            color: #e0e0e0;
+            font-size: 16px;
+            font-family: -apple-system, system-ui, sans-serif;
+            outline: none;
+            resize: none;
+            min-height: 48px;
+            max-height: 200px;
+            line-height: 1.5;
+        }
+        #text-input:focus { border-color: #7c9eff; }
+        .hint {
+            text-align: right;
+            font-size: 12px;
+            color: #444;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>AIOS <span class="presence-dot idle" id="presence-dot"></span></h1>
+        <a href="/voice">Voice</a>
+    </div>
+
+    <div id="conversation"></div>
+
+    <div class="input-area">
+        <textarea id="text-input" autofocus placeholder="Ask AIOS anything..." rows="1"></textarea>
+        <div class="hint">Enter to send - Shift+Enter for newline</div>
+    </div>
+
+<script>
+const SERVER = window.location.origin;
+let conversationHistory = [];
+let isBusy = false;
+const input = document.getElementById('text-input');
+const conversation = document.getElementById('conversation');
+
+// Auto-resize textarea
+input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+});
+
+// Enter to send, Shift+Enter for newline
+input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendText();
+    }
+});
+
+async function sendText() {
+    if (isBusy) return;
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    input.style.height = 'auto';
+
+    // Show user message
+    addMessage('user', text);
+
+    // Add to history
+    conversationHistory.push({ role: 'user', content: text });
+    if (conversationHistory.length > 12) {
+        conversationHistory = conversationHistory.slice(-12);
+    }
+
+    isBusy = true;
+    input.placeholder = 'AIOS is thinking...';
+
+    // Create assistant message element for streaming
+    const assistantDiv = document.createElement('div');
+    assistantDiv.className = 'msg assistant streaming';
+    conversation.appendChild(assistantDiv);
+
+    let fullText = '';
+
+    try {
+        const resp = await fetch(SERVER + '/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'aios-core',
+                messages: conversationHistory,
+                stream: true,
+            }),
+        });
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') continue;
+                    try {
+                        const parsed = JSON.parse(data);
+                        const delta = parsed.choices?.[0]?.delta?.content || '';
+                        if (delta) {
+                            fullText += delta;
+                            assistantDiv.textContent = fullText;
+                            scrollToBottom();
+                        }
+                    } catch (e) {
+                        // Ignore parse errors for partial lines
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        fullText = 'Error: ' + e.message;
+        assistantDiv.textContent = fullText;
+    }
+
+    assistantDiv.classList.remove('streaming');
+    if (fullText) {
+        conversationHistory.push({ role: 'assistant', content: fullText });
+        if (conversationHistory.length > 12) {
+            conversationHistory = conversationHistory.slice(-12);
+        }
+    }
+
+    isBusy = false;
+    input.placeholder = 'Ask AIOS anything...';
+    input.focus();
+}
+
+function addMessage(role, text) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + role;
+    div.textContent = text;
+    conversation.appendChild(div);
+    scrollToBottom();
+}
+
+function scrollToBottom() {
+    conversation.scrollTop = conversation.scrollHeight;
+}
+
+// Focus input on click anywhere (keyboard-first)
+document.addEventListener('click', () => {
+    if (!isBusy) input.focus();
+});
+
+// UX-1.3: Ambient presence subscriber
+let chimeEnabled = localStorage.getItem('aios_chime') === 'true';
+let presenceES = new EventSource(SERVER + '/v1/presence');
+presenceES.addEventListener('state', function(event) {
+    try {
+        const data = JSON.parse(event.data);
+        const dot = document.getElementById('presence-dot');
+        if (data.state === 'idle') {
+            dot.className = 'presence-dot idle';
+        } else if (data.state === 'thinking') {
+            dot.className = 'presence-dot thinking';
+        } else if (data.state === 'has_nudge') {
+            dot.className = 'presence-dot has_nudge';
+            if (chimeEnabled) {
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.frequency.value = 880;
+                    gain.gain.setValueAtTime(0, ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
+                    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.5);
+                } catch (e) { /* ignore */ }
+            }
+        }
+    } catch (e) { /* ignore */ }
+});
+</script>
+</body>
+</html>

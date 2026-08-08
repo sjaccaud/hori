@@ -1,0 +1,18 @@
+# Binary snapshot (Aug 2026)
+# Spiritbuun's buun-llama-cpp fork
+# Source: /tmp/buun-llama-cpp/ (git clone of github.com/spiritbuun/buun-llama-cpp)
+# Installed: ~/llama.cpp/build/bin/llama-server
+# Backup of mainline: ~/llama.cpp/build/bin/llama-server.orig
+# Shared lib: ~/llama.cpp/build/bin/libllama-server-impl.so
+# Build version: 1 (5c9409e)
+# Build config: cmake -B build -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 -DGGML_HIP_NO_VMM=OFF -DGGML_HIP_FORCE_ROCWMMA_FATTN_GFX12=ON -DCMAKE_BUILD_TYPE=Release
+# GPU: AMD Radeon AI PRO R9700 (gfx1201)
+# ROCm: 7.1
+#
+# To rebuild from source:
+# cd /tmp && git clone https://github.com/spiritbuun/buun-llama-cpp.git
+# cd buun-llama-cpp
+# cmake -B build -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 -DGGML_HIP_NO_VMM=OFF -DGGML_HIP_FORCE_ROCWMMA_FATTN_GFX12=ON -DCMAKE_BUILD_TYPE=Release
+# cmake --build build --target llama-server -j$(nproc)
+# cp build/bin/llama-server ~/llama.cpp/build/bin/
+# cp build/bin/libllama-server-impl.so ~/llama.cpp/build/bin/

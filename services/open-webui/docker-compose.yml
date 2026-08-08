@@ -1,0 +1,26 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open_webui_hori
+    restart: always
+    network_mode: host
+    environment:
+      - PORT=3000
+      - OLLAMA_BASE_URL=http://127.0.0.1:8080
+      - OPENAI_API_BASE_URL=http://127.0.0.1:5680/v1
+      - OPENAI_API_KEY=not-needed
+    volumes:
+      - open-webui:/app/backend/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4g
+
+volumes:
+  open-webui:

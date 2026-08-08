@@ -1,0 +1,38 @@
+{
+  "type": "manifesto",
+  "id": "hori-manifesto-001",
+  "version": "2.0.0",
+  "name": "HORI",
+  "name_origin": "彫り — Japanese for 'the carving', the craft of the tattoo artist",
+  "mascot": "koi (鯉) — perseverance, transformation, the koi that leaps the Dragon Gate becomes a dragon",
+  "mission": "To build a local-first agent runtime with a safety spine that helps latent builders solve problems at the speed of intent, not the speed of AI. HORI is not an 'AI Operating System' — it is narrower and more honest: a runtime that carves precise, permanent marks while keeping the LLM untrusted and the architecture trusted.",
+  "tagline": "Solve problems at the speed of intent, not the speed of AI.",
+  "audience": "Latent builders — people with the potential to build things who need a system that helps them realize it.",
+  "workflow": "Converse first, build second. The system refuses to code until a shared design concept is reached, then executes in strict red/green/refactor loops.",
+  "principles": [
+    {
+      "name": "Low Entropy Protocol (LEP)",
+      "description": "Prioritize the preservation of intent integrity and information fidelity across all layers of the system."
+    },
+    {
+      "name": "Local-First Intelligence",
+      "description": "Ensure core reasoning and sensitive data processing happen locally to maximize privacy, speed, and autonomy. The private alternative to frontier paid-trap ecosystems."
+    },
+    {
+      "name": "Hybrid Intelligence",
+      "description": "Seamlessly orchestrate between local edge models and powerful cloud models to optimize for both latency and reasoning depth."
+    },
+    {
+      "name": "Intentional Friction",
+      "description": "Use agentic red-teaming to challenge deviations from the core mission, ensuring long-term alignment. Converse first, build second."
+    },
+    {
+      "name": "Self-Healing Autonomy",
+      "description": "Design the system to proactively monitor, diagnose, and recover from failures without human intervention. The koi persists through the current."
+    },
+    {
+      "name": "Simplicity as Security",
+      "description": "More rules create more rulebreakers. Each safety layer must justify itself against the complexity it adds. The irreducible minimum is the spine."
+    }
+  ]
+}

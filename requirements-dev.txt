@@ -1,0 +1,13 @@
+# HORI development dependencies
+# Install: pip install -r requirements-dev.txt
+# This includes everything in requirements.txt plus test/lint tools.
+
+-r requirements.txt
+
+# Testing
+pytest==9.1.1
+pytest-cov==7.1.0
+
+# Linting and type checking
+ruff==0.16.1
+mypy==2.3.0

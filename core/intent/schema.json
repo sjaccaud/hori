@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HORI Intent Hierarchy Schema",
+  "description": "Defines the hierarchical structure of intent: Manifesto -> Charter -> Work Order.",
+  "oneOf": [
+    { "$ref": "#/definitions/manifesto" },
+    { "$ref": "#/definitions/charter" },
+    { "$ref": "#/definitions/work_order" }
+  ],
+  "definitions": {
+    "manifesto": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "manifesto" },
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "mission": { "type": "string" },
+        "principles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" }
+            },
+            "required": ["name", "description"]
+          }
+        }
+      },
+      "required": ["type", "id", "version", "mission", "principles"]
+    },
+    "charter": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "charter" },
+        "id": { "type": "string" },
+        "parent_manifesto_id": { "type": "string" },
+        "version": { "type": "string" },
+        "objectives": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "success_criteria": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["type", "id", "parent_manifesto_id", "version", "objectives"]
+    },
+    "work_order": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "work_order" },
+        "id": { "type": "string" },
+        "parent_charter_id": { "type": "string" },
+        "version": { "type": "string" },
+        "description": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["backlog", "in_progress", "completed", "blocked"]
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "deadline": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "id", "parent_charter_id", "version", "description", "status"]
+    }
+  }
+}

@@ -1,0 +1,65 @@
+[Unit]
+Description=HORI Sherpa — Behavioral Guardian (PoC 15.50)
+Documentation=file:///docs/tool_safety.md
+After=aios-tool-daemon.service
+Requires=aios-tool-daemon.service
+
+[Service]
+Type=simple
+User=sherpa
+Group=sherpa
+
+# The Sherpa binary is a static Go binary with no dependencies.
+ExecStart=/usr/local/bin/hori-sherpa
+
+# The Sherpa needs to read the audit log (owned by root:aios-worker 0620).
+# The sherpa user is in the root group for this purpose, OR we run as
+# root with dropped capabilities. For the spine, we run as root because
+# the audit log is mode 0620 (root can read, aios-worker can append).
+# The Sherpa is trusted because it's a static Go binary outside HORI's
+# control — HORI cannot modify it, signal it, or read its memory.
+User=root
+
+# Working directory — use / as the Sherpa uses absolute paths for everything.
+# Do NOT use the project directory here because ProtectHome=true makes
+# /home inaccessible. The Sherpa doesn't need a working directory.
+WorkingDirectory=/
+
+# Runtime directory: systemd creates /run/sherpa with correct permissions
+RuntimeDirectory=sherpa
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+
+# The Sherpa writes /run/sherpa/capability_level.
+# The tool daemon (aios-worker) reads it.
+
+# Restart policy — the Sherpa MUST stay running. If it dies, the tool
+# daemon drops to Level 4 (fail closed), but we also want to restart
+# the Sherpa to restore normal operation.
+Restart=always
+RestartSec=3
+
+# Security hardening
+# The Sherpa is the most security-critical component. It gets the
+# strongest systemd hardening.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/sherpa
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+# The Sherpa needs to read the audit log at /var/log/hori/tool_audit.jsonl
+# ProtectSystem=strict makes /var read-only, which is fine (we only read).
+# But we need ReadWritePaths for /run/sherpa (where we write the cap file).
+
+[Install]
+WantedBy=multi-user.target

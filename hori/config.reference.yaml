@@ -1,0 +1,96 @@
+# HORI Configuration Schema
+#
+# This is the reference schema for hori.yaml. The actual config lives at
+# ~/.config/hori/hori.yaml and is created on first run with these defaults.
+#
+# Env vars override YAML values. For example, if hori.yaml says
+# llm.api_url: "http://localhost:8080/v1/chat/completions" but the env var
+# HORI_LLM_API_URL is set, the env var wins. This is for CI/Docker/advanced
+# users who want to override without editing the file.
+#
+# Every setting has a sensible default. A fresh install works out of the box
+# with zero configuration — the defaults point to localhost services and
+# standard XDG paths.
+
+# --- LLM (the brain) ---
+llm:
+  # OpenAI-compatible endpoint. Works with llama-server, Ollama, LM Studio,
+  # vLLM, or any cloud provider that speaks the OpenAI chat completions API.
+  api_url: "http://localhost:8080/v1/chat/completions"
+  # Model name as known to the endpoint. Examples:
+  #   "Qwen3.6-27B" (llama-server), "qwen2.5:14b" (Ollama), "gpt-4o" (OpenAI)
+  model: "Qwen3.6-27B"
+  # Enable reasoning/thinking mode for models that support it (Qwen3.5/3.6).
+  # Slower but shows the reasoning process.
+  enable_thinking: false
+
+# --- Embedding (for memory) ---
+embedding:
+  api_url: "http://localhost:8081/v1/embeddings"
+  model: "nomic-embed-text-v1.5.Q8_0"
+  dim: 768
+
+# --- Memory (Qdrant vector database) ---
+memory:
+  qdrant_url: "http://localhost:6333"
+  # Collection names. These are schema, not user config — but exposed here
+  # for advanced users who want to namespace multiple HORI instances.
+  collection_working: "hori_working"
+  collection_project: "hori_project"
+  collection_longterm: "hori_longterm"
+
+# --- TTS (Text-to-Speech) ---
+tts:
+  # Backend: "kokoro" (default, high quality) or "piper" (fallback, lightweight).
+  # Set to "none" to disable TTS entirely (text-only mode).
+  backend: "kokoro"
+  # Kokoro model paths. Download from https://github.com/kokoro-xtz/kokoro-onnx
+  kokoro:
+    model_path: "~/.local/share/hori/models/kokoro-v1.0.onnx"
+    voices_path: "~/.local/share/hori/models/voices-v1.0.bin"
+    default_voice: "bf_emma"
+    lang: "en-gb"
+  # Piper voice paths. Download from https://github.com/rhasspy/piper
+  piper:
+    voice_dir: "~/.local/share/hori/piper-voices"
+    default_voice: "en_US-amy-medium"
+
+# --- Service (the HTTP server) ---
+service:
+  host: "0.0.0.0"
+  port: 5680
+
+# --- Paths ---
+paths:
+  # Workspace for tool operations (sandboxed file reads/writes).
+  # Created on startup if it doesn't exist.
+  workspace: "/tmp/hori-workspace"
+  # Audit log for tool calls (append-only, permission-separated in production).
+  audit_log: "logs/tool_audit.jsonl"
+  # Safety events log (hallucination interceptions, response verifications).
+  safety_events_log: "/var/log/hori/safety_events.jsonl"
+  # Unix domain socket for the tool daemon.
+  tool_socket: "/run/hori/tool-daemon.sock"
+  # Allowed path prefixes for read-only filesystem tools.
+  # The tool daemon (Landlock + registry) restricts file access to these
+  # directories. Default: ~/Projects (where the user keeps code/documents).
+  # Add more paths here if you want the LLM to read other directories.
+  # WARNING: Do NOT add ~ (home) — that would expose ~/.ssh, ~/.gnupg, etc.
+  allowed_read_paths:
+    - "~/Projects"
+
+# --- Admin ---
+admin:
+  # Bearer token for /admin/api/* endpoints. If empty, admin API is disabled.
+  # In production, set via HORI_ADMIN_TOKEN env var or secrets.env.
+  token: ""
+
+# --- Notifications (optional) ---
+notifications:
+  telegram_bot_token: ""
+  telegram_chat_id: ""
+  ntfy_topic: ""
+  ntfy_server: "https://ntfy.sh"
+  hass_url: ""
+  hass_token: ""
+  hass_notify_service: "notify.mobile_app_iphone"

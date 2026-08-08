@@ -1,0 +1,34 @@
+# HORI runtime dependencies
+# Install: pip install -r requirements.txt
+#
+# These are the Python packages required to run HORI's core services.
+# System-level dependencies (llama.cpp, Qdrant, espeak-ng) are documented
+# in docs/INSTALL.md and are NOT installed by this file.
+
+# Web framework
+fastapi==0.141.1
+uvicorn==0.52.1
+python-multipart==0.0.32
+
+# HTTP client (for LLM API calls, web search, multi-source fan-out)
+httpx==0.28.1
+requests==2.34.2
+
+# Validation
+pydantic==2.13.4
+jsonschema==4.26.0
+
+# Vector database client (for memory; Qdrant server runs separately)
+qdrant-client==1.18.0
+
+# TTS (Text-to-Speech)
+# NOTE: kokoro-onnx requires onnxruntime (installed automatically).
+# NOTE: piper-tts requires espeak-ng system dependency (apt install espeak-ng).
+# Both are optional — TTS is selected via AIOS_TTS_BACKEND env var.
+# If neither is installed, TTS is disabled and HORI operates text-only.
+kokoro-onnx==0.4.7
+numpy==2.5.1
+piper-tts==1.6.0
+
+# Web search (DuckDuckGo and other free sources)
+duckduckgo_search==8.1.1

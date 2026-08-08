@@ -1,0 +1,66 @@
+[Unit]
+Description=HORI Tool Daemon (PoC 15.5 - The Cage)
+Documentation=file:///docs/tool_safety.md
+After=network.target
+
+[Service]
+Type=simple
+User=aios-worker
+Group=aios-worker
+
+# Working directory is the project root (needed for Python imports).
+# The install script replaces %h/Projects/hori with the actual path.
+WorkingDirectory=%h/Projects/hori
+Environment=PYTHONPATH=.
+Environment=AIOS_AUDIT_LOG=/var/log/hori/tool_audit.jsonl
+
+# The tool daemon applies its own Landlock + seccomp restrictions
+# (PoC 15.0b/c/d). systemd's NoNewPrivileges is required for both.
+NoNewPrivileges=true
+
+# Runtime directory: systemd creates /run/hori. The directory must be
+# world-executable (0755) so that hori-core can reach the socket.
+# The socket file itself is 0666 (the daemon validates every request
+# via the registry + Sherpa, so socket access alone doesn't grant
+# anything — the security is in the daemon, not the socket).
+RuntimeDirectory=hori
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+
+# The daemon binds its Unix domain socket at /run/hori/tool-daemon.sock.
+
+# Logs directory: /var/log/hori (created by install script)
+# Audit log: /var/log/hori/tool_audit.jsonl (root:aios-worker 0620)
+
+# The workspace is created at boot by systemd-tmpfiles, NOT by
+# ExecStartPre. ReadWritePaths is processed BEFORE ExecStartPre (during
+# mount namespace setup), so ExecStartPre can never create a directory
+# that ReadWritePaths needs — it would fail at step NAMESPACE (status 226).
+# The tmpfiles.d config runs early in boot (via sysinit.target) and
+# creates the directory before any services start.
+
+# ExecStart: run the tool daemon (NOT in degraded mode — production)
+# The install script replaces %h/Projects/hori with the actual path.
+ExecStart=%h/Projects/hori/venv/bin/python3 -m services.tool_daemon.server
+
+# Restart policy
+Restart=on-failure
+RestartSec=5
+
+# Security hardening (defense in depth on top of Landlock + seccomp)
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/tmp/hori-workspace /var/log/hori /run/hori
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

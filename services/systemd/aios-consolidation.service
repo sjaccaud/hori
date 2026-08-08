@@ -1,0 +1,32 @@
+[Unit]
+Description=HORI Memory Consolidation ("Sleep & Dream" cycle)
+# Runs the distill-and-promote consolidation: clusters working-memory points,
+# distills each cluster via the LLM, promotes insights to the project/longterm
+# tier, and updates user_model.json + project_state.json.
+# Traces to: docs/roadmap.md Tier 1B, PoC 8.5.
+After=network.target llamacpp.service aios_core.service
+Wants=llamacpp.service
+
+[Service]
+Type=oneshot
+# User and WorkingDirectory are set by the install script.
+# Defaults shown here work for a single-user install where HORI runs
+# as the current user from ~/Projects/hori.
+# The install script (scripts/hardening/install_services.sh) replaces
+# these with the actual user and path.
+User=%i
+WorkingDirectory=%h/Projects/hori
+Environment=PYTHONPATH=.
+Environment=LLM_API_URL=http://localhost:8080/v1/chat/completions
+Environment=LLM_MODEL=Qwen3.6-27B
+Environment=EMBED_URL=http://localhost:8081/v1/embeddings
+Environment=QDRANT_URL=http://localhost:6333
+# Max clusters to distill per run (keeps each cycle bounded).
+# 10 clusters per night is enough to keep up with daily conversation volume.
+Environment=CONSOLIDATION_MAX_CLUSTERS=10
+ExecStart=%h/Projects/hori/venv/bin/python3 scripts/memory_consolidation.py 10
+# Timeout: LLM distillation can be slow. 10 clusters * ~30s each = ~5 min.
+TimeoutStartSec=900
+# Log to journald; view with: journalctl -u hori-consolidation.service
+StandardOutput=journal
+StandardError=journal

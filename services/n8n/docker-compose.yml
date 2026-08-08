@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n_hori
+    restart: always
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://<your-tailscale-ip>:5678/
+      - N8N_API_ENABLED=true
+      - N8N_API_KEY=${N8N_API_KEY:-change-me}
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4g

@@ -1,0 +1,39 @@
+[project]
+name = "hori"
+version = "0.1.0"
+description = "HORI — a local-first agent runtime with a safety spine"
+readme = "docs/README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/hori"
+
+[tool.pytest.ini_options]
+testpaths = ["services", "core", "scripts"]
+pythonpath = ["."]
+norecursedirs = ["services/observability/grafana/data"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+ignore_missing_imports = true

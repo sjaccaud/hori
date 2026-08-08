@@ -1,0 +1,74 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice-command",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node-id",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.text }}",
+        "systemMessage": "You are the HORI Intent Parser. Your sole job is to convert natural language into a structured JSON object following the HORI Intent Hierarchy Schema.\n\nSpecifically, you must output a 'work_order' object.\n\nSCHEMA REFERENCE:\n{\n  \"type\": \"work_order\",\n  \"id\": \"generate-a-uuid\",\n  \"parent_charter_id\": \"use-the-most-relevant-charter-id-or-default-to-root\",\n  \"version\": \"1.0.0\",\n  \"description\": \"the parsed task description\",\n  \"status\": \"backlog\",\n  \"priority\": \"medium\"\n}\n\nRULES:\n1. Return ONLY valid JSON.\n2. Do not include any conversational text.\n3. If the user's intent is unclear, set priority to 'low' and description to the raw text."
+      },
+      "id": "ai-agent-node-id",
+      "name": "AI Agent",
+      "type": "n8n-nodes-base.aiAgent",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.output }}",
+        "options": {}
+      },
+      "id": "respond-node-id",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

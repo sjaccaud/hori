@@ -1,0 +1,16 @@
+{
+  "check_interval_seconds": 30,
+  "vram_threshold_percent": 90,
+  "services": [
+    {
+      "name": "llamacpp",
+      "type": "systemd",
+      "check_command": "systemctl is-active --quiet llamacpp",
+      "restart_command": "sudo systemctl restart llamacpp"
+    },
+    {
+      "name": "gpu_vram",
+      "type": "vram"
+    }
+  ]
+}

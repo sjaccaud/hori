@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AIOS Admin">
+    <title>AIOS Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: #0a0a0a;
+            color: #e0e0e0;
+            font-family: -apple-system, system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 16px;
+            overscroll-behavior: none;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0 20px;
+            border-bottom: 1px solid #1a1a1a;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            color: #7c9eff;
+        }
+        .header a {
+            color: #555;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .section {
+            margin-bottom: 24px;
+        }
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #666;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-title .refresh {
+            margin-left: auto;
+            font-size: 11px;
+            color: #7c9eff;
+            cursor: pointer;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        /* Vitals cards */
+        .vitals-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .vital-card {
+            background: #141414;
+            border-radius: 12px;
+            padding: 14px;
+        }
+        .vital-card .label {
+            font-size: 11px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .vital-card .value {
+            font-size: 20px;
+            font-weight: 600;
+            margin-top: 4px;
+            color: #e0e0e0;
+        }
+        .vital-card .sub {
+            font-size: 11px;
+            color: #777;
+            margin-top: 2px;
+        }
+        .vital-card.warning .value { color: #ff9800; }
+        .vital-card.critical .value { color: #f44336; }
+        .vital-card.healthy .value { color: #4caf50; }
+
+        /* Progress bar for VRAM */
+        .progress-bar {
+            height: 6px;
+            background: #1a1a1a;
+            border-radius: 3px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        /* Service status */
+        .service-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #141414;
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 6px;
+        }
+        .service-row .name {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .service-row .port {
+            font-size: 11px;
+            color: #555;
+            margin-left: 8px;
+        }
+        .service-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .status-dot.up { background: #4caf50; }
+        .status-dot.down { background: #f44336; }
+
+        /* Gate criteria */
+        .gate-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #141414;
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+        .gate-row .check { color: #4caf50; font-weight: bold; }
+        .gate-row .cross { color: #f44336; font-weight: bold; }
+        .gate-row .question { color: #ff9800; font-weight: bold; }
+        .gate-row .info { color: #555; font-weight: bold; }
+
+        /* Buttons */
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .btn-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+        .btn {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            padding: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.15s;
+            font-family: inherit;
+        }
+        .btn:active { background: #2a2a2a; }
+        .btn:disabled { opacity: 0.4; }
+        .btn.danger { border-color: #4a2a2a; color: #ff6b6b; }
+        .btn.danger:active { background: #2a1a1a; }
+        .btn.primary { border-color: #2a3a5a; color: #7c9eff; }
+        .btn.primary:active { background: #1a2a3a; }
+
+        /* Output pane */
+        .output-pane {
+            background: #0d0d0d;
+            border: 1px solid #1a1a1a;
+            border-radius: 12px;
+            padding: 14px;
+            font-family: "SF Mono", "Fira Code", monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #aaa;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+        }
+        .output-pane.active { display: block; }
+        .output-pane .output-header {
+            font-size: 11px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .output-pane .pass { color: #4caf50; }
+        .output-pane .fail { color: #f44336; }
+        .output-pane .warn { color: #ff9800; }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #333;
+            border-top-color: #7c9eff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Log viewer tabs */
+        .log-tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .log-tab {
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 12px;
+            color: #777;
+            cursor: pointer;
+            white-space: nowrap;
+            font-family: inherit;
+        }
+        .log-tab.active {
+            background: #1a2a3a;
+            border-color: #2a3a5a;
+            color: #7c9eff;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>AIOS Admin</h1>
+        <a href="/voice">&larr; Voice</a>
+    </div>
+
+    <!-- System Vitals -->
+    <div class="section">
+        <div class="section-title">
+            System Vitals
+            <span class="refresh" onclick="loadState()">refresh</span>
+        </div>
+        <div class="vitals-grid" id="vitals">
+            <div class="vital-card"><div class="label">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- Services -->
+    <div class="section">
+        <div class="section-title">Services</div>
+        <div id="services"></div>
+    </div>
+
+    <!-- Gate Criteria -->
+    <div class="section">
+        <div class="section-title">
+            Gate Criteria (1.6 &rarr; 2.0)
+            <span class="refresh" onclick="loadGate()">refresh</span>
+        </div>
+        <div id="gate"></div>
+    </div>
+
+    <!-- Tests -->
+    <div class="section">
+        <div class="section-title">Test Suite</div>
+        <div class="btn-grid three">
+            <button class="btn" onclick="runTest('all')">All Tests</button>
+            <button class="btn" onclick="runTest('unit')">Unit</button>
+            <button class="btn" onclick="runTest('adversarial')">Adversarial</button>
+            <button class="btn" onclick="runTest('integration')">Integration</button>
+            <button class="btn" onclick="runTest('regression')">Regression</button>
+            <button class="btn" onclick="runTest('stress')">Stress (smoke)</button>
+            <button class="btn" onclick="runTest('stress-entropy')">Entropy</button>
+            <button class="btn" onclick="runTest('stress-safety')">Safety</button>
+            <button class="btn" onclick="clearOutput()">Clear</button>
+        </div>
+    </div>
+
+    <!-- Stress Runner (long runs) -->
+    <div class="section">
+        <div class="section-title">
+            Stress Runner
+            <span class="refresh" onclick="loadStressStatus()">refresh</span>
+        </div>
+        <div style="font-size:11px;color:#555;margin-bottom:8px">
+            Long runs (100+ turns) run in the background. Check progress below.
+        </div>
+        <div class="btn-grid three" style="margin-bottom:8px">
+            <button class="btn primary" onclick="startStress('entropy', 100)">Entropy 100</button>
+            <button class="btn primary" onclick="startStress('entropy', 1000)">Entropy 1K</button>
+            <button class="btn primary" onclick="startStress('entropy', 10000)">Entropy 10K</button>
+            <button class="btn primary" onclick="startStress('safety', 100)">Safety 100</button>
+            <button class="btn primary" onclick="startStress('safety', 500)">Safety 500</button>
+            <button class="btn danger" onclick="stopStress()">Stop</button>
+        </div>
+        <div id="stress-status" style="font-size:12px;color:#777"></div>
+    </div>
+
+    <!-- Service Control -->
+    <div class="section">
+        <div class="section-title">Service Control</div>
+        <div class="btn-grid three">
+            <button class="btn primary" onclick="svcAction('restart', 'aios_core')">Restart Core</button>
+            <button class="btn primary" onclick="svcAction('restart', 'aios-sherpa')">Restart Sherpa</button>
+            <button class="btn primary" onclick="svcAction('restart', 'aios-tool-daemon')">Restart Tools</button>
+            <button class="btn" onclick="svcAction('status', 'aios_core')">Core Status</button>
+            <button class="btn" onclick="svcAction('status', 'aios-sherpa')">Sherpa Status</button>
+            <button class="btn" onclick="svcAction('status', 'aios-tool-daemon')">Tools Status</button>
+        </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="section">
+        <div class="section-title">Logs</div>
+        <div class="log-tabs">
+            <button class="log-tab active" onclick="switchLog('aios-core', this)">aios-core</button>
+            <button class="log-tab" onclick="switchLog('sherpa', this)">sherpa</button>
+            <button class="log-tab" onclick="switchLog('tool-daemon', this)">tool-daemon</button>
+            <button class="log-tab" onclick="switchLog('safety', this)">safety events</button>
+            <button class="log-tab" onclick="switchLog('tool-audit', this)">tool audit</button>
+        </div>
+        <div class="btn-grid" style="margin-bottom: 8px;">
+            <button class="btn" onclick="loadLog(currentLog, 50)">Last 50</button>
+            <button class="btn" onclick="loadLog(currentLog, 200)">Last 200</button>
+        </div>
+    </div>
+
+    <!-- Output Pane -->
+    <div class="section">
+        <div class="output-pane" id="output">
+            <div class="output-header" id="output-header">Output</div>
+            <div id="output-content"></div>
+        </div>
+    </div>
+
+    <!-- Auth Login Overlay -->
+    <div id="auth-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;justify-content:center;align-items:center;flex-direction:column;gap:16px">
+        <h2 style="color:#7c9eff;font-size:20px">AIOS Admin Login</h2>
+        <input type="password" id="auth-token-input" placeholder="Admin token"
+               style="background:#141414;border:1px solid #333;border-radius:8px;padding:12px 16px;color:#e0e0e0;font-size:16px;width:280px;text-align:center"
+               onkeydown="if(event.key==='Enter')submitToken()">
+        <button class="btn primary" onclick="submitToken()" style="width:280px">Login</button>
+        <div id="auth-error" style="color:#f44336;font-size:13px;min-height:18px"></div>
+    </div>
+
+    <script>
+        let currentLog = 'aios-core';
+
+        // --- Auth ---
+        function getAdminToken() {
+            return localStorage.getItem('aios_admin_token');
+        }
+
+        function showLoginOverlay(msg) {
+            document.getElementById('auth-overlay').style.display = 'flex';
+            if (msg) document.getElementById('auth-error').textContent = msg;
+            document.getElementById('auth-token-input').focus();
+        }
+
+        function hideLoginOverlay() {
+            document.getElementById('auth-overlay').style.display = 'none';
+            document.getElementById('auth-error').textContent = '';
+        }
+
+        function submitToken() {
+            const input = document.getElementById('auth-token-input');
+            const token = input.value.trim();
+            if (!token) return;
+            localStorage.setItem('aios_admin_token', token);
+            input.value = '';
+            hideLoginOverlay();
+            // Verify by loading state — if it fails with 401/403, re-prompt
+            loadState().then(() => {
+                loadGate();
+                loadStressStatus();
+            });
+        }
+
+        // --- Helpers ---
+        async function fetchJSON(url, opts) {
+            try {
+                const token = getAdminToken();
+                const headers = { ...(opts?.headers || {}) };
+                if (token) headers['Authorization'] = 'Bearer ' + token;
+                const resp = await fetch(url, { ...opts, headers });
+                if (resp.status === 401 || resp.status === 403) {
+                    localStorage.removeItem('aios_admin_token');
+                    const body = await resp.json().catch(() => ({}));
+                    showLoginOverlay(body.detail || 'Authentication required');
+                    return { error: 'auth' };
+                }
+                return await resp.json();
+            } catch (e) {
+                return { error: e.message };
+            }
+        }
+
+        function showOutput(header, content) {
+            const pane = document.getElementById('output');
+            document.getElementById('output-header').textContent = header;
+            document.getElementById('output-content').innerHTML = content;
+            pane.classList.add('active');
+            pane.scrollTop = 0;
+        }
+
+        function clearOutput() {
+            document.getElementById('output').classList.remove('active');
+        }
+
+        function escapeHTML(s) {
+            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        // --- System Vitals ---
+        async function loadState() {
+            const data = await fetchJSON('/admin/api/state');
+            if (data.error) return;
+
+            const vram = data.vram;
+            const disk = data.disk;
+            const vramPct = vram ? vram.percent : 0;
+            const vramClass = vramPct > 90 ? 'critical' : vramPct > 75 ? 'warning' : 'healthy';
+            const vramColor = vramPct > 90 ? '#f44336' : vramPct > 75 ? '#ff9800' : '#4caf50';
+
+            let html = '';
+            html += `<div class="vital-card ${vramClass}">
+                <div class="label">VRAM</div>
+                <div class="value">${vram ? vram.used_mb + ' / ' + vram.total_mb + ' MB' : 'N/A'}</div>
+                <div class="sub">${vram ? vram.percent + '% used' : ''}</div>
+                <div class="progress-bar"><div class="fill" style="width:${vramPct}%;background:${vramColor}"></div></div>
+            </div>`;
+            html += `<div class="vital-card ${disk && disk.percent > 90 ? 'critical' : ''}">
+                <div class="label">Disk</div>
+                <div class="value">${disk ? disk.used_gb + ' / ' + disk.total_gb + ' GB' : 'N/A'}</div>
+                <div class="sub">${disk ? disk.percent + '% used &middot; ' + disk.free_gb + ' GB free' : ''}</div>
+            </div>`;
+            html += `<div class="vital-card">
+                <div class="label">Model</div>
+                <div class="value" style="font-size:14px">${data.loaded_model || 'none'}</div>
+                <div class="sub">${data.gpu || ''}</div>
+            </div>`;
+            html += `<div class="vital-card">
+                <div class="label">Uptime</div>
+                <div class="value" style="font-size:16px">${data.uptime || '?'}</div>
+                <div class="sub">${data.host || ''} &middot; ROCm ${data.rocm_version || '?'}</div>
+            </div>`;
+
+            document.getElementById('vitals').innerHTML = html;
+
+            // Services
+            let svcHtml = '';
+            for (const [name, info] of Object.entries(data.services || {})) {
+                const dotClass = info.up ? 'up' : 'down';
+                const statusText = info.up ? 'UP' : 'DOWN';
+                svcHtml += `<div class="service-row">
+                    <div><span class="name">${name}</span><span class="port">:${info.port}</span></div>
+                    <div class="service-status"><span class="status-dot ${dotClass}"></span>${statusText}</div>
+                </div>`;
+            }
+            const allUp = data.status === 'healthy';
+            svcHtml = `<div class="service-row">
+                <div><span class="name" style="font-weight:600">Overall</span></div>
+                <div class="service-status"><span class="status-dot ${allUp ? 'up' : 'down'}"></span>${data.status?.toUpperCase()}</div>
+            </div>` + svcHtml;
+            document.getElementById('services').innerHTML = svcHtml;
+        }
+
+        // --- Gate Criteria ---
+        async function loadGate() {
+            const data = await fetchJSON('/admin/api/gate');
+            if (data.error) return;
+
+            let html = '';
+            const l3pass = data.sherpa_level_3plus === 0;
+            const l2pass = data.sherpa_level_2 <= 2;
+            html += `<div class="gate-row">
+                <span>Sherpa Level 3+ triggers</span>
+                <span><span class="${l3pass ? 'check' : 'cross'}">${l3pass ? '&#10003;' : '&#10007;'}</span> ${data.sherpa_level_3plus} (must be 0)</span>
+            </div>`;
+            html += `<div class="gate-row">
+                <span>Sherpa Level 2 triggers</span>
+                <span><span class="${l2pass ? 'check' : 'cross'}">${l2pass ? '&#10003;' : '&#10007;'}</span> ${data.sherpa_level_2} (must be &le;2)</span>
+            </div>`;
+
+            if (data.hallucination_rate !== null) {
+                const hPass = data.hallucination_rate === 100;
+                html += `<div class="gate-row">
+                    <span>Hallucination interception rate</span>
+                    <span><span class="${hPass ? 'check' : 'cross'}">${hPass ? '&#10003;' : '&#10007;'}</span> ${data.hallucination_rate}% (${data.hallucination_interceptions}/${data.hallucination_claims_without_tool})</span>
+                </div>`;
+            } else if (data.verified_events > 0) {
+                html += `<div class="gate-row">
+                    <span>Hallucination interception rate</span>
+                    <span><span class="check">&#10003;</span> 100% (no claims without tool calls)</span>
+                </div>`;
+            } else {
+                html += `<div class="gate-row">
+                    <span>Hallucination interception rate</span>
+                    <span><span class="info">i</span> ${data.hallucination_interceptions} logged (restart core)</span>
+                </div>`;
+            }
+
+            html += `<div class="gate-row">
+                <span>Adversarial test suite</span>
+                <span><span class="question">?</span> run tests below</span>
+            </div>`;
+            html += `<div class="gate-row">
+                <span>Tool calls</span>
+                <span style="color:#777">${data.tool_calls_total} total &middot; ${data.tool_calls_successful} ok &middot; ${data.tool_calls_failed} fail</span>
+            </div>`;
+
+            document.getElementById('gate').innerHTML = html;
+        }
+
+        // --- Tests ---
+        async function runTest(suite) {
+            showOutput('Running ' + suite + ' tests...', '<span class="spinner"></span>');
+            const data = await fetchJSON('/admin/api/test?suite=' + suite, { method: 'POST' });
+            if (data.error) {
+                showOutput('Error', escapeHTML(data.error));
+                return;
+            }
+            const passed = data.exit_code === 0;
+            const summary = data.output.match(/(\d+) passed.*?(\d+ failed)?/)?.[0] || '';
+            let colorized = escapeHTML(data.output);
+            colorized = colorized.replace(/(passed|PASSING|PASSED)/g, '<span class="pass">$1</span>');
+            colorized = colorized.replace(/(failed|FAILED|FAIL)/g, '<span class="fail">$1</span>');
+            colorized = colorized.replace(/(warning|WARNING|ERROR)/g, '<span class="warn">$1</span>');
+            const header = `${suite} tests — ${passed ? 'PASS' : 'FAIL'} (exit ${data.exit_code}) ${summary}`;
+            showOutput(header, colorized);
+        }
+
+        // --- Service Control ---
+        async function svcAction(action, service) {
+            showOutput(`${action} ${service}...`, '<span class="spinner"></span>');
+            const data = await fetchJSON(`/admin/api/service/${action}?service=${service}`, { method: 'POST' });
+            if (data.error) {
+                showOutput('Error', escapeHTML(data.error));
+                return;
+            }
+            const header = `${service} ${action} — exit ${data.exit_code}`;
+            showOutput(header, escapeHTML(data.output || ''));
+            if (action === 'restart') {
+                setTimeout(loadState, 3000);
+            }
+        }
+
+        // --- Logs ---
+        function switchLog(type, btn) {
+            currentLog = type;
+            document.querySelectorAll('.log-tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            loadLog(type, 50);
+        }
+
+        async function loadLog(type, lines) {
+            showOutput(`Loading ${type} logs...`, '<span class="spinner"></span>');
+            const data = await fetchJSON(`/admin/api/logs/${type}?lines=${lines}`);
+            if (data.error) {
+                showOutput('Error', escapeHTML(data.error));
+                return;
+            }
+            const header = `${type} — ${data.lines} lines`;
+            showOutput(header, escapeHTML(data.content || '(empty)'));
+        }
+
+        // --- Stress Runner ---
+        async function startStress(test, turns) {
+            showOutput(`Starting ${test} stress test (${turns} turns)...`, '<span class="spinner"></span>');
+            const data = await fetchJSON(`/admin/api/stress/start?test=${test}&turns=${turns}&delay=1.0`, { method: 'POST' });
+            if (data.error) {
+                showOutput('Error', escapeHTML(data.error));
+                return;
+            }
+            showOutput(`${test} stress started`, `PID ${data.pid} &middot; ${data.turns} turns &middot; log: ${data.log_file}`);
+            loadStressStatus();
+        }
+
+        async function stopStress() {
+            showOutput('Stopping stress test...', '<span class="spinner"></span>');
+            const data = await fetchJSON('/admin/api/stress/stop', { method: 'POST' });
+            if (data.error) {
+                showOutput('Error', escapeHTML(data.error));
+                return;
+            }
+            showOutput('Stopped', `Killed PID ${data.pid}`);
+            loadStressStatus();
+        }
+
+        async function loadStressStatus() {
+            const data = await fetchJSON('/admin/api/stress/status');
+            if (data.error) {
+                document.getElementById('stress-status').innerHTML = escapeHTML(data.error);
+                return;
+            }
+            if (data.message) {
+                document.getElementById('stress-status').innerHTML = escapeHTML(data.message);
+                return;
+            }
+            const status = data.running ? '<span style="color:#4caf50">RUNNING</span>' : '<span style="color:#f44336">STOPPED</span>';
+            let html = `${status} &middot; ${data.test} &middot; ${data.turns} turns &middot; PID ${data.pid}<br>`;
+            html += `Started: ${data.started_at || '?'}<br>`;
+            if (data.latest_checkpoint) html += `Checkpoint: ${data.latest_checkpoint}<br>`;
+            if (data.latest_report) html += `Report: ${data.latest_report}<br>`;
+            if (data.log_tail) {
+                html += `<details><summary style="cursor:pointer;color:#555">Last 50 lines</summary><pre style="margin-top:6px;font-size:11px;color:#aaa;white-space:pre-wrap">${escapeHTML(data.log_tail)}</pre></details>`;
+            }
+            document.getElementById('stress-status').innerHTML = html;
+        }
+
+        // --- Init ---
+        if (getAdminToken()) {
+            loadState();
+            loadGate();
+            loadStressStatus();
+        } else {
+            showLoginOverlay();
+        }
+    </script>
+</body>
+</html>

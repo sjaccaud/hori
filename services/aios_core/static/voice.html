@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AIOS">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+    <title>AIOS Voice</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: #0a0a0a;
+            color: #e0e0e0;
+            font-family: -apple-system, -apple-system-body, system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overscroll-behavior: none;
+        }
+        .header {
+            width: 100%;
+            text-align: center;
+            padding: 20px 0 10px;
+        }
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: #7c9eff;
+        }
+        .header .status {
+            font-size: 12px;
+            color: #555;
+            margin-top: 4px;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4caf50;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .status-dot.offline { background: #f44336; }
+        .status-dot.connecting { background: #ff9800; }
+        /* UX-1.3: Ambient presence states */
+        .status-dot.idle {
+            background: #4caf50;
+            animation: breath 3s ease-in-out infinite;
+        }
+        .status-dot.thinking {
+            background: #ff9800;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        .status-dot.has_nudge {
+            background: #7c9eff;
+            animation: glow 2s ease-in-out infinite;
+            box-shadow: 0 0 8px rgba(124, 158, 255, 0.6);
+        }
+        @keyframes breath {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 4px rgba(124, 158, 255, 0.3); }
+            50% { box-shadow: 0 0 12px rgba(124, 158, 255, 0.8); }
+        }
+
+        #transcript {
+            width: 100%;
+            max-width: 600px;
+            min-height: 80px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 16px;
+            margin: 20px 0;
+            background: #141414;
+            border-radius: 16px;
+            font-size: 17px;
+            line-height: 1.5;
+            color: #aaa;
+            word-wrap: break-word;
+            display: none;
+        }
+        #transcript.active { display: block; }
+        #transcript .user { color: #7c9eff; }
+        #transcript .aios { color: #e0e0e0; }
+
+        #response-text {
+            width: 100%;
+            max-width: 600px;
+            min-height: 60px;
+            max-height: 350px;
+            overflow-y: auto;
+            padding: 20px;
+            margin: 10px 0;
+            background: #111;
+            border-radius: 16px;
+            font-size: 18px;
+            line-height: 1.6;
+            color: #ccc;
+            word-wrap: break-word;
+            display: none;
+        }
+        #response-text.active { display: block; }
+
+        .controls {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            max-width: 600px;
+            padding: 20px 0;
+        }
+
+        .mic-button {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #1a2a5e, #0d1a3a);
+            color: #7c9eff;
+            font-size: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            box-shadow: 0 4px 20px rgba(124, 158, 255, 0.15);
+        }
+        .mic-button.disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        .mic-button:active {
+            transform: scale(0.95);
+        }
+        .mic-button.listening {
+            background: linear-gradient(135deg, #5e1a1a, #3a0d0d);
+            color: #ff7c7c;
+            box-shadow: 0 4px 30px rgba(255, 124, 124, 0.3);
+            animation: pulse 1.5s infinite;
+        }
+        .mic-button.loading {
+            background: linear-gradient(135deg, #1a3a1a, #0d2a0d);
+            color: #7cff7c;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 4px 30px rgba(255, 124, 124, 0.3); }
+            50% { box-shadow: 0 4px 40px rgba(255, 124, 124, 0.6); }
+        }
+
+        .mic-label {
+            margin-top: 16px;
+            font-size: 14px;
+            color: #555;
+            text-align: center;
+        }
+
+        .text-section {
+            width: 100%;
+            max-width: 600px;
+            margin-top: 24px;
+        }
+        .text-hint {
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .text-hint.active { display: block; }
+
+        #text-input {
+            width: 100%;
+            max-width: 600px;
+            padding: 16px 18px;
+            background: #141414;
+            border: 1px solid #333;
+            border-radius: 14px;
+            color: #e0e0e0;
+            font-size: 18px;
+            outline: none;
+            -webkit-appearance: none;
+            border-radius: 14px;
+        }
+        #text-input:focus { border-color: #7c9eff; }
+
+        .send-button {
+            width: 100%;
+            max-width: 600px;
+            padding: 16px;
+            margin-top: 10px;
+            background: #1a2a5e;
+            border: none;
+            border-radius: 14px;
+            color: #7c9eff;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .send-button:active { background: #0d1a3a; }
+        .send-button:disabled { opacity: 0.3; }
+
+        .toggle-row {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            justify-content: center;
+        }
+        .toggle-row button {
+            padding: 8px 16px;
+            background: #141414;
+            border: 1px solid #222;
+            border-radius: 8px;
+            color: #666;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .toggle-row button.active {
+            color: #7c9eff;
+            border-color: #7c9eff;
+        }
+
+        audio {
+            position: absolute;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+        }
+
+        .history {
+            width: 100%;
+            max-width: 600px;
+            margin-top: 20px;
+        }
+        .history-item {
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            background: #0d0d0d;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .history-item .q { color: #555; font-size: 12px; }
+        .history-item .a { color: #999; margin-top: 4px; }
+
+        .footer {
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            padding: 30px 0 10px;
+        }
+        .footer a {
+            font-size: 12px;
+            color: #333;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Add to Home Screen banner (shown once on first visit in Safari) -->
+    <div id="aths-banner" style="display:none; background:#141414; border:1px solid #333; border-radius:12px; padding:14px 16px; margin-bottom:16px; width:100%; max-width:600px; font-size:14px; line-height:1.5;">
+        <div style="display:flex; justify-content:space-between; align-items:start;">
+            <div>
+                <strong style="color:#7c9eff;">Add AIOS to Home Screen</strong><br>
+                <span style="color:#888;">Tap the Share button, then "Add to Home Screen" for one-tap voice access.</span>
+            </div>
+            <button onclick="document.getElementById('aths-banner').style.display='none'; localStorage.setItem('aths_dismissed','1');" style="background:none; border:none; color:#555; font-size:20px; padding:0 4px; cursor:pointer;">x</button>
+        </div>
+    </div>
+    <script>
+    // Show the banner only in Safari (not in standalone mode) and only once
+    (function() {
+        const standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+        const dismissed = localStorage.getItem('aths_dismissed') === '1';
+        const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
+        if (!standalone && !dismissed && isSafari) {
+            document.getElementById('aths-banner').style.display = 'block';
+        }
+    })();
+    </script>
+    <div class="header">
+        <h1>AIOS</h1>
+        <div class="status">
+            <span class="status-dot connecting" id="status-dot"></span>
+            <span id="status-text">Connecting...</span>
+        </div>
+    </div>
+
+    <div id="transcript"></div>
+    <div id="response-text"></div>
+
+    <div class="controls">
+        <button class="mic-button" id="mic-button" onclick="toggleMic()">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+        </button>
+        <div class="mic-label" id="mic-label">Tap to speak</div>
+
+        <div class="text-section">
+            <div class="text-hint" id="text-hint">Tap below and use the keyboard mic to speak</div>
+            <input type="text" id="text-input" placeholder="Ask AIOS anything..." onkeydown="if(event.key==='Enter')sendText()" autofocus>
+            <button class="send-button" id="send-button" onclick="sendText()">Send</button>
+        </div>
+
+        <div class="toggle-row">
+            <button id="auto-play-btn" class="active" onclick="toggleAutoPlay()">Auto-play: On</button>
+            <button id="voice-btn" onclick="toggleVoice()">Emma (British)</button>
+            <button id="speed-btn" onclick="toggleSpeed()">1.15x</button>
+        </div>
+    </div>
+
+    <div class="history" id="history"></div>
+
+    <div class="footer">
+        <a href="/admin">Admin</a>
+    </div>
+
+<script>
+const SERVER = window.location.origin;
+let recognition = null;
+let isListening = false;
+let isBusy = false;  // prevent overlapping requests
+let autoPlay = true;
+let currentVoice = 'bf_emma';
+let voices = [
+    {id: 'bf_emma', name: 'Emma (British)'},
+];
+// Fetch available voices from the API on load
+async function loadVoices() {
+    try {
+        const resp = await fetch(SERVER + '/v1/audio/voices');
+        const data = await resp.json();
+        if (data.voices && data.voices.length > 0) {
+            // Friendly names for known Kokoro voices
+            const nameMap = {
+                'bf_emma': 'Emma (British)',
+                'bf_isabella': 'Isabella (British)',
+                'bf_alice': 'Alice (British)',
+                'bf_lily': 'Lily (British)',
+                'af_bella': 'Bella (US)',
+                'af_nicole': 'Nicole (US)',
+                'af_sky': 'Sky (US)',
+                'am_eric': 'Eric (US)',
+                'am_michael': 'Michael (US)',
+                'bm_george': 'George (British)',
+                'bm_lewis': 'Lewis (British)',
+            };
+            voices = data.voices.map(v => ({
+                id: v.name,
+                name: nameMap[v.name] || v.name,
+            }));
+            // Set default to bf_emma if available, else first voice
+            const emmaIdx = voices.findIndex(v => v.id === 'bf_emma');
+            voiceIndex = emmaIdx >= 0 ? emmaIdx : 0;
+            currentVoice = voices[voiceIndex].id;
+            const btn = document.getElementById('voice-btn');
+            if (btn) btn.textContent = voices[voiceIndex].name;
+        }
+    } catch (e) {
+        console.warn('Failed to load voices, using default:', e);
+    }
+}
+let voiceIndex = 0;
+let speed = 1.15;
+let currentAudioURL = null;  // track for cleanup
+let micPermissionGranted = false;
+let conversationHistory = [];  // track turns for continuity
+let audioContext = null;  // Web Audio API context for iOS playback
+let currentSourceNode = null;  // track active source for stop-on-interrupt
+
+// Unlock audio context on first user interaction.
+// iOS blocks audio playback unless it's unlocked by a user gesture.
+// We create the AudioContext on the first mic tap and keep it alive.
+function unlockAudio() {
+    if (audioContext) return;
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+        console.log('Audio context unlocked');
+    } catch (e) {
+        console.log('Audio context failed:', e);
+    }
+}
+
+// Play WAV audio bytes using Web Audio API.
+// This bypasses iOS auto-play restrictions because the AudioContext
+// was unlocked by a user gesture (the mic tap).
+// Returns a promise that resolves when playback finishes.
+async function playAudioBuffer(wavBytes) {
+    if (!audioContext) unlockAudio();
+    if (!audioContext) return;
+
+    try {
+        // Fast path: parse WAV header manually and create AudioBuffer directly
+        // from PCM data. This skips the async decodeAudioData call, saving
+        // ~10-50ms per chunk on iOS Safari.
+        const view = new DataView(wavBytes.buffer, wavBytes.byteOffset, wavBytes.byteLength);
+        // Validate WAV header
+        if (view.getUint32(0, false) === 0x52494646 &&  // "RIFF"
+            view.getUint32(8, false) === 0x57415645) {  // "WAVE"
+            // Find "fmt " and "data" chunks
+            let offset = 12;
+            let sampleRate = 24000, numChannels = 1, bitsPerSample = 16;
+            let pcmOffset = 0, pcmLength = 0;
+            while (offset < wavBytes.byteLength - 8) {
+                const chunkId = view.getUint32(offset, false);
+                const chunkSize = view.getUint32(offset + 4, true);
+                if (chunkId === 0x666d7420) {  // "fmt "
+                    numChannels = view.getUint16(offset + 10, true);
+                    sampleRate = view.getUint32(offset + 12, true);
+                    bitsPerSample = view.getUint16(offset + 22, true);
+                } else if (chunkId === 0x64617461) {  // "data"
+                    pcmOffset = offset + 8;
+                    pcmLength = chunkSize;
+                    break;
+                }
+                offset += 8 + chunkSize + (chunkSize % 2);  // chunks are word-aligned
+            }
+            if (pcmLength > 0 && bitsPerSample === 16) {
+                const numFrames = pcmLength / (numChannels * (bitsPerSample / 8));
+                const audioBuffer = audioContext.createBuffer(numChannels, numFrames, sampleRate);
+                const channelData = audioBuffer.getChannelData(0);
+                // Convert 16-bit PCM to float32 [-1, 1]
+                for (let i = 0; i < numFrames; i++) {
+                    const sample = view.getInt16(pcmOffset + i * 2, true);
+                    channelData[i] = sample / 32768;
+                }
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                currentSourceNode = source;
+                source.start(0);
+                return new Promise((resolve) => {
+                    source.onended = () => {
+                        if (currentSourceNode === source) currentSourceNode = null;
+                        resolve();
+                    };
+                });
+            }
+        }
+        // Fallback: use decodeAudioData for non-WAV or non-16-bit
+        const arrayBuffer = wavBytes.buffer.slice(wavBytes.byteOffset, wavBytes.byteOffset + wavBytes.byteLength);
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        currentSourceNode = source;
+        source.start(0);
+        return new Promise((resolve) => {
+            source.onended = () => {
+                if (currentSourceNode === source) currentSourceNode = null;
+                resolve();
+            };
+        });
+    } catch (e) {
+        console.error('Web Audio playback failed:', e);
+        fallbackPlayAudio(wavBytes);
+    }
+}
+
+// Fallback: use a regular audio element (may fail on iOS without gesture)
+function fallbackPlayAudio(wavBytes) {
+    const blob = new Blob([wavBytes], { type: 'audio/wav' });
+    if (currentAudioURL) URL.revokeObjectURL(currentAudioURL);
+    currentAudioURL = URL.createObjectURL(blob);
+    const audio = document.createElement('audio');
+    audio.src = currentAudioURL;
+    audio.style.display = 'none';
+    document.body.appendChild(audio);
+    audio.play().catch(e => console.log('Fallback audio failed:', e));
+    audio.onended = () => { document.body.removeChild(audio); };
+}
+
+// Check server health
+async function checkHealth() {
+    try {
+        const resp = await fetch(SERVER + '/health');
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            document.getElementById('status-dot').className = 'status-dot';
+            document.getElementById('status-text').textContent = 'Online';
+        }
+    } catch (e) {
+        document.getElementById('status-dot').className = 'status-dot offline';
+        document.getElementById('status-text').textContent = 'Offline';
+    }
+}
+checkHealth();
+setInterval(checkHealth, 30000);
+
+// UX-1.3: Ambient presence subscriber.
+// Listens to /v1/presence SSE and updates the status dot with breathing
+// animations. Opt-in chime for has_nudge (default off, localStorage).
+let presenceEventSource = null;
+let chimeEnabled = localStorage.getItem('aios_chime') === 'true';
+
+function initPresence() {
+    if (presenceEventSource) presenceEventSource.close();
+    presenceEventSource = new EventSource(SERVER + '/v1/presence');
+    presenceEventSource.addEventListener('state', function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+            if (data.state === 'idle') {
+                dot.className = 'status-dot idle';
+                text.textContent = 'Online';
+            } else if (data.state === 'thinking') {
+                dot.className = 'status-dot thinking';
+                text.textContent = 'Thinking...';
+            } else if (data.state === 'has_nudge') {
+                dot.className = 'status-dot has_nudge';
+                text.textContent = 'AIOS has something to say';
+                if (chimeEnabled) playChime();
+            }
+        } catch (e) { /* ignore parse errors */ }
+    });
+}
+
+function playChime() {
+    // Simple sine-wave chime via Web Audio API (no external file needed)
+    if (!audioContext) unlockAudio();
+    if (!audioContext) return;
+    try {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.frequency.value = 880; // A5
+        gain.gain.setValueAtTime(0, audioContext.currentTime);
+        gain.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.05);
+        gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.5);
+    } catch (e) { /* ignore */ }
+}
+initPresence();
+
+// Warm up microphone permission once on page load.
+// This uses getUserMedia to trigger the iOS permission prompt a single time,
+// then immediately releases the stream. iOS remembers the permission for
+// the session, so Web Speech API won't re-prompt on every refresh.
+async function warmUpMicPermission() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(t => t.stop());
+        micPermissionGranted = true;
+        console.log('Mic permission warmed up');
+    } catch (e) {
+        console.log('Mic permission warmup failed:', e.message);
+        // Not fatal - Web Speech API will still try to prompt on its own
+    }
+}
+
+// Check if speech recognition is available
+function checkSpeechSupport() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const isHTTPS = location.protocol === 'https:';
+    if (!SpeechRecognition) {
+        document.getElementById('mic-label').innerHTML = isHTTPS
+            ? 'Speech recognition not available - use keyboard mic below'
+            : 'HTTPS required for mic - use keyboard mic below';
+        document.getElementById('mic-button').classList.add('disabled');
+        document.getElementById('text-hint').classList.add('active');
+        return false;
+    }
+    if (!isHTTPS) {
+        document.getElementById('mic-label').innerHTML = 'HTTPS required for mic - use keyboard mic below';
+        document.getElementById('mic-button').classList.add('disabled');
+        document.getElementById('text-hint').classList.add('active');
+        return false;
+    }
+    return true;
+}
+
+// Create a fresh SpeechRecognition object each time we listen.
+// Reusing the same object causes flakiness after a few turns on iOS.
+function createRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SpeechRecognition();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+
+    rec.onresult = function(event) {
+        const transcript = document.getElementById('transcript');
+        transcript.className = 'active';
+        let finalText = '';
+        let interimText = '';
+        for (let i = 0; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+                finalText += event.results[i][0].transcript;
+            } else {
+                interimText += event.results[i][0].transcript;
+            }
+        }
+        transcript.innerHTML = '<span class="user">' + escapeHtml(finalText || interimText) + '</span>';
+        if (finalText && !isBusy) {
+            sendToAIOS(finalText);
+        }
+    };
+
+    rec.onerror = function(event) {
+        console.error('Recognition error:', event.error);
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            document.getElementById('mic-label').textContent = 'Mic access denied - check Safari settings';
+        } else if (event.error === 'no-speech') {
+            // Silent - just reset without error message
+        } else {
+            document.getElementById('mic-label').textContent = 'Tap to speak';
+        }
+        isListening = false;
+        updateMicButton();
+    };
+
+    rec.onend = function() {
+        isListening = false;
+        updateMicButton();
+    };
+
+    return rec;
+}
+
+function toggleMic() {
+    if (isBusy) return;  // don't start listening while AIOS is responding
+    if (!checkSpeechSupport()) return;
+
+    // Unlock audio on first interaction - critical for iOS
+    unlockAudio();
+
+    if (isListening) {
+        if (recognition) {
+            try { recognition.stop(); } catch(e) {}
+        }
+        isListening = false;
+    } else {
+        // Create a fresh recognition object each time
+        if (recognition) {
+            try { recognition.abort(); } catch(e) {}
+            recognition = null;
+        }
+        recognition = createRecognition();
+        try {
+            recognition.start();
+            isListening = true;
+            document.getElementById('transcript').className = 'active';
+            document.getElementById('transcript').innerHTML = '<span class="user">Listening...</span>';
+            document.getElementById('mic-label').textContent = 'Listening... tap to stop';
+        } catch (e) {
+            console.error('Start error:', e);
+            // If it fails, try once more after a short delay
+            setTimeout(() => {
+                recognition = createRecognition();
+                try {
+                    recognition.start();
+                    isListening = true;
+                    updateMicButton();
+                } catch(e2) {
+                    console.error('Retry start failed:', e2);
+                    isListening = false;
+                    updateMicButton();
+                }
+            }, 300);
+        }
+    }
+    updateMicButton();
+}
+
+function updateMicButton() {
+    const btn = document.getElementById('mic-button');
+    const label = document.getElementById('mic-label');
+    if (isBusy) {
+        btn.className = 'mic-button loading';
+        label.textContent = 'Thinking...';
+    } else if (isListening) {
+        btn.className = 'mic-button listening';
+        label.textContent = 'Listening... tap to stop';
+    } else {
+        btn.className = 'mic-button';
+        label.textContent = 'Tap to speak';
+    }
+}
+
+async function sendText() {
+    if (isBusy) return;
+    unlockAudio();  // unlock on text send too
+    const input = document.getElementById('text-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    sendToAIOS(text);
+}
+
+async function sendToAIOS(text) {
+    if (isBusy) return;
+    isBusy = true;
+    updateMicButton();
+
+    const responseDiv = document.getElementById('response-text');
+    responseDiv.className = 'active';
+    responseDiv.textContent = '';
+
+    // Show the question
+    const transcript = document.getElementById('transcript');
+    transcript.className = 'active';
+    transcript.innerHTML = '<span class="user">' + escapeHtml(text) + '</span>';
+
+    let fullText = '';
+    let audioQueue = [];
+    let isPlaying = false;
+    let nextPlayIndex = 0;
+    let playEpoch = 0;  // incremented on 'searching' to invalidate stale playQueue loops
+    let playbackResolve = null;  // resolves when audio queue fully drains
+
+    async function playQueue() {
+        if (isPlaying) return;
+        isPlaying = true;
+        const myEpoch = playEpoch;
+        while (nextPlayIndex < audioQueue.length) {
+            if (myEpoch !== playEpoch) return;  // superseded by a new response
+            const idx = nextPlayIndex;
+            nextPlayIndex++;
+            if (audioQueue[idx]) {
+                try {
+                    await playAudioBuffer(audioQueue[idx]);
+                } catch (e) {
+                    console.error('Audio playback error:', e);
+                }
+            }
+        }
+        isPlaying = false;
+        // Check if more audio arrived while we were finishing
+        if (myEpoch === playEpoch && nextPlayIndex < audioQueue.length) {
+            playQueue();
+        } else if (myEpoch === playEpoch && playbackResolve) {
+            // Audio queue fully drained — signal that playback is done
+            const resolve = playbackResolve;
+            playbackResolve = null;
+            resolve();
+        }
+    }
+
+    try {
+        const resp = await fetch(SERVER + '/v1/voice/chat/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: text,
+                voice: currentVoice,
+                speed: speed,
+                history: conversationHistory,
+            }),
+        });
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let eventType = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            // Process complete lines
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';  // keep incomplete line in buffer
+
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    eventType = line.slice(7).trim();
+                } else if (line.startsWith('data: ') && eventType) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (eventType === 'text') {
+                            fullText += data.text;
+                            responseDiv.textContent = stripMarkdown(fullText);
+                        } else if (eventType === 'audio') {
+                            if (autoPlay) {
+                                const audioBytes = base64ToUint8Array(data.audio);
+                                audioQueue[data.index] = audioBytes;
+                                playQueue();
+                            }
+                        } else if (eventType === 'searching') {
+                            // Reactive search: stop any playing audio from the first
+                            // response ("Let me see what I can find"), clear the queue,
+                            // and reset for the second response.
+                            if (currentSourceNode) {
+                                try { currentSourceNode.stop(); } catch(e) {}
+                                currentSourceNode = null;
+                            }
+                            playEpoch++;  // invalidate any in-flight playQueue loop
+                            audioQueue = [];
+                            nextPlayIndex = 0;
+                            isPlaying = false;
+                            // Keep the first response text but add a separator
+                            fullText += '\n\n';
+                            statusDiv.textContent = 'Searching the web...';
+                            statusDiv.className = 'status-thinking';
+                        } else if (eventType === 'correction') {
+                            // Anti-hallucination: replace the streamed text with the verified version
+                            fullText = data.replacement;
+                            responseDiv.textContent = stripMarkdown(fullText);
+                        } else if (eventType === 'done') {
+                            fullText = data.text || fullText;
+                            responseDiv.textContent = stripMarkdown(fullText);
+                        }
+                    } catch (e) {
+                        console.error('Parse error:', e, line.slice(0, 80));
+                    }
+                    eventType = '';
+                } else if (line === '') {
+                    // Blank line resets event type per SSE spec
+                    eventType = '';
+                }
+            }
+        }
+
+        if (fullText) {
+            // Save to conversation history
+            conversationHistory.push({ role: 'user', content: text });
+            conversationHistory.push({ role: 'assistant', content: fullText });
+            if (conversationHistory.length > 12) {
+                conversationHistory = conversationHistory.slice(-12);
+            }
+            addHistory(text, fullText);
+        }
+    } catch (e) {
+        responseDiv.className = 'active';
+        responseDiv.textContent = 'Error: ' + e.message;
+    }
+
+    // Wait for all TTS audio to finish playing before re-arming the mic.
+    // Without this, the mic picks up the tail end of the TTS audio
+    // (audio feedback loop — "she's hearing herself").
+    if (isPlaying || nextPlayIndex < audioQueue.length) {
+        await new Promise((resolve) => { playbackResolve = resolve; });
+    }
+
+    isBusy = false;
+    updateMicButton();
+
+    // UX-1.1: In autolisten mode, re-arm listening after each response
+    // so the user can continue the conversation without tapping.
+    if (autoListenMode && !isListening) {
+        setTimeout(() => {
+            if (!isBusy && !isListening) {
+                toggleMic();
+            }
+        }, 500);
+    }
+}
+
+function base64ToUint8Array(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
+function addHistory(question, answer) {
+    const history = document.getElementById('history');
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerHTML = '<div class="q">You: ' + escapeHtml(question) + '</div>' +
+                     '<div class="a">AIOS: ' + escapeHtml(answer.substring(0, 200)) + (answer.length > 200 ? '...' : '') + '</div>';
+    history.insertBefore(item, history.firstChild);
+    while (history.children.length > 10) {
+        history.removeChild(history.lastChild);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Strip markdown formatting from text for clean display in voice mode.
+// Mirrors the server-side _strip_markdown_for_tts() so the transcript
+// matches what was spoken (no asterisks, hashes, backticks, etc.).
+function stripMarkdown(text) {
+    // Remove tool call JSON artifacts ({"tool_call": {...}})
+    text = text.replace(/\{"tool_call"[\s\S]*?\}\s*\}/g, '');
+    text = text.replace(/\{"tool_call"[\s\S]*$/g, '');
+    // Remove code blocks
+    text = text.replace(/```[\s\S]*?```/g, '');
+    // Remove inline code
+    text = text.replace(/`([^`]+)`/g, '$1');
+    // Remove bold/italic markers
+    text = text.replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1');
+    text = text.replace(/_{1,3}([^_]+)_{1,3}/g, '$1');
+    // Remove headers
+    text = text.replace(/^#{1,6}\s+/gm, '');
+    // Remove link URLs, keep text
+    text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    // Remove list markers
+    text = text.replace(/^[\s]*[-*+]\s+/gm, '');
+    text = text.replace(/^[\s]*\d+\.\s+/gm, '');
+    // Clean up extra whitespace
+    text = text.replace(/\n{2,}/g, '\n');
+    return text.trim();
+}
+
+function toggleAutoPlay() {
+    autoPlay = !autoPlay;
+    const btn = document.getElementById('auto-play-btn');
+    btn.textContent = 'Auto-play: ' + (autoPlay ? 'On' : 'Off');
+    btn.className = autoPlay ? 'active' : '';
+}
+
+function toggleVoice() {
+    voiceIndex = (voiceIndex + 1) % voices.length;
+    currentVoice = voices[voiceIndex].id;
+    document.getElementById('voice-btn').textContent = voices[voiceIndex].name;
+}
+
+function toggleSpeed() {
+    const speeds = [0.85, 1.0, 1.15, 1.3, 1.5];
+    let idx = speeds.indexOf(speed);
+    idx = (idx + 1) % speeds.length;
+    speed = speeds[idx];
+    document.getElementById('speed-btn').textContent = speed + 'x';
+}
+
+// Check for ?autolisten=1 URL param or standalone PWA mode (UX-1.1).
+// When the page is opened with ?autolisten=1 (from a Shortcut or deep-link),
+// auto-start listening. When launched as a standalone PWA from the home
+// screen icon, iOS strips the URL param — so we also check
+// window.navigator.standalone. Tapping the home screen icon IS the user
+// gesture that means "I want to talk" and unlocks the AudioContext.
+let autoListenMode = false;
+
+function checkAutoListenParam() {
+    const params = new URLSearchParams(window.location.search);
+    const hasParam = params.get('autolisten') === '1';
+    // iOS Safari: navigator.standalone is true when launched from home screen.
+    // Other browsers: matchMedia('(display-mode: standalone)').
+    const isStandalone = window.navigator.standalone === true ||
+        window.matchMedia('(display-mode: standalone)').matches;
+    if (hasParam || isStandalone) {
+        autoListenMode = true;
+        unlockAudio();
+        warmUpMicPermission();
+        // Delay to let mic permission settle before starting recognition
+        setTimeout(() => { toggleMic(); }, 300);
+    }
+}
+
+// Re-arm listening when the page becomes visible again (UX-1.1).
+// iOS Safari is inconsistent: when the Shortcut opens the same URL, Safari
+// may focus the existing tab without reloading. We listen for multiple
+// events to catch all cases.
+function tryAutoListen() {
+    if (autoListenMode && !isBusy && !isListening) {
+        unlockAudio();
+        setTimeout(() => {
+            if (!isBusy && !isListening) {
+                toggleMic();
+            }
+        }, 200);
+    }
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') tryAutoListen();
+});
+window.addEventListener('focus', tryAutoListen);
+window.addEventListener('pageshow', (e) => {
+    if (e.persisted) tryAutoListen();
+});
+
+// Wake polling (UX-1.1): poll /v1/wake every 2s when idle. The iOS Shortcut
+// hits POST /v1/wake before opening the page, so even if Safari doesn't
+// fire visibility/focus events, the poll catches the wake signal and
+// auto-arms listening. This is the most reliable re-trigger mechanism.
+let lastWakeSeen = 0;
+setInterval(async () => {
+    if (!autoListenMode || isBusy || isListening) return;
+    try {
+        const resp = await fetch(SERVER + '/v1/wake');
+        const data = await resp.json();
+        if (data.timestamp > lastWakeSeen) {
+            lastWakeSeen = data.timestamp;
+            tryAutoListen();
+        }
+    } catch (e) { /* ignore network errors */ }
+}, 2000);
+
+// Initialize on load
+if (checkSpeechSupport()) {
+    // Warm up mic permission once - prevents re-prompting on every refresh
+    warmUpMicPermission();
+}
+// Load available voices from the API
+loadVoices();
+// Check for autolisten param (UX-1.1: iOS streaming deep-link)
+checkAutoListenParam();
+</script>
+</body>
+</html>
