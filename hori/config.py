@@ -128,11 +128,17 @@ def _ensure_config_exists() -> None:
     """Create the config file with defaults if it doesn't exist."""
     if CONFIG_FILE.exists():
         return
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    reference = _load_reference()
-    with open(CONFIG_FILE, "w") as f:
-        yaml.dump(reference, f, default_flow_style=False, sort_keys=True)
-    logger.info("Created default config at %s", CONFIG_FILE)
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        reference = _load_reference()
+        with open(CONFIG_FILE, "w") as f:
+            yaml.dump(reference, f, default_flow_style=False, sort_keys=True)
+        logger.info("Created default config at %s", CONFIG_FILE)
+    except (OSError, PermissionError) as e:
+        # Running as a restricted user (e.g. aios-worker with home=/nonexistent)
+        # that can't create the config dir. Fall back to defaults — the caller
+        # can override via env vars (XDG_CONFIG_HOME, AIOS_*).
+        logger.warning("Cannot create config dir %s: %s — using defaults", CONFIG_DIR, e)
 
 
 def load_config() -> dict[str, Any]:
@@ -142,8 +148,12 @@ def load_config() -> dict[str, Any]:
     and cached as the module-level `config` variable.
     """
     _ensure_config_exists()
-    with open(CONFIG_FILE) as f:
-        data = yaml.safe_load(f) or {}
+    try:
+        with open(CONFIG_FILE) as f:
+            data = yaml.safe_load(f) or {}
+    except (OSError, PermissionError, FileNotFoundError) as e:
+        logger.warning("Cannot read config %s: %s — using defaults", CONFIG_FILE, e)
+        data = _load_reference()
     data = _apply_env_overrides(data)
     data = _expand_paths(data)
     return data

@@ -395,7 +395,7 @@ def test_admin_page_served(client):
     response = client.get("/admin")
     assert response.status_code == 200
     assert "text/html" in response.headers.get("content-type", "")
-    assert "AIOS Admin" in response.text
+    assert "HORI Admin" in response.text
 
 
 def test_admin_api_state(admin_client):

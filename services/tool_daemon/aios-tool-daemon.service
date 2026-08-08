@@ -13,6 +13,10 @@ Group=aios-worker
 WorkingDirectory=%h/Projects/hori
 Environment=PYTHONPATH=.
 Environment=AIOS_AUDIT_LOG=/var/log/hori/tool_audit.jsonl
+# Config: aios-worker has home=/nonexistent, so point XDG_CONFIG_HOME
+# to the real config location. ProtectHome=read-only allows reading this.
+# The install script replaces %h with the actual home dir.
+Environment=XDG_CONFIG_HOME=%h/.config
 
 # The tool daemon applies its own Landlock + seccomp restrictions
 # (PoC 15.0b/c/d). systemd's NoNewPrivileges is required for both.
