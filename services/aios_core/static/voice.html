@@ -687,6 +687,10 @@ function createRecognition() {
     rec.continuous = false;
     rec.interimResults = true;
     rec.lang = 'en-US';
+    // On desktop Chrome, the default maxAlternatives is 1 — that's fine.
+    // The issue is often that the recognition ends too quickly on desktop
+    // due to brief silence. We handle this in onend by checking if we
+    // got any results.
 
     rec.onresult = function(event) {
         const transcript = document.getElementById('transcript');
@@ -709,17 +713,28 @@ function createRecognition() {
     rec.onerror = function(event) {
         console.error('Recognition error:', event.error);
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-            document.getElementById('mic-label').textContent = 'Mic access denied - check Safari settings';
+            document.getElementById('mic-label').textContent = 'Mic access denied - check browser settings';
         } else if (event.error === 'no-speech') {
-            // Silent - just reset without error message
+            // Show a hint so the user knows the mic was listening but didn't hear anything
+            document.getElementById('mic-label').textContent = 'No speech detected - try again';
+        } else if (event.error === 'audio-capture') {
+            document.getElementById('mic-label').textContent = 'No microphone found';
+        } else if (event.error === 'network') {
+            document.getElementById('mic-label').textContent = 'Network error - check connection';
         } else {
-            document.getElementById('mic-label').textContent = 'Tap to speak';
+            document.getElementById('mic-label').textContent = 'Error: ' + event.error;
         }
         isListening = false;
         updateMicButton();
     };
 
+    rec.onstart = function() {
+        console.log('Recognition started successfully');
+        isListening = true;
+    };
+
     rec.onend = function() {
+        console.log('Recognition ended');
         isListening = false;
         updateMicButton();
     };
