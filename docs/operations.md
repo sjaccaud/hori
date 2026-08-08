@@ -1,6 +1,7 @@
 # HORI Operational Notes
 
-This file captures discovered runtime details for the local LLM inference stack on the host.
+This file captures discovered runtime details for the local LLM inference
+stack. Paths shown are examples — adjust to your own build locations.
 
 ## Build & Test Commands
 
@@ -32,24 +33,23 @@ PYTHONPATH=. ./venv/bin/python3 -m pytest services/aios_core/test_main.py -v
 - **Performance:** ~0.7s for simple queries, ~2.5s with system prompt + memory retrieval
 - **Memory:** ~16GB VRAM (15GB model + ~1GB turbo4 KV cache at 16K context)
 - **Binary:** Spiritbuun's `buun-llama-cpp` fork (TurboQuant + VBR + DFlash)
-  - Source: `/tmp/buun-llama-cpp/` (cloned from `github.com/spiritbuun/buun-llama-cpp`)
-  - Installed binary: `~/llama-builds/spiritbuun-714/bin/llama-server`
-  - Mainline binary (ROCm 7.14): `~/llama-builds/mainline-714/bin/llama-server`
+  - Source: `github.com/spiritbuun/buun-llama-cpp`
   - Compiled with ROCm/HIP 7.14 for gfx1201 (Radeon AI PRO R9700)
   - Build config: `-DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 -DGGML_HIP_NO_VMM=OFF -DCMAKE_BUILD_TYPE=Release`
-- **Model store:** `~/ai-models`
-  - Contains `.gguf` files (e.g. `qwen3.6-27b-IQ4_NL-with-MTP`, `Qwen2.5-Coder-32B-Instruct-IQ4_NL`, `Qwen_Qwen3.5-27B-IQ4_NL`, `gemma-4-26B-A4B-it-qat-UD-Q4_K_XL`, `gemma-4-e4b-it-Q4_K_M`).
-  - DFlash draft model for Qwen3.5-27B: `~/ai-models/dflash/Qwen3.5-27B-DFlash.gguf` (4.3GB, tested but OOM with 27B target on 34GB VRAM)
+- **Model store:** `~/ai-models` (adjust to your preferred location)
+  - Contains `.gguf` files (e.g. `qwen3.6-27b-IQ4_NL-with-MTP`, `Qwen2.5-Coder-32B-Instruct-IQ4_NL`, etc.)
+  - DFlash draft model for Qwen3.5-27B: tested but OOM with 27B target on 32GB VRAM
 - **Runtime flags:** `--model ~/ai-models/qwen3.6-27b-IQ4_NL-with-MTP.gguf --alias Qwen3.6-27B -c 16384 -np 1 -fa on --reasoning-preserve -b 2048 -ub 2048 -ctk turbo4 -ctv turbo4 --host 0.0.0.0 --port 8080`
-- **Environment:** `LD_LIBRARY_PATH=/opt/rocm/core-7.14/lib:/opt/rocm/core-7.14/lib/rocm_sysdeps/lib:/opt/rocm/core-7.14/lib/llvm/lib` + `GPU_MAX_HW_QUEUES=1` (prevents ROCm idle-100%-GPU bug; see RDNA4 research review below)
+- **Environment:** `LD_LIBRARY_PATH=<your-rocm-path>/lib:<your-rocm-path>/lib/rocm_sysdeps/lib:<your-rocm-path>/lib/llvm/lib` + `GPU_MAX_HW_QUEUES=1` (prevents ROCm idle-100%-GPU bug)
 
 ### ROCm 7.14
 
-- Installed via runfile installer: `bash /tmp/rocm-installer-7.14.0-6.run deps=install gfx=gfx1201 rocm`
-- Runtime at `/opt/rocm/core-7.14/`, sysdeps at `/opt/rocm/core-7.14/lib/rocm_sysdeps/lib/`
-- SDK headers assembled at `~/rocm-sdk/core-7.14/` (dev packages extracted from runfile - the default `core` install only includes runtime, not dev headers)
+- Installed via runfile installer (adjust path to your installer):
+  `bash rocm-installer-7.14.0-6.run deps=install gfx=gfx1201 rocm`
+- Runtime at `/opt/rocm/` (or wherever you installed it)
+- SDK headers: extract dev packages from the runfile (the default `core`
+  install only includes runtime, not dev headers)
 - `LD_LIBRARY_PATH` must include all three lib directories when running llama-server
-- Ubuntu's ROCm 7.1 packages at `/usr` are still installed but not used
 - Fixes vs ROCm 7.1: HipVMM crashes eliminated, turbo4 KV cache works with Qwen3.6's hybrid architecture
 
 ### Inference Optimizations (Aug 2026)
@@ -89,9 +89,8 @@ VBR uses ~19.9GB VRAM at 65K context (vs 20.7GB at 16K with turbo4). The tradeof
 
 ### DFlash Draft Model (Available, Not Usable on 34GB VRAM)
 
-- DFlash draft model for Qwen3.5-27B downloaded and converted to GGUF: `~/ai-models/dflash/Qwen3.5-27B-DFlash.gguf` (4.3GB)
-- Source: `z-lab/Qwen3.5-27B-DFlash` on HuggingFace
-- Cannot fit alongside 27B target model in 34GB VRAM (19GB target + 4.3GB draft = 23.3GB, leaving only 10.7GB for KV + compute, which is not enough)
+- DFlash draft model for Qwen3.5-27B: source `z-lab/Qwen3.5-27B-DFlash` on HuggingFace
+- Cannot fit alongside 27B target model in 32GB VRAM (19GB target + 4.3GB draft = 23.3GB, leaving only ~9GB for KV + compute)
 - Future: When a larger GPU is available (48GB+), DFlash with Qwen3.5-27B should work
 
 ### Rebuilding the Binary
@@ -100,29 +99,29 @@ If the binary needs to be rebuilt (e.g. after a system update):
 
 **Spiritbuun fork** (for turbo4 KV cache):
 ```bash
-cd /tmp/buun-llama-cpp
-rm -rf build-714
-ROCM_PATH=~/rocm-sdk/core-7.14 \
-cmake -B build-714 -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 \
+cd <your-llama-cpp-source>
+rm -rf build
+ROCM_PATH=<your-rocm-path> \
+cmake -B build -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 \
   -DCMAKE_BUILD_TYPE=Release -DGGML_HIP_NO_VMM=OFF \
-  -DROCM_PATH=~/rocm-sdk/core-7.14 \
-  -DCMAKE_EXE_LINKER_FLAGS="-L/opt/rocm/core-7.14/lib/rocm_sysdeps/lib -Wl,-rpath,/opt/rocm/core-7.14/lib/rocm_sysdeps/lib" \
-  -DCMAKE_SHARED_LINKER_FLAGS="-L/opt/rocm/core-7.14/lib/rocm_sysdeps/lib -Wl,-rpath,/opt/rocm/core-7.14/lib/rocm_sysdeps/lib"
-ROCM_PATH=~/rocm-sdk/core-7.14 cmake --build build-714 --target llama-server -j$(nproc)
+  -DROCM_PATH=<your-rocm-path> \
+  -DCMAKE_EXE_LINKER_FLAGS="-L<your-rocm-path>/lib/rocm_sysdeps/lib -Wl,-rpath,<your-rocm-path>/lib/rocm_sysdeps/lib" \
+  -DCMAKE_SHARED_LINKER_FLAGS="-L<your-rocm-path>/lib/rocm_sysdeps/lib -Wl,-rpath,<your-rocm-path>/lib/rocm_sysdeps/lib"
+ROCM_PATH=<your-rocm-path> cmake --build build --target llama-server -j$(nproc)
 ```
 
 **Mainline llama.cpp** (no turbo4, but stable):
 ```bash
-cd ~/llama.cpp
-rm -rf build-714
-ROCM_PATH=~/rocm-sdk/core-7.14 \
-cmake -B build-714 -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 \
+cd <your-llama-cpp-source>
+rm -rf build
+ROCM_PATH=<your-rocm-path> \
+cmake -B build -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 \
   -DCMAKE_BUILD_TYPE=Release -DGGML_HIP_NO_VMM=ON \
-  -DROCM_PATH=~/rocm-sdk/core-7.14 \
+  -DROCM_PATH=<your-rocm-path> \
   -DCMAKE_HIP_FLAGS="-include __clang_hip_runtime_wrapper.h" \
-  -DCMAKE_EXE_LINKER_FLAGS="-L/opt/rocm/core-7.14/lib/rocm_sysdeps/lib -Wl,-rpath,/opt/rocm/core-7.14/lib/rocm_sysdeps/lib" \
-  -DCMAKE_SHARED_LINKER_FLAGS="-L/opt/rocm/core-7.14/lib/rocm_sysdeps/lib -Wl,-rpath,/opt/rocm/core-7.14/lib/rocm_sysdeps/lib"
-ROCM_PATH=~/rocm-sdk/core-7.14 cmake --build build-714 --target llama-server -j$(nproc)
+  -DCMAKE_EXE_LINKER_FLAGS="-L<your-rocm-path>/lib/rocm_sysdeps/lib -Wl,-rpath,<your-rocm-path>/lib/rocm_sysdeps/lib" \
+  -DCMAKE_SHARED_LINKER_FLAGS="-L<your-rocm-path>/lib/rocm_sysdeps/lib -Wl,-rpath,<your-rocm-path>/lib/rocm_sysdeps/lib"
+ROCM_PATH=<your-rocm-path> cmake --build build --target llama-server -j$(nproc)
 ```
 
 Note: The Spiritbuun fork's `ggml/src/ggml-hip/CMakeLists.txt` has a patch to add
@@ -141,9 +140,9 @@ The mainline build requires this flag via `-DCMAKE_HIP_FLAGS`.
 ### Starting the server manually
 
 ```bash
-LD_LIBRARY_PATH=/opt/rocm/core-7.14/lib:/opt/rocm/core-7.14/lib/rocm_sysdeps/lib:/opt/rocm/core-7.14/lib/llvm/lib \
+LD_LIBRARY_PATH=<your-rocm-path>/lib:<your-rocm-path>/lib/rocm_sysdeps/lib:<your-rocm-path>/lib/llvm/lib \
 GPU_MAX_HW_QUEUES=1 \
-~/llama-builds/spiritbuun-714/bin/llama-server \
+<your-llama-server-binary> \
   --model ~/ai-models/qwen3.6-27b-IQ4_NL-with-MTP.gguf \
   --alias Qwen3.6-27B \
   -c 16384 -np 1 -fa on --reasoning-preserve \
@@ -504,7 +503,7 @@ Three collections for hierarchical memory (the anti-groundhog mechanism):
 - `systemctl` changes require `sudo` and cannot be performed by unprivileged sessions in this environment.
 - The embedding server on :8081 is not in the systemd unit yet; it must be started manually or added as a separate service.
 - aios-core uses `httpx` (async) for LLM calls, not `requests` (blocking). This is critical - blocking calls caused the server to hang during concurrent requests (model polling + chat).
-- aios-core must be started manually: `cd ~/Projects/aios && PYTHONPATH=. ./venv/bin/python3 -m services.aios_core.main &`
+- aios-core must be started manually: `PYTHONPATH=. ./venv/bin/python3 -m services.aios_core.main &`
 - The systemd service for llama-server now uses a single model (`--model`), not router mode. This is because Qwen3.6 requires specific turbo4 KV flags that don't work with all models.
 
 ## Benchmark (Aug 2026)

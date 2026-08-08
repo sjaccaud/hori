@@ -61,22 +61,22 @@
   spine. macOS/Windows: user-space validation only. The Sherpa still
   works (it's Go, cross-platform). Kernel isolation does not."
 
-### GUI surfaces — Ubuntu is headless, not the daily driver
-- **Context:** The Ubuntu server (the host) is headless — the GUI was removed
-  to free VRAM. The only GUI surfaces the product owner has for testing are
-  iPhone (iOS) and MacBook Air (macOS). The Ubuntu box is where the GPU
-  and LLM live, not where the user interacts.
+### GUI surfaces — the GPU server is headless, not the daily driver
+- **Context:** The GPU server (Linux) is headless — the GUI was removed
+  to free VRAM. Users interact with HORI from their phone or laptop over
+  the network. The GPU server is where the LLM lives, not where the user
+  interacts.
 - **Why it matters for design:** The "converse first" experience, the
-  themes, the voice interaction — these need to be tested on iOS and
-  macOS, not on an Ubuntu desktop. The Ubuntu box is the backend.
-- **Why it matters for the audience:** Most "solo creators" are on macOS
-  or Windows. Few run Ubuntu as their daily driver. HORI's GUI surfaces
-  (voice app, chat app, admin panel) are web-based and accessed from the
-  user's device over the network (Tailscale or LAN). The LLM can live
-  anywhere — a headless Linux box, a cloud endpoint, or even locally on
-  the MacBook if it has enough RAM.
-- **Current leaning:** Design and test the GUI surfaces on iOS + macOS.
-  The Ubuntu box is the reference backend (where the safety spine runs
+  themes, the voice interaction — these need to be tested on the user's
+  actual devices (phone, laptop), not on a Linux desktop. The GPU server
+  is the backend.
+- **Why it matters for the audience:** Most users are on macOS, Windows,
+  or iOS/Android. HORI's GUI surfaces (voice app, chat app, admin panel)
+  are web-based and accessed from the user's device over the network
+  (Tailscale or LAN). The LLM can live anywhere — a headless Linux box,
+  a cloud endpoint, or even locally on a laptop if it has enough VRAM.
+- **Current leaning:** Design and test the GUI surfaces on mobile + desktop.
+  The GPU server is the reference backend (where the safety spine runs
   at full strength). Document the architecture as: "your GPU box runs
   HORI's backend; your phone and laptop are the frontends." This is
   actually the natural deployment model for most users — a headless

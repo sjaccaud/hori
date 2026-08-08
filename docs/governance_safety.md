@@ -31,7 +31,7 @@ architecture.
 
 ### 5. Notification & Alerting (The "Nervous System")
 
-- __Critical Alerts:__ Sent via Apprise/Home Assistant to your iPhone.
+- __Critical Alerts:__ Sent via Apprise/Home Assistant to your phone.
 - __Low-Level Logs:__ Written to a dedicated `aios_audit.log` for your review.
 - __Intentional Friction:__ For any "Delta" (divergence from Charter/Manifesto) detected, I will pause and present the "Yes, AND" framework.
 

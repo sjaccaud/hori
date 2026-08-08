@@ -1,4 +1,4 @@
-# PRD: UX-1.2 — MacBook Typing Surface (/chat)
+# PRD: UX-1.2 — Laptop Typing Surface (/chat)
 
 ## 1. Intent Trace
 
@@ -12,7 +12,7 @@
 - **Roadmap PoC:** Off-roadmap (new UX surface). The closest roadmap item
   is PoC 4.2 (Remote Control Surface, complete). This PoC adds a
   keyboard-first, distraction-free text surface optimized for the
-  coffee-shop MacBook use case where voice is impractical.
+  coffee-shop laptop use case where voice is impractical.
 - **UX Gameplan reference:** `~/.devin/plans/plan-7dbbbd3cbddb61f9.md` §7, UX-1.2.
 
 ## 2. Interface Contract
@@ -24,7 +24,7 @@ One new route handler:
 ```python
 @app.get("/chat")
 async def chat_app():
-    """Keyboard-first text chat web app - optimized for MacBook typing."""
+    """Keyboard-first text chat web app - optimized for laptop typing."""
     # Serves static/chat.html — same pattern as /voice (line 72)
 ```
 
@@ -160,7 +160,7 @@ new abstractions.
   "id": "aios-ux-typing-surface-wo-001",
   "parent_charter_id": "aios-foundation-charter-001",
   "version": "1.0.0",
-  "description": "UX-1.2: Create a keyboard-first, distraction-free text chat web page at /chat for MacBook typing. New static/chat.html + one route handler in main.py. Uses existing /v1/chat/completions streaming endpoint. No new API endpoints, no new infra. Traces to Manifesto Pillar IV (multimodal) + VII (simplicity).",
+  "description": "UX-1.2: Create a keyboard-first, distraction-free text chat web page at /chat for laptop typing. New static/chat.html + one route handler in main.py. Uses existing /v1/chat/completions streaming endpoint. No new API endpoints, no new infra. Traces to Manifesto Pillar IV (multimodal) + VII (simplicity).",
   "status": "backlog",
   "priority": "medium"
 }

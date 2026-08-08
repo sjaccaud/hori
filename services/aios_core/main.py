@@ -71,7 +71,7 @@ if _static_dir.exists():
 
 @app.get("/voice")
 async def voice_app():
-    """Voice web app - accessible from iPhone browser.
+    """Voice web app - accessible from a phone browser.
     Add to home screen for app-like experience."""
     html_path = _static_dir / "voice.html"
     if html_path.exists():
@@ -82,7 +82,7 @@ async def voice_app():
 @app.get("/chat")
 async def chat_app():
     """Keyboard-first text chat web app (UX-1.2).
-    Optimized for MacBook typing — one input box, Enter to send,
+    Optimized for laptop typing — one input box, Enter to send,
     streaming response. Uses the existing /v1/chat/completions endpoint.
     Traces to: Manifesto Pillar IV (multimodal), UX Gameplan UX-1.2."""
     html_path = _static_dir / "chat.html"

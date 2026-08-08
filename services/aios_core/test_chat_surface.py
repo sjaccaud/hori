@@ -3,7 +3,7 @@
 Tests that the /chat web page (UX-1.2) is a keyboard-first, distraction-free
 text chat surface that uses the existing streaming endpoint.
 
-Traces to: UX-1.2 PRD (docs/prd/ux-1-2-macbook-typing-surface.md),
+Traces to: UX-1.2 PRD (docs/prd/ux-1-2-laptop-typing-surface.md),
 Manifesto Pillar IV (multimodal input/output).
 """
 import re

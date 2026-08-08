@@ -70,7 +70,7 @@ To implement the backend, create a new workflow in `n8n` with the following node
         *   Key: `text` | Value: `Dictated Text` (from previous step)
 5.  (Optional) Add action: **Show Result** to see the parsed JSON.
 
-### For macOS (MacBook Air)
+### For macOS
 1.  Open the **Shortcuts** app.
 2.  Create a new Shortcut named **"HORI Command"**.
 3.  Add action: **Dictate Text**.

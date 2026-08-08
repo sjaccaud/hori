@@ -172,7 +172,7 @@ This gives iOS the HTTPS it needs for the Web Speech API while keeping
 everything private. Verify with `./scripts/hardening/audit_funnel.sh`.
 
 - **Voice app:** `https://<your-tailnet>.ts.net/voice` (streaming SSE, mobile-first)
-- **Chat app:** `https://<your-tailnet>.ts.net/chat` (keyboard-first text, MacBook typing surface)
+- **Chat app:** `https://<your-tailnet>.ts.net/chat` (keyboard-first text, laptop typing surface)
 - **Presence SSE:** `https://<your-tailnet>.ts.net/v1/presence` (ambient presence stream)
 - **Admin panel:** `https://<your-tailnet>.ts.net/admin` (system vitals,
   tests, logs, service control — requires `scripts/hardening/setup_admin_sudoers.sh`

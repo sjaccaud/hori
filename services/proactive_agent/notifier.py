@@ -48,7 +48,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 HASS_URL = os.getenv("HASS_URL", "").rstrip("/")
 HASS_TOKEN = os.getenv("HASS_TOKEN", "")
-HASS_NOTIFY_SERVICE = os.getenv("HASS_NOTIFY_SERVICE", "notify.mobile_app_iphone")
+HASS_NOTIFY_SERVICE = os.getenv("HASS_NOTIFY_SERVICE", "notify.mobile_app")
 
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "")
 NTFY_SERVER = os.getenv("NTFY_SERVER", "https://ntfy.sh").rstrip("/")

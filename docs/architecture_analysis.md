@@ -11,27 +11,27 @@
 
 Based on the current hardware and software inventory, the following constraints define the operational boundaries of the HORI:
 
-*   **Compute/VRAM Ceiling:** The primary local intelligence is bound by the **32GB VRAM** on the "<your-hostname>" rig. While excellent for high-performance 8B-30B parameter models (e.g., Gemma 4, Qwen 3.6), it will struggle with massive frontier-class models (100B+) without significant quantization or offloading, which impacts speed. **Note: The transition to I-Quants (Importance Matrix Quants) and uncompressed KV Caches is designed to maximize this ceiling by intelligently allocating VRAM between model weights and high-fidelity short-term memory.**
-*   **Mobile/Client Bottleneck:** The MacBook Air (8GB RAM) is a significant constraint for local AI execution. It must function primarily as a **Thin Client/Orchestrator** rather than a compute node.
+*   **Compute/VRAM Ceiling:** The primary local intelligence is bound by the **32GB VRAM** on the the GPU server rig. While excellent for high-performance 8B-30B parameter models (e.g., Gemma 4, Qwen 3.6), it will struggle with massive frontier-class models (100B+) without significant quantization or offloading, which impacts speed. **Note: The transition to I-Quants (Importance Matrix Quants) and uncompressed KV Caches is designed to maximize this ceiling by intelligently allocating VRAM between model weights and high-fidelity short-term memory.**
+*   **Mobile/Client Bottleneck:** A lightweight laptop is a significant constraint for local AI execution. It must function primarily as a **Thin Client/Orchestrator** rather than a compute node.
 *   **Connectivity Dependency:** The system's "remote control" and "mesh" capabilities are heavily reliant on **Tailscale**. While highly secure, latency over non-local networks will impact real-time voice/control responsiveness.
-*   **Storage/RAG Throughput:** While the 8TB NAS provides massive capacity for RAG (Retrieval-Augmented Generation), the ingestion and retrieval speed will be limited by the interface (USB/Network) compared to the local NVME.
+*   **Storage/RAG Throughput:** While a NAS provides massive capacity for RAG (Retrieval-Augmented Generation), the ingestion and retrieval speed will be limited by the interface (USB/Network) compared to the local NVME.
 
 ## 2. Opportunities for Maximization
 
 *   **Hybrid Intelligence Strategy:** We can implement a "Tiered Reasoning" model. 
-    *   *Tier 1 (Local/Fast):* "<your-hostname>" handles routine tasks, privacy-sensitive data, and immediate voice responses.
+    *   *Tier 1 (Local/Fast):* the GPU server handles routine tasks, privacy-sensitive data, and immediate voice responses.
     *   *Tier 2 (Cloud/Deep):* Gemini Pro handles complex planning, long-context reasoning, and high-level strategy.
-*   **Edge-to-Core Voice Loop:** Edge devices (such as the Pi4) are perfectly positioned as low-power "Always-On" listeners. By offloading the heavy Whisper/Vosk processing to "<your-hostname>" via Tailscale, we can achieve high-accuracy voice control without taxing the edge hardware.
-*   **Unified Mesh Identity:** Using Tailscale and static IPs, we can treat the entire stack as a single, distributed computer. The HORI can "spawn" processes on "<your-hostname>" and "monitor" them from the MacBook seamlessly.
-*   **Massive Context/RAG:** The 8TB NAS allows us to build a "Life-Long Memory" for the HORI, indexing everything from project files to music libraries, making the HORI contextually aware of your entire digital life.
+*   **Edge-to-Core Voice Loop:** Edge devices (such as an edge device (e.g. Raspberry Pi)) are perfectly positioned as low-power "Always-On" listeners. By offloading the heavy Whisper/Vosk processing to the GPU server via Tailscale, we can achieve high-accuracy voice control without taxing the edge hardware.
+*   **Unified Mesh Identity:** Using Tailscale and static IPs, we can treat the entire stack as a single, distributed computer. The HORI can "spawn" processes on the GPU server and "monitor" them from a laptop seamlessly.
+*   **Massive Context/RAG:** A large-capacity NAS allows us to build a "Life-Long Memory" for the HORI, indexing everything from project files to music libraries, making the HORI contextually aware of your entire digital life.
 
 ## 3. Capabilities vs. Limitations
 
 ### What the HORI will be GREAT at:
-*   **Private, Local-First Development:** Using Cline/VS Code on "<your-hostname>" for secure, private coding.
+*   **Private, Local-First Development:** Using Cline/VS Code on the GPU server for secure, private coding.
 *   **Context-Aware Personal Assistant:** Managing projects and information using the massive RAG capability.
 *   **Distributed Orchestration:** Controlling smart home/IoT or tabletop RPG elements via edge devices.
-*   **Creative Workflow Support:** Bridging music production (MacBook) with AI-driven ideation/coding (the host).
+*   **Creative Workflow Support:** Bridging music production (laptop) with AI-driven ideation/coding (the GPU server).
 
 ### What the HORI might be UNDERPOWERED for:
 *   **Heavy Local Training/Fine-tuning:** 32GB VRAM is great for inference, but large-scale model training is out of reach.
@@ -42,7 +42,7 @@ Based on the current hardware and software inventory, the following constraints 
 
 To honor your preference for simplicity and maximizing current value, the HORI will leverage your existing subscriptions as follows:
 
-*   **Gemini Pro (Tier 2 Intelligence):** Instead of trying to run massive models locally, we will use Gemini Pro via API for high-level reasoning, complex planning, and long-context tasks. This keeps "<your-hostname>" fast and responsive while providing "frontier" intelligence when needed.
+*   **Gemini Pro (Tier 2 Intelligence):** Instead of trying to run massive models locally, we will use Gemini Pro via API for high-level reasoning, complex planning, and long-context tasks. This keeps the GPU server fast and responsive while providing "frontier" intelligence when needed.
 *   **Devin Pro (Specialized Engineering):** We will treat Devin as a "Senior AI Engineer" on call. While the HORI handles the day-to-day orchestration and local coding, Devin will be invoked for deep architectural refactors and complex debugging that require its specialized cloud-based capabilities.
 
 ## 5. Software Suggestions & Redundancy Check
@@ -57,14 +57,14 @@ To honor your preference for simplicity and maximizing current value, the HORI w
 *   **Home Assistant:** Even if not a "smart home" enthusiast, Home Assistant is the gold standard for device orchestration and could manage the "physical" aspects of your HORI (WOL, lights, status LEDs).
 
 **B. The Memory (Vector Database & RAG):**
-*   **Qdrant or ChromaDB:** To manage the massive amount of data on your 8TB NAS, we need a dedicated, high-performance vector database running on "<your-hostname>".
+*   **Qdrant or ChromaDB:** To manage the massive amount of data on a NAS, we need a dedicated, high-performance vector database running on the GPU server.
 
 **C. The Interface (Monitoring & Control):**
-*   **Prometheus + Grafana:** To monitor the "health" of the HORI (VRAM usage on the host, edge device temperature, Tailscale latency). This provides the "Self-Healing" visibility required.
-*   **Apprise:** For unified notification delivery (sending HORI alerts to your iPhone, MacBook, or even a physical light via edge devices).
+*   **Prometheus + Grafana:** To monitor the "health" of the HORI (VRAM usage on the GPU server, edge device temperature, Tailscale latency). This provides the "Self-Healing" visibility required.
+*   **Apprise:** For unified notification delivery (sending HORI alerts to your phone, laptop, or even a physical light via edge devices).
 
 **D. The Voice (Advanced Interaction):**
-*   **Faster-Whisper:** To ensure the voice-to-text pipeline on edge devices is as low-latency as possible when offloading to "<your-hostname>".
+*   **Faster-Whisper:** To ensure the voice-to-text pipeline on edge devices is as low-latency as possible when offloading to the GPU server.
 
 ## 6. The Low Entropy Protocol (LEP)
 
@@ -82,7 +82,7 @@ Instead of a passive assistant, the HORI employs an active "Red Team" of agentic
 
 *   **The Strategist:** Monitors alignment between the **Work Order** and the **Project Charter**. (e.g., *"This feature is cool, but it's delaying our MVP launch. Is this a strategic pivot?"*)
 *   **The Architect:** Monitors alignment between the **Work Order** and the **Technical Constraints** in the Charter. (e.g., *"This implementation violates our 'Local-First' principle. Should we refactor?"*)
-*   **The Guardian:** Monitors alignment with the **Manifesto** and resource constraints. (e.g., *"This request exceeds our current VRAM ceiling on '<your-hostname>'."*)
+*   **The Guardian:** Monitors alignment with the **Manifesto** and resource constraints. (e.g., *"This request exceeds our current VRAM ceiling on the GPU server."*)
 
 ### C. Intentional Friction & The "Yes, AND" Mechanism
 When a significant "Delta" (divergence) is detected, the HORI does not blindly execute. It triggers **Intentional Friction**:
@@ -107,7 +107,7 @@ To implement the Low Entropy Protocol effectively, the following emerging techno
 
 ## 8. Model Loading & Serving Architecture
 
-To maximize the utility of the "<your-hostname>" rig and ensure a frictionless developer experience, the model loading and serving layer follows these principles:
+To maximize the utility of the the GPU server rig and ensure a frictionless developer experience, the model loading and serving layer follows these principles:
 
 ### A. Model Consolidation (Single Source of Truth)
 To minimize fragmentation and simplify management, all models are maintained in a single, unified directory: `~/ai-models`. The Hugging Face CLI (`hf`) is used to download specific I-Quants (e.g., `IQ4_NL.gguf`) directly into this location, ensuring a centralized repository for all local intelligence.
@@ -118,7 +118,7 @@ The serving layer utilizes `llama-server` in **Router Mode** (`--models-dir ~/ai
 * **Flash Attention** (`-fa on`): Optimizes attention computation to prevent VRAM bloat and maintain high-speed inference even when processing massive codebases or long-term memory logs.
 
 ### C. Access & Integration
-The serving layer exposes an OpenAI-compatible endpoint and a native web interface (`llama-ui`) on port 8080. This is accessible via Tailscale from any device (MacBook, iPhone, etc.) and is designed for direct integration with IDEs like VS Code, Cline, and Roo.
+The serving layer exposes an OpenAI-compatible endpoint and a native web interface (`llama-ui`) on port 8080. This is accessible via Tailscale from any device (laptop, phone, etc.) and is designed for direct integration with IDEs like VS Code, Cline, and Roo.
 
 ### Future Trajectory
 The industry is moving away from "Chat-as-Interface" toward **"Agent-as-Partner."** We expect a shift from models that simply predict the next token to models that can maintain internal state, reason about long-term goals, and interact with structured knowledge (Graphs) as natively as they do with text. The HORI is being designed to sit at the forefront of this shift.

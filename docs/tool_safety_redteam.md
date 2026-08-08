@@ -477,7 +477,7 @@ GLM-5.2 High's proposal provides a solid baseline for structural isolation
 and validation schemas. However, it relies heavily on architectural
 assumptions that break down under active prompt injection, agentic
 tool-chaining, and localized system escalation. An HORI operating on local
-hardware (the host / pi4) with system-level modification rights presents
+hardware (the GPU server / edge device) with system-level modification rights presents
 unique attack surfaces.
 
 ### Five Blind Spots in the Original Architecture
@@ -505,7 +505,7 @@ at the kernel level. Must integrate.
 #### 2. SSRF via API Egress (PoC 15.8)
 **The gap**: The network egress allowlist allows requests to internal
 endpoints. With Tailscale mesh, internal services are reachable:
-<your-tailscale-ip>:8080 (llama-server), AmpliFi router admin, Open WebUI,
+<your-tailscale-ip>:8080 (llama-server), router admin, Open WebUI,
 n8n, etc.
 
 **The exploit**: An API tool call to http://<your-tailscale-ip>:8080/v1/chat/

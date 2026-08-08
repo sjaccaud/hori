@@ -13,11 +13,11 @@ WHY IT EXISTS:
   process can apply to ITSELF — it cannot be escaped even by root
   within the same process tree. This is the structural guarantee that
   /proc/self/environ, /etc/shadow, ~/.ssh, and the local network
-  (MacBook, Pi4, n8n, Home Assistant) are unreachable.
+  (laptop, edge devices, n8n, Home Assistant) are unreachable.
 
 WHAT IT DEFENDS AGAINST:
   - Credential theft via /proc/self/environ, ~/.ssh, ~/.gnupg, .env
-  - Lateral movement to local network services (n8n, HA, router, Pi4)
+  - Lateral movement to local network services (n8n, HA, router, edge devices)
   - Reading system files (/etc, /var/log) that leak architecture
   - Any filesystem path not explicitly granted
 
