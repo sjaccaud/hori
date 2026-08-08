@@ -5,17 +5,27 @@
 
 ## Current Slice
 
-(none — SLICE-07 complete, repo is public-ready)
+(none — SLICE-08 complete)
 
 ## Slice Queue
 
-Proposed order (adjustable at any retro):
-
-1. **SLICE-08: Setup wizard** — `hori init` command that creates config,
-   detects hardware, and writes hori.yaml automatically. Demo: fresh
-   clone → `hori init` → working config.
+(Open — decide at next retro)
 
 ## Completed Slices
+
+### SLICE-08: hori init setup wizard — COMPLETE
+- Branch: slice/08-hori-init
+- What was built: `hori/init.py` (setup wizard), `hori/test_init.py` (9 tests).
+  `hori init` combines hardware detection + config creation: detects GPU/VRAM,
+  recommends a model tier, writes `~/.config/hori/hori.yaml` with the recommended
+  model and SQLite backend, creates `~/.local/share/hori/`, prints next steps.
+  `--force` overwrites existing config, `--quiet` suppresses the report.
+  Updated cli.py, README quickstart, AGENTS.md.
+- Surprises: None. The detect module was already clean, so init was just
+  orchestration + config writing + next-steps printing.
+- Skipped: Nothing.
+- Demo: Fresh clone → `pip install -e .` → `hori init` → working config
+  with recommended model, data dir created, next steps printed.
 
 ### SLICE-07: README + LICENSE + CONTRIBUTING — COMPLETE
 - Branch: slice/07-readme-license

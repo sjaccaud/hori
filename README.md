@@ -36,24 +36,23 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-### 2. Detect hardware
+### 2. Initialize
 
 ```bash
-hori detect
+hori init
 ```
 
-This inspects your GPU/VRAM and recommends a model tier. It outputs a
-`hori.yaml` snippet you can paste into `~/.config/hori/hori.yaml`.
+This detects your hardware, recommends a model tier, and creates
+`~/.config/hori/hori.yaml` with the recommended settings. It also
+creates the data directory at `~/.local/share/hori/`.
 
-### 3. Configure
+### 3. Review config (optional)
 
 ```bash
-mkdir -p ~/.config/hori
-cp hori/config.reference.yaml ~/.config/hori/hori.yaml
-# Edit hori.yaml — set your LLM endpoint, model, and memory backend
+cat ~/.config/hori/hori.yaml
 ```
 
-Key settings:
+The defaults work out of the box. Key settings you might want to change:
 
 ```yaml
 llm:
@@ -62,10 +61,6 @@ llm:
 
 memory:
   backend: "sqlite"              # "sqlite" (no external deps) or "qdrant"
-
-embedding:
-  api_url: "http://localhost:8081/v1/embeddings"
-  model: "nomic-embed-text-v1.5.Q8_0"
 ```
 
 ### 4. Run

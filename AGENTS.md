@@ -15,15 +15,20 @@ Key documents:
 If docs conflict, `docs/stack.md` and `docs/operations.md` win for technical
 configuration. `docs/manifesto.md` is philosophy, not current config.
 
-## Hardware Detection
+## Hardware Detection & Setup
 
 ```bash
-python -m hori.detect   # or: hori detect (after pip install -e .)
+hori init      # setup wizard: detect hardware + create config + create data dir
+hori detect    # detect hardware and recommend a model tier (no config changes)
 ```
 
-Detects GPU/VRAM and recommends a model tier. Supports AMD (ROCm via
-rocm-smi or DRM sysfs), NVIDIA (nvidia-smi), Apple Silicon (sysctl), and
-CPU-only fallback. Outputs a hori.yaml snippet with the recommended model.
+`hori init` combines hardware detection with config creation. It detects
+GPU/VRAM, recommends a model tier, writes `~/.config/hori/hori.yaml` with
+the recommended model and SQLite memory backend, creates
+`~/.local/share/hori/`, and prints next steps. Use `--force` to overwrite
+an existing config.
+
+`hori detect` just shows the detection report without writing anything.
 
 ## Build & Test
 
