@@ -1184,7 +1184,7 @@ async def openai_chat_completions(req: OAIChatRequest):
 class TTSRequest(BaseModel):
     model: str = "kokoro"
     input: str
-    voice: str = "bf_emma"
+    voice: str = "af_heart"
     response_format: str = "wav"
     speed: float = 1.0  # <1.0 = faster, >1.0 = slower
 
@@ -1332,7 +1332,7 @@ async def list_tts_voices():
 
 class VoiceChatRequest(BaseModel):
     text: str
-    voice: str = "bf_emma"
+    voice: str = "af_heart"
     speed: float = 1.0  # <1.0 = faster, >1.0 = slower
     history: list = []  # list of {"role": "user"/"assistant", "content": "..."}
 

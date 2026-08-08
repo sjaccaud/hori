@@ -342,7 +342,7 @@ let recognition = null;
 let isListening = false;
 let isBusy = false;  // prevent overlapping requests
 let autoPlay = true;
-let currentVoice = 'bf_emma';
+let currentVoice = 'af_heart';
 let voices = [
     {id: 'bf_emma', name: 'Emma (British)'},
 ];
@@ -358,9 +358,12 @@ async function loadVoices() {
                 'bf_isabella': 'Isabella (British)',
                 'bf_alice': 'Alice (British)',
                 'bf_lily': 'Lily (British)',
+                'af_heart': 'Heart (US)',
                 'af_bella': 'Bella (US)',
                 'af_nicole': 'Nicole (US)',
                 'af_sky': 'Sky (US)',
+                'af_sarah': 'Sarah (US)',
+                'af_nova': 'Nova (US)',
                 'am_eric': 'Eric (US)',
                 'am_michael': 'Michael (US)',
                 'bm_george': 'George (British)',
@@ -370,9 +373,9 @@ async function loadVoices() {
                 id: v.name,
                 name: nameMap[v.name] || v.name,
             }));
-            // Set default to bf_emma if available, else first voice
-            const emmaIdx = voices.findIndex(v => v.id === 'bf_emma');
-            voiceIndex = emmaIdx >= 0 ? emmaIdx : 0;
+            // Set default to af_heart if available, else first voice
+            const heartIdx = voices.findIndex(v => v.id === 'af_heart');
+            voiceIndex = heartIdx >= 0 ? heartIdx : 0;
             currentVoice = voices[voiceIndex].id;
             const btn = document.getElementById('voice-btn');
             if (btn) btn.textContent = voices[voiceIndex].name;
