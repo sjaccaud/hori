@@ -57,7 +57,11 @@ RestartSec=5
 
 # Security hardening (defense in depth on top of Landlock + seccomp)
 ProtectSystem=strict
-ProtectHome=read-only
+# Note: ProtectHome was blocking the tool daemon from reading
+# the project directory. Landlock is the primary filesystem isolation
+# layer. ReadOnlyPaths explicitly bind-mounts the project dir as
+# accessible read-only (ProtectSystem=strict alone was masking it).
+ReadOnlyPaths=%h/Projects
 ReadWritePaths=/tmp/hori-workspace /var/log/hori /run/hori
 PrivateDevices=true
 ProtectKernelTunables=true

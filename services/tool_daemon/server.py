@@ -123,13 +123,13 @@ class ToolDaemon:
         audit_abs = os.path.abspath(str(self.audit_logger.log_path))
         audit_dir = os.path.dirname(audit_abs)
         # Workspace and allowed read paths come from config.
-        # The home directory and model directory are allowed read-only
-        # so tools can read files the user asks about. The workspace
-        # is read-write for tool operations.
-        from hori.config import WORKSPACE_PATH
-        home_dir = str(Path.home())
+        # The allowed read paths are read-only so tools can read files
+        # the user asks about. The workspace is read-write for tool
+        # operations.
+        from hori.config import WORKSPACE_PATH, ALLOWED_READ_PATHS
         allowed_paths = [
-            AllowedPath(home_dir, read_only=True),
+            AllowedPath(p, read_only=True) for p in ALLOWED_READ_PATHS
+        ] + [
             AllowedPath(WORKSPACE_PATH, read_only=False),
             AllowedPath(audit_dir, read_only=False),
             # Sherpa capability file (PoC 15.50). The daemon reads this
