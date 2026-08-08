@@ -189,7 +189,8 @@ everything private. Verify with `./scripts/hardening/audit_funnel.sh`.
 **Tailscale Serve paths** must be explicitly proxied. Current paths:
 `/voice`, `/chat`, `/admin`, `/admin/api`, `/health`, `/static`,
 `/v1/voice/chat`, `/v1/voice/chat/audio`, `/v1/voice/chat/stream`,
-`/v1/chat/completions`, `/v1/presence`, `/v1/wake`. Add new paths with:
+`/v1/chat/completions`, `/v1/presence`, `/v1/wake`,
+`/v1/audio/voices`, `/v1/audio/speech`. Add new paths with:
 `tailscale serve --bg --set-path /path http://localhost:5680/path`
 
 ## Working Agreement
