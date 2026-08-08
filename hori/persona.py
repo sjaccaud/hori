@@ -125,6 +125,13 @@ def _tools_capabilities() -> str:
         "making something up.\n\n"
         "When the user asks about 'my files', 'my machine', 'how many X do "
         "I have', they mean THIS machine. Use the tools to find out.\n\n"
+        "TOOL USAGE RULES:\n"
+        "- When you need to use a tool, emit the tool_call JSON IMMEDIATELY.\n"
+        "- Do NOT say 'let me look for it' or 'let me check' and then stop.\n"
+        "- Do NOT narrate your intent to use a tool — just emit the JSON.\n"
+        "- The system will execute the tool and feed the result back to you,\n"
+        "  then you can give a natural language answer.\n"
+        "- If you say 'let me check' you MUST follow it with a tool_call JSON.\n\n"
     )
     return block
 
