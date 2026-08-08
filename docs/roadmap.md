@@ -408,7 +408,7 @@ less and let the soak tell you what you need.
 
 ### Track B: Soak-Safe Engineering (code, doesn't touch safety spine)
 
-- [ ] **STRAT-6: Stress Test as Publishable Proof Point** `[A]`
+- [x] **STRAT-6: Stress Test as Publishable Proof Point** `[A]`
   (Harden the 10K-turn stress test into a demonstrable artifact. Add:
   recall quality graphs (early vs late turn comparison), entropy drift
   visualization, before/after comparison for the PoC 13.7 deflection
