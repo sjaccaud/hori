@@ -387,6 +387,12 @@ def apply_landlock_restrictions(
             try:
                 parent_fd = os.open(ap.path, os.O_PATH | os.O_CLOEXEC)
             except OSError as e:
+                if e.errno == errno.ENOENT:
+                    # Path doesn't exist (e.g. ~/Projects expanded to a
+                    # nonexistent home for a restricted service user). Skip
+                    # it — there's nothing to allow access to.
+                    print(f"Landlock: skipping non-existent path {ap.path!r}", flush=True)
+                    continue
                 return LandlockResult(
                     success=False,
                     abi_version=abi,
