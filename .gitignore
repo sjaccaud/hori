@@ -79,3 +79,6 @@ core/state/*.json
 core/state/proposed_work_orders/
 !core/state/.gitkeep
 services/n8n/n8n_data/
+
+# Security audit is local-only (contains network topology specifics)
+docs/system_security_audit.md

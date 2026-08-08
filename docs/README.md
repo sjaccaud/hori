@@ -40,10 +40,6 @@ SUPERSEDED, do not follow its guidance - use the replacement.
   (15.37-15.50). Includes an attack vector coverage matrix with spine vs
   HORI 2.0 tier annotations. Read this to understand what the safety
   architecture defends against.
-- **docs/system_security_audit.md** - Investigation of the actual host
-  system's attack surface: what sensitive data is accessible, what services
-  are network-reachable, and what hardening is needed before the safety
-  spine. Read this before implementing any tool access.
 
 ### Operational Notes
 - **docs/operations.md** - Runtime operational details: build commands, service
