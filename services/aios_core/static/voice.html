@@ -236,6 +236,40 @@
             color: #7c9eff;
             border-color: #7c9eff;
         }
+        .toggle-row select {
+            padding: 8px 12px;
+            background: #141414;
+            border: 1px solid #222;
+            border-radius: 8px;
+            color: #666;
+            font-size: 13px;
+            cursor: pointer;
+            max-width: 180px;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23666' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 28px;
+        }
+        .toggle-row select:hover {
+            border-color: #444;
+            color: #999;
+        }
+        .toggle-row select:focus {
+            outline: none;
+            border-color: #7c9eff;
+            color: #7c9eff;
+        }
+        .toggle-row select option {
+            background: #141414;
+            color: #999;
+        }
+        .toggle-row select optgroup {
+            background: #0a0a0a;
+            color: #555;
+            font-weight: bold;
+        }
 
         audio {
             position: absolute;
@@ -325,7 +359,7 @@
 
         <div class="toggle-row">
             <button id="auto-play-btn" class="active" onclick="toggleAutoPlay()">Auto-play: On</button>
-            <button id="voice-btn" onclick="toggleVoice()">Emma (British)</button>
+            <select id="voice-select" onchange="selectVoice(this.value)"></select>
             <button id="speed-btn" onclick="toggleSpeed()">1.15x</button>
         </div>
     </div>
@@ -343,46 +377,92 @@ let isListening = false;
 let isBusy = false;  // prevent overlapping requests
 let autoPlay = true;
 let currentVoice = 'af_heart';
-let voices = [
-    {id: 'bf_emma', name: 'Emma (British)'},
-];
-// Fetch available voices from the API on load
+let voices = [];
+
+// Friendly names for known Kokoro voices
+const voiceNameMap = {
+    // American English
+    'af_heart': 'Heart', 'af_bella': 'Bella', 'af_nicole': 'Nicole',
+    'af_sky': 'Sky', 'af_sarah': 'Sarah', 'af_nova': 'Nova',
+    'af_alloy': 'Alloy', 'af_aoede': 'Aoede', 'af_jessica': 'Jessica',
+    'af_kore': 'Kore', 'af_river': 'River',
+    'am_adam': 'Adam', 'am_echo': 'Echo', 'am_eric': 'Eric',
+    'am_fenrir': 'Fenrir', 'am_liam': 'Liam', 'am_michael': 'Michael',
+    'am_onyx': 'Onyx', 'am_puck': 'Puck', 'am_santa': 'Santa',
+    // British English
+    'bf_alice': 'Alice', 'bf_emma': 'Emma', 'bf_isabella': 'Isabella', 'bf_lily': 'Lily',
+    'bm_daniel': 'Daniel', 'bm_fable': 'Fable', 'bm_george': 'George', 'bm_lewis': 'Lewis',
+    // Japanese
+    'jf_alpha': 'Alpha', 'jf_gongitsune': 'Gongitsune',
+    'jf_nezumi': 'Nezumi', 'jf_tebukuro': 'Tebukuro',
+    'jm_kumo': 'Kumo',
+    // Other languages
+    'ef_dora': 'Dora (ES)', 'em_alex': 'Alex (ES)', 'em_santa': 'Santa (ES)',
+    'ff_siwis': 'Siwis (FR)',
+    'hf_alpha': 'Alpha (HI)', 'hf_beta': 'Beta (HI)',
+    'hm_omega': 'Omega (HI)', 'hm_psi': 'Psi (HI)',
+    'if_sara': 'Sara (IT)', 'im_nicola': 'Nicola (IT)',
+    'pf_dora': 'Dora (BR)', 'pm_alex': 'Alex (BR)', 'pm_santa': 'Santa (BR)',
+    'zf_xiaobei': 'Xiaobei (CN)', 'zf_xiaoni': 'Xiaoni (CN)',
+    'zf_xiaoxiao': 'Xiaoxiao (CN)', 'zf_xiaoyi': 'Xiaoyi (CN)',
+    'zm_yunjian': 'Yunjian (CN)', 'zm_yunxi': 'Yunxi (CN)',
+    'zm_yunxia': 'Yunxia (CN)', 'zm_yunyang': 'Yunyang (CN)',
+};
+
+// Group voices by language prefix
+const voiceGroups = {
+    'af': 'American Female', 'am': 'American Male',
+    'bf': 'British Female',  'bm': 'British Male',
+    'jf': 'Japanese Female', 'jm': 'Japanese Male',
+    'ef': 'Spanish Female',  'em': 'Spanish Male',
+    'ff': 'French Female',
+    'hf': 'Hindi Female',    'hm': 'Hindi Male',
+    'if': 'Italian Female',  'im': 'Italian Male',
+    'pf': 'Portuguese Female', 'pm': 'Portuguese Male',
+    'zf': 'Chinese Female',  'zm': 'Chinese Male',
+};
+
+// Fetch available voices from the API and populate the dropdown
 async function loadVoices() {
     try {
         const resp = await fetch(SERVER + '/v1/audio/voices');
         const data = await resp.json();
         if (data.voices && data.voices.length > 0) {
-            // Friendly names for known Kokoro voices
-            const nameMap = {
-                'bf_emma': 'Emma (British)',
-                'bf_isabella': 'Isabella (British)',
-                'bf_alice': 'Alice (British)',
-                'bf_lily': 'Lily (British)',
-                'af_heart': 'Heart (US)',
-                'af_bella': 'Bella (US)',
-                'af_nicole': 'Nicole (US)',
-                'af_sky': 'Sky (US)',
-                'af_sarah': 'Sarah (US)',
-                'af_nova': 'Nova (US)',
-                'am_eric': 'Eric (US)',
-                'am_michael': 'Michael (US)',
-                'bm_george': 'George (British)',
-                'bm_lewis': 'Lewis (British)',
-            };
             voices = data.voices.map(v => ({
                 id: v.name,
-                name: nameMap[v.name] || v.name,
+                name: voiceNameMap[v.name] || v.name,
             }));
-            // Set default to af_heart if available, else first voice
-            const heartIdx = voices.findIndex(v => v.id === 'af_heart');
-            voiceIndex = heartIdx >= 0 ? heartIdx : 0;
-            currentVoice = voices[voiceIndex].id;
-            const btn = document.getElementById('voice-btn');
-            if (btn) btn.textContent = voices[voiceIndex].name;
+            // Build grouped dropdown
+            const select = document.getElementById('voice-select');
+            select.innerHTML = '';
+            const grouped = {};
+            voices.forEach(v => {
+                const prefix = v.id.substring(0, 2);
+                const group = voiceGroups[prefix] || 'Other';
+                if (!grouped[group]) grouped[group] = [];
+                grouped[group].push(v);
+            });
+            for (const [groupLabel, groupVoices] of Object.entries(grouped)) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = groupLabel;
+                groupVoices.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.id;
+                    opt.textContent = v.name;
+                    optgroup.appendChild(opt);
+                });
+                select.appendChild(optgroup);
+            }
+            // Set default to af_heart
+            select.value = 'af_heart';
+            currentVoice = 'af_heart';
         }
     } catch (e) {
         console.warn('Failed to load voices, using default:', e);
     }
+}
+function selectVoice(voiceId) {
+    currentVoice = voiceId;
 }
 let voiceIndex = 0;
 let speed = 1.15;
@@ -935,12 +1015,6 @@ function toggleAutoPlay() {
     const btn = document.getElementById('auto-play-btn');
     btn.textContent = 'Auto-play: ' + (autoPlay ? 'On' : 'Off');
     btn.className = autoPlay ? 'active' : '';
-}
-
-function toggleVoice() {
-    voiceIndex = (voiceIndex + 1) % voices.length;
-    currentVoice = voices[voiceIndex].id;
-    document.getElementById('voice-btn').textContent = voices[voiceIndex].name;
 }
 
 function toggleSpeed() {
