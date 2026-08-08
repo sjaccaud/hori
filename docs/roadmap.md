@@ -450,7 +450,7 @@ less and let the soak tell you what you need.
   open-source vs. paper. We want the spine proven in production before
   patenting — the soak gate passing is the proof. Entry condition:
   STRAT-3 complete + soak gate passed.)
-- [ ] **STRAT-11: Intent Hierarchy Tooling** `[A]` (Work order
+- [x] **STRAT-11: Intent Hierarchy Tooling** `[A]` (Work order
   management improvements, red-team gate enhancements, the Yes-AND
   mechanism. This touches aios-core and is NOT soak-safe — the
   integration test `test_tool_augmented_chat.py` goes through aios-core.
