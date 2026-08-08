@@ -366,7 +366,7 @@ less and let the soak tell you what you need.
   fail-closed guardian, intent hierarchy, memory consolidation,
   voice-first, progressive capability unlock, adversarial TDD). This
   doc is the evidence backing STRAT-1.)
-- [ ] **STRAT-3: Sherpa Patent Exploration** `[A]` (Research prior art
+- [x] **STRAT-3: Sherpa Patent Exploration** `[A]` (Research prior art
   for the Sherpa pattern. Novel elements to assess: (a) guardian in a
   different language (Go) than the agent (Python) — cross-language
   isolation; (b) fail-closed by default — guardian must actively write
