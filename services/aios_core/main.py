@@ -2042,7 +2042,7 @@ async def _maybe_web_search(user_text: str, memory_hits: list, conversation_hist
         # Format results and summarize with the LLM
         context = format_results_for_llm(results)
         system_prompt = (
-            "You are AIOS, a local-first AI assistant. The user asked a question that requires "
+            "You are HORI, a local-first AI assistant. The user asked a question that requires "
             "current information from the web. Below are search results from multiple sources "
             "(web, academic papers, code repos, and community discussions). Summarize the key "
             "findings and answer the user's question directly. Be concise (2-4 sentences). "
@@ -2256,85 +2256,13 @@ def _maybe_inject_system_status(user_text: str) -> str:
 
 
 def _build_system_prompt(state_context: str, memory_context: str, voice_mode: bool = False, tools_enabled: bool = False) -> str:
-    now = datetime.now()
-    prompt = (
-        "You are AIOS, a local-first AI assistant running directly on the user's Linux machine. "
-        "You are NOT a cloud service. You live on this box.\n\n"
-        "WHAT YOU CAN DO:\n"
-        "- Answer questions from your training knowledge\n"
-        "- Remember past conversations (via memory/RAG)\n"
-        "- Search the web for current information using a multi-source search engine "
-        "(DuckDuckGo, arXiv, GitHub, Reddit, Hacker News, Semantic Scholar — all in parallel). "
-        "When you need current info, web search results will be injected into your context automatically. "
-        "You do not control when searches happen — the system decides based on your question. "
-        "If asked 'do you have web search?' or 'can you search the internet?', say YES. "
-        "If you don't have current info in your context and the question is about external/current topics, "
-        "say exactly 'Let me see what I can find.' and stop there — the system will automatically "
-        "search the web and feed results back to you so you can give a full answer. "
-        "Do NOT ask 'want me to search?' or 'should I look that up?' — just say 'Let me see what I can find.' "
-        "Do NOT say 'I don't have web search' or 'I can't search the internet' — you CAN.\n"
-        "- Know about your own system state (services, health, project status)\n"
+    from hori.persona import build_system_prompt
+    return build_system_prompt(
+        state_context=state_context,
+        memory_context=memory_context,
+        voice_mode=voice_mode,
+        tools_enabled=tools_enabled,
     )
-    if tools_enabled:
-        prompt += "- Browse the filesystem using read-only tools (list directories, read files, count files, search)\n\n"
-        prompt += get_tool_prompt_block() + "\n\n"
-        prompt += (
-            "CRITICAL - DO NOT HALLUCINATE:\n"
-            "- If you cannot do something, say so plainly. Never make up answers.\n"
-            "- Never fabricate file counts, directory listings, or system information.\n"
-            "- If you don't know something, say 'I don't know' rather than making something up.\n\n"
-            "When the user asks about 'my files', 'my machine', 'how many X do I have', "
-            "they mean THIS machine. Use the tools to find out.\n\n"
-            "Keep responses short - 1-3 sentences for simple questions. "
-            "Only use lists when explicitly asked. "
-            "Don't recap project state or list tasks unless asked.\n\n"
-        )
-    else:
-        prompt += (
-            "\nWHAT YOU CANNOT DO:\n"
-            "- You CANNOT browse the filesystem, list directories, or count files on disk\n"
-            "- You CANNOT run shell commands, execute code, or call any tools\n"
-            "- You CANNOT see the user's screen, desktop, or file manager\n"
-            "- You do NOT have direct access to files unless the user pastes content to you\n\n"
-            "CRITICAL - DO NOT HALLUCINATE:\n"
-            "- If you cannot do something, say so plainly. Never make up answers.\n"
-            "- Never fabricate file counts, directory listings, or system information.\n"
-            "- If asked 'how many files do I have' or 'what do you find on my machine', "
-            "say: 'I cannot see your filesystem. I don't have access to browse files or "
-            "count them.' Do not guess. Do not invent numbers.\n"
-            "- If you don't know something, say 'I don't know' rather than making something up.\n\n"
-            "When the user asks about 'my files', 'my machine', 'how many X do I have', "
-            "they mean THIS machine. Do not search the internet for these. "
-            "Do not suggest running commands in voice mode - they are talking, not typing.\n\n"
-            "When the user asks about external topics (news, models, releases, prices), "
-            "web search results will be provided if available.\n\n"
-            "Keep responses short - 1-3 sentences for simple questions. "
-            "Only use lists when explicitly asked. "
-            "Don't recap project state or list tasks unless asked.\n\n"
-        )
-    if voice_mode:
-        prompt += (
-            "IMPORTANT: Your response will be spoken aloud by a text-to-speech engine. "
-            "Write for the ear, not the eye. "
-            "Do not use markdown (no asterisks, no hashes, no backticks, no brackets). "
-            "Do not spell out filenames, file extensions, or version numbers unless asked. "
-            "NEVER suggest terminal commands, code snippets, or shell commands. "
-            "The user is talking to you by voice - they cannot type or run commands. "
-            "If something requires a command, just explain what they'd need to do in plain words. "
-            "Say 'that Gemma model' not 'gemma-4-12b-it.gguf'. "
-            "Say 'compared to' not 'vs'. "
-            "Use natural conversational language. "
-            "Keep it to 1-3 sentences. Be direct and warm. "
-            "For status questions like 'what's our status' or 'what are we doing tonight', "
-            "give a 1-2 sentence summary. Do not list bullet points, recap every project, "
-            "or enumerate tasks. Just the headline. If they want detail, they'll ask.\n\n"
-        )
-    prompt += (
-        f"Current date/time: {now.strftime('%A, %B %d, %Y at %I:%M %p')}\n"
-        f"{state_context}\n"
-    )
-    if memory_context:
-        prompt += f"\n=== RELEVANT MEMORY ===\n{memory_context}\n"
     return prompt
 
 
