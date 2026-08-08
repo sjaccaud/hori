@@ -722,7 +722,13 @@ function createRecognition() {
         } else if (event.error === 'audio-capture') {
             document.getElementById('mic-label').textContent = 'No microphone found';
         } else if (event.error === 'network') {
-            document.getElementById('mic-label').textContent = 'Network error - check connection';
+            // Chrome's Web Speech API uses Google's cloud servers for
+            // recognition. This fails on machines without internet access
+            // to Google's servers. Fall back to text input.
+            document.getElementById('mic-label').textContent = 'Voice needs internet (Chrome cloud STT) — use text input below';
+            document.getElementById('mic-button').classList.add('disabled');
+            document.getElementById('text-hint').classList.add('active');
+            document.getElementById('text-input').focus();
         } else if (event.error === 'aborted') {
             // Normal — user tapped stop or we aborted before restarting
             console.log('Recognition aborted (normal)');
