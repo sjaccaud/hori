@@ -95,7 +95,9 @@ sudo journalctl -u aios_core -f    # live logs
 systemctl status llamacpp
 
 # Embedding server (port 8081, CPU-only, start manually)
-llama-server --model ~/ai-models/nomic-embed-text-v1.5.Q8_0.gguf --host 127.0.0.1 --port 8081 --ctx-size 2048 --embedding --n-gpu-layers 0
+# Note: -ctk f16 -ctv f16 is required on the Spiritbuun fork (defaults to turbo4
+# which doesn't work with embedding models)
+llama-server --model ~/ai-models/nomic-embed-text-v1.5.Q8_0.gguf --host 127.0.0.1 --port 8081 --ctx-size 2048 --embedding --n-gpu-layers 0 -ctk f16 -ctv f16
 ```
 
 ## Current Model
