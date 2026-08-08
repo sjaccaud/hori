@@ -48,12 +48,15 @@ tts:
   # Backend: "kokoro" (default, high quality) or "piper" (fallback, lightweight).
   # Set to "none" to disable TTS entirely (text-only mode).
   backend: "kokoro"
-  # Kokoro model paths. Download from https://github.com/kokoro-xtz/kokoro-onnx
+  # Kokoro model paths. Download from:
+  #   https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+  #   https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+  # Voices: https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md
   kokoro:
     model_path: "~/.local/share/hori/models/kokoro-v1.0.onnx"
     voices_path: "~/.local/share/hori/models/voices-v1.0.bin"
-    default_voice: "bf_emma"
-    lang: "en-gb"
+    default_voice: "af_heart"
+    lang: "en-us"
   # Piper voice paths. Download from https://github.com/rhasspy/piper
   piper:
     voice_dir: "~/.local/share/hori/piper-voices"

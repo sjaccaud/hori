@@ -184,7 +184,7 @@ everything private. Verify with `./scripts/hardening/audit_funnel.sh`.
   admin API returns 403. The setup script generates the token
   automatically; restart aios_core after running it.)
 - Apple Shortcut setup at `docs/apple_shortcut_setup.md` (streaming deep-link with `?autolisten=1`, or non-streaming WAV fallback)
-- Default voice: bf_emma (Kokoro-82M TTS, #1 TTS Arena, 24kHz, CPU)
+- Default voice: af_heart (Kokoro-82M TTS, #1 TTS Arena, 24kHz, CPU, American English)
 
 **Tailscale Serve paths** must be explicitly proxied. Current paths:
 `/voice`, `/chat`, `/admin`, `/admin/api`, `/health`, `/static`,
