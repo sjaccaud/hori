@@ -5,17 +5,31 @@
 
 ## Current Slice
 
-(none — history squashed, ready for SLICE-05)
+(none — SLICE-05 complete, ready for SLICE-06)
 
 ## Slice Queue
 
 Proposed order (adjustable at any retro):
 
-1. **SLICE-05: hori detect** — a command that detects hardware and recommends a model tier. Demo: run it, show output.
-2. **SLICE-06: SQLite memory backend** — HORI works with zero external deps beyond Python. Demo: chat with HORI using SQLite instead of Qdrant.
-3. **SLICE-07: README + LICENSE + CONTRIBUTING** — public repo ready. Demo: stranger can clone and understand the project.
+1. **SLICE-06: SQLite memory backend** — HORI works with zero external deps beyond Python. Demo: chat with HORI using SQLite instead of Qdrant.
+2. **SLICE-07: README + LICENSE + CONTRIBUTING** — public repo ready. Demo: stranger can clone and understand the project.
 
 ## Completed Slices
+
+### SLICE-05: hori detect — COMPLETE
+- Branch: slice/05-hori-detect
+- What was built: `hori/detect.py` (hardware detection + model tier recommendations),
+  `hori/cli.py` (CLI entry point), `hori/test_detect.py` (25 tests).
+  Detects AMD (ROCm via rocm-smi or DRM sysfs fallback), NVIDIA (nvidia-smi),
+  Apple Silicon (sysctl), and CPU-only. Recommends one of 5 model tiers
+  (heavy/medium/light/micro/nano) based on VRAM, outputs a hori.yaml snippet.
+- Surprises: rocm-smi's `--showproductname` doesn't include VRAM — needed a
+  separate `--showmeminfo vram` call. The kfd sysfs path has no properties
+  on this kernel, but DRM sysfs (`/sys/class/drm/cardN/device/mem_info_vram_total`)
+  works perfectly. The GPU name key in rocm-smi JSON is "Card Series" (capital S).
+- Skipped: Nothing.
+- Demo: `python -m hori.detect` → detects Radeon AI PRO R9700 (31.9GB VRAM),
+  recommends heavy tier (Qwen3.6-27B).
 
 ### Pre-squash: De-personalization (SLICE-01 through SLICE-04)
 - History was squashed to a single initial commit to remove personal data

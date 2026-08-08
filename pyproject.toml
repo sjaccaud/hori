@@ -22,6 +22,9 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/your-username/hori"
 
+[project.scripts]
+hori = "hori.cli:main"
+
 [tool.pytest.ini_options]
 testpaths = ["services", "core", "scripts"]
 pythonpath = ["."]

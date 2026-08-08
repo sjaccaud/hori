@@ -15,6 +15,16 @@ Key documents:
 If docs conflict, `docs/stack.md` and `docs/operations.md` win for technical
 configuration. `docs/manifesto.md` is philosophy, not current config.
 
+## Hardware Detection
+
+```bash
+python -m hori.detect   # or: hori detect (after pip install -e .)
+```
+
+Detects GPU/VRAM and recommends a model tier. Supports AMD (ROCm via
+rocm-smi or DRM sysfs), NVIDIA (nvidia-smi), Apple Silicon (sysctl), and
+CPU-only fallback. Outputs a hori.yaml snippet with the recommended model.
+
 ## Build & Test
 
 ```bash
