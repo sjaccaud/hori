@@ -351,7 +351,7 @@ less and let the soak tell you what you need.
   (aios_core, aios-sherpa, etc.) remain as legacy technical identifiers
   — a future migration task. Traces to: Manifesto Pillar VII — don't
   claim what we're not.)
-- [ ] **STRAT-2: Competitive Landscape Doc** `[A]` (Formalize the
+- [x] **STRAT-2: Competitive Landscape Doc** `[A]` (Formalize the
   red-team analysis into `docs/competitive_landscape.md`. Map against:
   academic AIOS (Rutgers/COLM 2025 — agent scheduling, no safety/deployment/voice),
   oikOS (local-first + 51 MCP tools + 7-layer Python middleware — no
