@@ -186,14 +186,26 @@ def survey_rss_feeds() -> List[Opportunity]:
 
 
 def score_relevance(opportunities: List[Opportunity], interests: List[str], projects: List[str]) -> List[Opportunity]:
-    """Score each opportunity's relevance to the user's interests using keyword matching.
-    Splits multi-word interests into individual keywords for broader matching."""
+    """Score each opportunity's relevance to the user's interests.
+
+    Uses a multi-factor scoring approach:
+    1. Keyword matching (base score) — full phrase matches weighted higher
+    2. Source credibility — GitHub > HackerNews > RSS (signal quality)
+    3. Title vs description weighting — title matches are stronger
+    4. Deduplication — similar opportunities are merged
+
+    Splits multi-word interests into individual keywords for broader matching.
+    """
     # Build keyword set: full phrases + individual words (excluding common words)
     stop_words = {"the", "a", "an", "and", "or", "for", "in", "of", "to", "is", "it", "with"}
     keywords = set()
+    phrase_keywords = set()  # full multi-word phrases get extra weight
     for interest in interests + projects:
-        keywords.add(interest.lower())
-        for word in interest.lower().split():
+        kw = interest.lower()
+        keywords.add(kw)
+        if " " in kw:
+            phrase_keywords.add(kw)
+        for word in kw.split():
             if len(word) > 2 and word not in stop_words:
                 keywords.add(word)
 
@@ -201,16 +213,60 @@ def score_relevance(opportunities: List[Opportunity], interests: List[str], proj
     keywords.update({"ai", "llm", "gpt", "python", "docker", "gpu", "rocm", "cuda", "local", "self-hosted",
                      "inference", "model", "training", "rag", "vector", "embedding", "agent", "automation"})
 
-    for opp in opportunities:
-        text = (opp.title + " " + opp.description).lower()
-        matches = [kw for kw in keywords if kw in text]
+    # Source credibility weights
+    source_weights = {
+        "github": 1.0,      # repos are concrete, actionable
+        "hackernews": 0.85, # community-curated, some noise
+        "rss": 0.7,         # broad, more marketing noise
+    }
 
-        opp.relevance_score = min(len(matches) / 3.0, 1.0)  # cap at 1.0, 3 matches = full
-        opp.relevance_reason = f"Matched: {', '.join(matches[:5])}" if matches else "No direct match"
+    for opp in opportunities:
+        title_text = opp.title.lower()
+        desc_text = opp.description.lower()
+        full_text = title_text + " " + desc_text
+
+        # Base keyword matching
+        title_matches = [kw for kw in keywords if kw in title_text]
+        desc_matches = [kw for kw in keywords if kw in desc_text and kw not in title_matches]
+        phrase_matches = [pk for pk in phrase_keywords if pk in full_text]
+
+        # Weighted score: title matches count double, phrase matches count triple
+        raw_score = (
+            len(title_matches) * 2.0 +
+            len(desc_matches) * 1.0 +
+            len(phrase_matches) * 3.0
+        )
+
+        # Normalize: 6 points = full score (e.g. 2 title + 1 desc + 1 phrase)
+        base_score = min(raw_score / 6.0, 1.0)
+
+        # Apply source credibility weight
+        source_weight = source_weights.get(opp.source, 0.7)
+        final_score = base_score * source_weight
+
+        opp.relevance_score = round(final_score, 3)
+        all_matches = title_matches + desc_matches + phrase_matches
+        opp.relevance_reason = f"Matched: {', '.join(all_matches[:5])}" if all_matches else "No direct match"
+
+    # Deduplicate: merge opportunities with similar titles
+    seen = {}
+    deduped = []
+    for opp in opportunities:
+        # Normalize title for comparison
+        key = opp.title.lower().strip()[:60]
+        if key in seen:
+            # Keep the higher-scored one
+            if opp.relevance_score > seen[key].relevance_score:
+                idx = deduped.index(seen[key])
+                deduped[idx] = opp
+                seen[key] = opp
+        else:
+            seen[key] = opp
+            deduped.append(opp)
 
     # Sort by relevance
-    opportunities.sort(key=lambda o: o.relevance_score, reverse=True)
-    return opportunities
+    deduped.sort(key=lambda o: o.relevance_score, reverse=True)
+    return deduped
 
 
 def save_opportunities(opportunities: List[Opportunity]):

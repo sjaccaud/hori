@@ -418,7 +418,7 @@ less and let the soak tell you what you need.
   with measurable recall quality." Risk: zero — test code only, does
   not touch the production system. Traces to: PoC 13.1–13.7, Manifesto
   Pillar III.)
-- [ ] **STRAT-7: Proactive Agent Quality Pass** `[A]` (The opportunity
+- [x] **STRAT-7: Proactive Agent Quality Pass** `[A]` (The opportunity
   proposer (`services/proactive_agent/`) is a separate service not in
   the integration or adversarial test suites. Improvements: better
   scoring heuristics for landscape survey results, work order quality
