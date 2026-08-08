@@ -5,15 +5,29 @@
 
 ## Current Slice
 
-(none — SLICE-06 complete, ready for SLICE-07)
+(none — SLICE-07 complete, repo is public-ready)
 
 ## Slice Queue
 
 Proposed order (adjustable at any retro):
 
-1. **SLICE-07: README + LICENSE + CONTRIBUTING** — public repo ready. Demo: stranger can clone and understand the project.
+1. **SLICE-08: Setup wizard** — `hori init` command that creates config,
+   detects hardware, and writes hori.yaml automatically. Demo: fresh
+   clone → `hori init` → working config.
 
 ## Completed Slices
+
+### SLICE-07: README + LICENSE + CONTRIBUTING — COMPLETE
+- Branch: slice/07-readme-license
+- What was built: Root `README.md` (project overview, quickstart,
+  architecture diagram, project structure, testing commands),
+  `LICENSE` (Apache-2.0), `CONTRIBUTING.md` (slice workflow, build/test,
+  code style, safety-first testing, crash recovery). Updated
+  `docs/README.md` to point at the root README.
+- Surprises: None. Straightforward documentation slice.
+- Skipped: Nothing.
+- Demo: A stranger can clone the repo, read the README, and understand
+  what HORI is, how to install it, and how to run it.
 
 ### SLICE-06: SQLite memory backend — COMPLETE
 - Branch: slice/06-sqlite-memory
