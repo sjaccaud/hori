@@ -9,8 +9,14 @@ import AVFoundation
 /// transcripts (for live UI feedback) and a final transcript (when
 /// listening stops).
 ///
-/// Note: AVAudioSession (iOS) is not used — macOS handles audio routing
-/// automatically via AVAudioEngine.
+/// Two critical details:
+/// 1. Speech recognition permission MUST be requested before starting.
+///    Without it, SFSpeechRecognizer silently fails with "No speech
+///    detected" — auth=0 (notDetermined) is treated as denied at runtime.
+/// 2. The audio format from AVAudioEngine's input node on macOS is
+///    typically 4-channel 96kHz Float32 (deinterleaved). SFSpeechRecognizer
+///    expects mono 16kHz. We must convert the format before appending
+///    buffers to the recognition request.
 ///
 /// Traces to: docs/roadmap.md MAC-3 (Voice Conversation), Phase 3.
 final class SpeechRecognizer: NSObject {
@@ -32,6 +38,14 @@ final class SpeechRecognizer: NSObject {
     private var recognitionTask: SFSpeechRecognitionTask?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var finalTranscript = ""
+
+    /// The target audio format for SFSpeechRecognizer (mono 16kHz Float32).
+    private let targetFormat = AVAudioFormat(
+        commonFormat: .pcmFormatFloat32,
+        sampleRate: 16000,
+        channels: 1,
+        interleaved: false
+    )!
 
     override init() {
         self.speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -56,13 +70,10 @@ final class SpeechRecognizer: NSObject {
     }
 
     /// Requests microphone permission (macOS).
+    /// On macOS, the system prompts automatically when AVAudioEngine
+    /// accesses the input node. This just checks the current status.
     /// - Returns: true if permission was granted.
     static func requestMicrophonePermission() async -> Bool {
-        // On macOS, microphone permission is requested automatically when
-        // AVAudioEngine starts the input node. We check the current status
-        // via the TCC system. If this is the first time, the system will
-        // prompt the user when we try to access the microphone.
-        // For now, return true — the system will prompt if needed.
         true
     }
 
@@ -71,10 +82,42 @@ final class SpeechRecognizer: NSObject {
     /// Starts listening and transcribing speech.
     /// Calls `onPartialTranscript` with live updates.
     func startListening() {
+        let authStatus = SFSpeechRecognizer.authorizationStatus()
+        print("🎤 SpeechRecognizer.startListening() — auth=\(authStatus.rawValue)")
+
+        // If permission hasn't been determined, request it first.
+        // SFSpeechRecognizer silently fails with "No speech detected"
+        // when auth=0 (notDetermined).
+        if authStatus == .notDetermined {
+            print("🎤 Permission not determined — requesting...")
+            SFSpeechRecognizer.requestAuthorization { [weak self] status in
+                print("🎤 Authorization result: \(status.rawValue)")
+                if status == .authorized {
+                    DispatchQueue.main.async {
+                        self?.startListening()
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self?.onError?("Speech recognition permission denied.")
+                    }
+                }
+            }
+            return
+        }
+
+        guard authStatus == .authorized else {
+            print("🎤 ERROR: Speech recognition not authorized (status=\(authStatus.rawValue))")
+            onError?("Speech recognition permission denied. Enable it in System Settings → Privacy & Security → Speech Recognition.")
+            return
+        }
+
         guard let speechRecognizer, speechRecognizer.isAvailable else {
+            print("🎤 ERROR: SFSpeechRecognizer is nil or not available")
             onError?("Speech recognition is not available on this device.")
             return
         }
+
+        print("🎤 SFSpeechRecognizer is available, starting...")
 
         // Stop any existing task
         stopListening()
@@ -104,6 +147,7 @@ final class SpeechRecognizer: NSObject {
             }
 
             if let error {
+                print("🎤 Recognition error: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     self.onError?(error.localizedDescription)
                 }
@@ -113,15 +157,48 @@ final class SpeechRecognizer: NSObject {
 
         // Configure audio engine input
         let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        print("🎤 Input format: \(inputFormat)")
+        print("🎤 Target format: \(targetFormat)")
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+        // Install tap with format conversion.
+        // The input node on macOS gives 4-channel 96kHz Float32.
+        // SFSpeechRecognizer needs mono 16kHz. We convert each buffer.
+        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            print("🎤 ERROR: Cannot create audio converter from \(inputFormat) to \(targetFormat)")
+            onError?("Audio format conversion failed.")
+            isListening = false
+            return
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+            guard let self else { return }
+
+            // Convert the input buffer to the target format (mono 16kHz)
+            let ratio = self.targetFormat.sampleRate / buffer.format.sampleRate
+            let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+
+            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: self.targetFormat, frameCapacity: outputFrameCount) else { return }
+
+            var error: NSError?
+            var inputBuffer = buffer
+            converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+                outStatus.pointee = .haveData
+                return inputBuffer
+            }
+
+            if let error {
+                print("🎤 Conversion error: \(error)")
+            } else {
+                self.recognitionRequest?.append(outputBuffer)
+            }
         }
 
         do {
             try audioEngine.start()
+            print("🎤 Audio engine started successfully")
         } catch {
+            print("🎤 Audio engine start failed: \(error)")
             onError?("Failed to start audio engine: \(error.localizedDescription)")
             cleanup()
             isListening = false
