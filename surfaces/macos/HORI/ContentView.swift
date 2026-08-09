@@ -10,6 +10,10 @@ import SwiftUI
 /// - `ConnectionSetupView` as a sheet on first launch (no URL set)
 /// In Phase 2, it also shows:
 /// - `PresenceIndicator` in the top-right corner (live presence state)
+/// In Phase 3, it adds:
+/// - Voice mode toggle (text ↔ voice)
+/// - `VoiceInputButton` for push-to-talk
+/// - Streaming text + audio playback
 ///
 /// Receives `WindowState` (per-window) and `SharedAppState` (shared)
 /// via `@Environment`. The background is always `HoriTheme.background`
@@ -35,12 +39,19 @@ struct ContentView: View {
     /// Error message to show if a send fails (transient banner).
     @State private var errorMessage: String? = nil
 
+    /// Whether voice mode is active (vs text mode).
+    @State private var isVoiceMode: Bool = false
+
+    /// The voice view model (created when voice mode is first activated).
+    @State private var voiceViewModel: VoiceViewModel?
+
+    /// Whether voice settings sheet is showing.
+    @State private var showVoiceSettings: Bool = false
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             VStack(spacing: 0) {
                 // Conversation area — empty state or message list.
-                // This expands to fill available space; the input field
-                // below takes only its natural height.
                 if windowState.messages.isEmpty {
                     EmptyStateView()
                 } else {
@@ -59,29 +70,43 @@ struct ContentView: View {
                     }
                 }
 
-                // Input field — always visible once configured.
-                // Fixed at bottom; the conversation area above flexes.
+                // Input area — text or voice, depending on mode.
                 if sharedState.isConnectionConfigured {
-                    MessageInputView(
-                        text: $inputText,
-                        isSending: windowState.isSending,
-                        onSend: sendMessage
-                    )
+                    if isVoiceMode {
+                        voiceInputArea
+                    } else {
+                        MessageInputView(
+                            text: $inputText,
+                            isSending: windowState.isSending,
+                            onSend: sendMessage
+                        )
+                    }
                 }
             }
-            // Fill the entire ZStack/window so the conversation area has a
-            // finite amount of space to flex into and the input field stays
-            // anchored at the bottom. Without this, a ZStack child with an
-            // unspecified size proposal can grow indefinitely and push the
-            // input off-screen.
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Presence indicator — top-right corner, overlay.
+            // Presence indicator + mode toggle — top-right corner, overlay.
             if sharedState.isConnectionConfigured {
-                PresenceIndicator(
-                    presence: sharedState.presence,
-                    isConnected: sharedState.isPresenceConnected
-                )
+                VStack(alignment: .trailing, spacing: 8) {
+                    HStack(spacing: 12) {
+                        PresenceIndicator(
+                            presence: sharedState.presence,
+                            isConnected: sharedState.isPresenceConnected
+                        )
+                        modeToggleButton
+                    }
+                    if isVoiceMode {
+                        Button {
+                            showVoiceSettings = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Voice settings")
+                    }
+                }
                 .padding(.top, 12)
                 .padding(.trailing, 16)
             }
@@ -93,14 +118,111 @@ struct ContentView: View {
         .sheet(isPresented: $showConnectionSetup) {
             ConnectionSetupView(isPresented: $showConnectionSetup)
         }
+        .sheet(isPresented: $showVoiceSettings) {
+            VoiceSettingsView()
+        }
         .onAppear {
             if !sharedState.isConnectionConfigured {
                 showConnectionSetup = true
             }
         }
+        .onChange(of: isVoiceMode) { _, newValue in
+            if newValue && voiceViewModel == nil {
+                createVoiceViewModel()
+            }
+        }
     }
 
-    // MARK: - Send
+    // MARK: - Voice Input Area
+
+    private var voiceInputArea: some View {
+        HStack(spacing: 12) {
+            if let vm = voiceViewModel {
+                // Partial transcript (live feedback while listening)
+                if !vm.voiceState.partialTranscript.isEmpty {
+                    Text(vm.voiceState.partialTranscript)
+                        .font(HoriTypography.body)
+                        .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text("Hold the mic button to talk")
+                        .font(HoriTypography.caption)
+                        .foregroundStyle(HoriTheme.textSecondary(for: colorScheme).opacity(0.5))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                VoiceInputButton(
+                    voiceState: vm.voiceState,
+                    onPress: { vm.startTalking() },
+                    onRelease: { vm.stopTalking() }
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: - Mode Toggle
+
+    private var modeToggleButton: some View {
+        Button {
+            withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
+                isVoiceMode.toggle()
+            }
+        } label: {
+            Image(systemName: isVoiceMode ? "keyboard" : "mic.fill")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isVoiceMode ? "Switch to text input" : "Switch to voice input")
+    }
+
+    // MARK: - Voice ViewModel
+
+    private func createVoiceViewModel() {
+        guard let url = URL(string: sharedState.aiosCoreURL) else { return }
+        let vm = VoiceViewModel(
+            baseURL: url,
+            voice: sharedState.ttsVoice,
+            speed: Float(sharedState.ttsSpeed)
+        )
+
+        // Wire text chunks to update the conversation
+        vm.onTextChunk = { chunk in
+            // Accumulate streaming text into the last HORI message
+            if let lastMsg = windowState.messages.last, lastMsg.role == .hori {
+                // Update existing HORI message
+                let updated = WindowState.Message(
+                    role: .hori,
+                    content: lastMsg.content + chunk
+                )
+                windowState.messages[windowState.messages.count - 1] = updated
+            } else {
+                // Start a new HORI message
+                windowState.messages.append(WindowState.Message(role: .hori, content: chunk))
+            }
+        }
+
+        vm.onDone = { fullText in
+            // Replace the last HORI message with the full text
+            if let lastIdx = windowState.messages.indices.last,
+               windowState.messages[lastIdx].role == .hori {
+                windowState.messages[lastIdx] = WindowState.Message(role: .hori, content: fullText)
+            }
+            windowState.isSending = false
+        }
+
+        vm.onError = { msg in
+            errorMessage = msg
+            windowState.isSending = false
+        }
+
+        voiceViewModel = vm
+    }
+
+    // MARK: - Send (Text Mode)
 
     /// Sends the current input text to HORI and handles the response.
     private func sendMessage() {
@@ -135,7 +257,7 @@ struct ContentView: View {
         }
 
         let client = HoriClient(baseURL: url)
-        let history = windowState.messages.dropLast() // exclude the message we just added
+        let history = windowState.messages.dropLast()
 
         Task {
             do {

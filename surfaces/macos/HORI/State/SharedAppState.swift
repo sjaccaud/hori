@@ -46,6 +46,29 @@ final class SharedAppState {
         }
     }
 
+    // MARK: - Voice Settings (Phase 3)
+
+    /// Selected TTS voice name (default: af_heart).
+    /// Stored property + didSet for @Observable tracking.
+    var ttsVoice: String = UserDefaults.standard.string(forKey: "ttsVoice") ?? "af_heart" {
+        didSet {
+            guard oldValue != ttsVoice else { return }
+            UserDefaults.standard.set(ttsVoice, forKey: "ttsVoice")
+        }
+    }
+
+    /// TTS speed multiplier (1.0 = normal, <1.0 = faster, >1.0 = slower).
+    /// Stored property + didSet for @Observable tracking.
+    var ttsSpeed: Double = {
+        let val = UserDefaults.standard.double(forKey: "ttsSpeed")
+        return val == 0 ? 1.0 : val
+    }() {
+        didSet {
+            guard oldValue != ttsSpeed else { return }
+            UserDefaults.standard.set(ttsSpeed, forKey: "ttsSpeed")
+        }
+    }
+
     // MARK: - Project List (Phase 5)
 
     /// All known projects (shared across windows so the sidebar
