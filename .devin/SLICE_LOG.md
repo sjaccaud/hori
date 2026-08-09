@@ -5,18 +5,24 @@
 
 ## Current Slice
 
-**SLICE-MACOS-00: First Impression + Foundation** — IN PROGRESS
-- Branch: (to be created on Mac)
-- What's being built: The HORI macOS app skeleton — Xcode project,
+**SLICE-MACOS-00: First Impression + Foundation** — SOURCE COMPLETE, AWAITING MAC VALIDATION
+- Branch: `slice/macos-00-first-impression` (pushed to origin)
+- What was built: The HORI macOS app skeleton — xcodegen project,
   design system (theme, typography, animations, shapes), five
   foundational decisions (accessibility, keyboard, localization,
   multi-window, undo), and the empty state view (koi + "What do you
-  want to make today?"). Source files written on GPU server; will be
-  pulled to Mac for Xcode build/test/run.
+  want to make today?"). 5 Swift test files (Theme, EmptyStateView,
+  Accessibility, WindowState, UndoManager).
+- Status: Source written on GPU server and pushed. Needs Mac build/test
+  (xcodegen generate → xcodebuild test → Cmd+R) to validate before
+  marking COMPLETE. See surfaces/macos/README.md for build steps.
+- Next: SLICE-MACOS-01 (Native Text Conversation) — proposed, pending
+  MACOS-00 validation on Mac. Devin will write MACOS-01 source on GPU
+  server in parallel once approved.
 
 ## Slice Queue
 
-1. SLICE-MACOS-00: First Impression + Foundation (IN PROGRESS)
+1. SLICE-MACOS-00: First Impression + Foundation (SOURCE COMPLETE — awaiting Mac validation)
 2. SLICE-MACOS-01: Native Text Conversation
 3. SLICE-MACOS-02: HORI Feels Alive — Presence
 4. SLICE-MACOS-03: Voice Conversation
