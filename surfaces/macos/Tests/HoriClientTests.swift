@@ -170,13 +170,13 @@ struct HoriClientTests {
     @Test("Error descriptions are human-readable")
     func errorDescriptions() {
         let networkErr = HoriClientError.networkFailed(URLError(.timedOut))
-        #expect(networkErr.localizedDescription?.contains("Could not reach HORI") == true)
+        #expect(networkErr.localizedDescription.contains("Could not reach HORI"))
 
         let serverErr = HoriClientError.serverError(statusCode: 500, body: "error")
-        #expect(serverErr.localizedDescription?.contains("HTTP 500") == true)
+        #expect(serverErr.localizedDescription.contains("HTTP 500"))
 
         let decodeErr = HoriClientError.decodingFailed(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "test")))
-        #expect(decodeErr.localizedDescription?.contains("Could not understand") == true)
+        #expect(decodeErr.localizedDescription.contains("Could not understand"))
     }
 
     // MARK: - URL Construction
