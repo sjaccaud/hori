@@ -161,37 +161,12 @@ final class SpeechRecognizer: NSObject {
         print("🎤 Input format: \(inputFormat)")
         print("🎤 Target format: \(targetFormat)")
 
-        // Install tap with format conversion.
-        // The input node on macOS gives 4-channel 96kHz Float32.
-        // SFSpeechRecognizer needs mono 16kHz. We convert each buffer.
-        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-            print("🎤 ERROR: Cannot create audio converter from \(inputFormat) to \(targetFormat)")
-            onError?("Audio format conversion failed.")
-            isListening = false
-            return
-        }
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-
-            // Convert the input buffer to the target format (mono 16kHz)
-            let ratio = self.targetFormat.sampleRate / buffer.format.sampleRate
-            let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
-
-            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: self.targetFormat, frameCapacity: outputFrameCount) else { return }
-
-            var error: NSError?
-            var inputBuffer = buffer
-            converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-                outStatus.pointee = .haveData
-                return inputBuffer
-            }
-
-            if let error {
-                print("🎤 Conversion error: \(error)")
-            } else {
-                self.recognitionRequest?.append(outputBuffer)
-            }
+        // Install the tap directly in the target format (mono 16kHz).
+        // AVAudioEngine handles the format conversion internally —
+        // no manual AVAudioConverter needed. This is the standard
+        // pattern for SFSpeechRecognizer on macOS.
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: targetFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
         }
 
         do {
