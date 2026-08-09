@@ -104,7 +104,7 @@ extension Color {
 
     func components(relativeTo scheme: ColorScheme) -> RGBComponents {
         #if canImport(AppKit)
-        let nsColor = NSColor(self).usingColorSpace(.sRGBColorSpace) ?? NSColor.black
+        let nsColor = NSColor(self).usingColorSpace(.sRGB) ?? NSColor.black
         return RGBComponents(
             red: Double(nsColor.redComponent),
             green: Double(nsColor.greenComponent),
