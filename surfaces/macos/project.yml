@@ -65,3 +65,4 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: ai.hori.macos.tests
         BUNDLE_LOADER: "$(TEST_HOST)"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/HORI.app/Contents/MacOS/HORI"
+        GENERATE_INFOPLIST_FILE: YES
