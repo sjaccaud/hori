@@ -161,12 +161,50 @@ final class SpeechRecognizer: NSObject {
         print("🎤 Input format: \(inputFormat)")
         print("🎤 Target format: \(targetFormat)")
 
-        // Install the tap directly in the target format (mono 16kHz).
-        // AVAudioEngine handles the format conversion internally —
-        // no manual AVAudioConverter needed. This is the standard
-        // pattern for SFSpeechRecognizer on macOS.
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: targetFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+        // macOS gives us 4ch 96kHz deinterleaved from the hardware.
+        // We can't install a tap with a different format (crash).
+        // We must install with the hardware format and convert manually.
+        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            print("🎤 ERROR: Cannot create audio converter")
+            onError?("Audio format conversion failed.")
+            isListening = false
+            return
+        }
+        print("🎤 Converter created successfully")
+
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            guard let self else { return }
+
+            // Calculate output frame count based on sample rate ratio
+            let ratio = self.targetFormat.sampleRate / buffer.format.sampleRate
+            let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+
+            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: self.targetFormat, frameCapacity: outputFrameCount) else {
+                print("🎤 ERROR: Cannot create output PCM buffer")
+                return
+            }
+            outputBuffer.frameLength = outputFrameCount
+
+            // Use the block-based conversion API.
+            // The closure is called repeatedly until enough input is consumed.
+            var consumedAllInput = false
+            var error: NSError?
+            converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+                if consumedAllInput {
+                    outStatus.pointee = .endOfStream
+                    return nil
+                } else {
+                    outStatus.pointee = .haveData
+                    consumedAllInput = true
+                    return buffer
+                }
+            }
+
+            if let error {
+                print("🎤 Conversion error: \(error.localizedDescription)")
+            } else {
+                self.recognitionRequest?.append(outputBuffer)
+            }
         }
 
         do {
