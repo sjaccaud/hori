@@ -64,6 +64,61 @@ systemctl status llamacpp
 llama-server --model ~/ai-models/nomic-embed-text-v1.5.Q8_0.gguf --host 127.0.0.1 --port 8081 --ctx-size 2048 --embedding --n-gpu-layers 0 -ctk f16 -ctv f16
 ```
 
+## Building & Testing the macOS App Remotely
+
+The macOS app must be built on the Mac (no macOS toolchain on the GPU
+server). Devin SSHes into the Mac over Tailscale to build and test.
+
+**Connection details (Tailscale IP, username, SSH key, repo path on the
+Mac, xcodegen full path) live in `~/.config/devin/mac-build.md` — a
+user-level file on the GPU server, NOT committed to this repo.** Read
+that file at the start of a session to get the SSH target. It is kept
+out of git because it contains PII (Tailscale IP, username, device
+name) that must not go to GitHub.
+
+General workflow (substitute the `<MAC_SSH_TARGET>` from
+`~/.config/devin/mac-build.md`):
+
+```bash
+# Push changed Swift files to the Mac (when not committing+pushing to origin):
+scp surfaces/macos/HORI/<file>.swift <MAC_SSH_TARGET>:<MAC_REPO_PATH>/surfaces/macos/HORI/<file>.swift
+scp surfaces/macos/Tests/<file>.swift   <MAC_SSH_TARGET>:<MAC_REPO_PATH>/surfaces/macos/Tests/<file>.swift
+
+# Regenerate (picks up new test files) + build + test:
+ssh <MAC_SSH_TARGET> 'cd <MAC_REPO_PATH>/surfaces/macos && \
+  <XCODEGEN_PATH> generate && \
+  xcodebuild test -project HORI.xcodeproj -scheme HORI -destination "platform=macOS"'
+```
+
+The Mac may have uncommitted local changes (e.g. `Info.plist`,
+`Localizable.xcstrings` from prior builds). Leave them alone unless
+they conflict with the work in progress.
+
+## Git Safety Hooks (PII Defense in Depth)
+
+Two local git hooks form a defense-in-depth gate against PII and
+secrets entering the public repo:
+
+1. **`pre-commit`** — scans *staged added lines* for PII patterns and
+   blocks sensitive file paths. Stops PII from entering local history
+   at all. This is the first gate. Added after a session accidentally
+   committed a Tailscale IP + username into `.devin/AGENTS.md` (caught
+   by the product owner before push, but the PII was in a local commit).
+2. **`pre-push`** — blocks `archive/*` and other pre-squash branches,
+   re-scans pushed commits for PII, and blocks sensitive files. This is
+   the second gate, in case the pre-commit hook is bypassed or a
+   re-clone lacks it.
+
+Both hooks are in `.git/hooks/` and are **local-only** — they are NOT
+committed to the repo (they contain the PII patterns and a real secret
+they scan for, so they can't be). If the repo is re-cloned, the hooks
+must be reinstalled manually. The `archive/pre-squash` branch also has
+`branch.<name>.pushRemote` set to `no-push` as a config-level barrier.
+
+Bypass with `--no-verify` is deliberate friction, not a fat-finger
+risk. The hooks are the trusted architecture; the LLM (Devin) is the
+untrusted proposer — same principle as HORI's own safety spine.
+
 ## Current Model
 
 Qwen3.6-27B IQ4_NL on llama.cpp (Spiritbuun fork) with TurboQuant turbo4 KV
@@ -185,7 +240,8 @@ PLAN → BUILD → DEMO
 - If something unexpected happens — test won't pass, approach doesn't
   work, dependency is broken — STOP and bring it to the product owner
   rather than pushing through silently
-- Write a `.devin/SLICE_LOG.md` entry: what was built, what surprised,
+- Write `.devin/SLICE_LOG.md` Current Slice at START (before any code),
+  and a full entry at completion: what was built, what surprised,
   what's unsure, what was skipped
 
 **DEMO (product owner + Devin, 15-30 min):**
@@ -282,13 +338,26 @@ Commit messages start with the slice ID:
 The single source of truth for "where are we right now." Lives in the
 repo, committed, survives crashes. Any new session reads this first.
 
+**Current Slice must be written at session START, not just completion.**
+A crash mid-slice leaves the file accurate — a returning session reads
+the real state, not a stale "None." Update Current Slice as soon as you
+know what you're working on, before writing any code. Update it again
+when the slice completes or the plan changes.
+
 ### Resume protocol (run at the start of every new session)
+
+Run `scripts/devin_resume.sh` — it automates the checks below and
+verifies that the git safety hooks are installed. Or run them manually:
 
 1. Read `.devin/SLICE_LOG.md` → "where are we?"
 2. `git branch` → "what branch are we on?"
 3. `git log --oneline -5` → "what was the last commit?"
 4. `git status` → "are there uncommitted changes?"
 5. Run the tests → "does the code currently work?"
+6. Verify hooks: `.git/hooks/pre-commit` and `.git/hooks/pre-push`
+   exist and are executable. If missing, run
+   `scripts/install_hooks.sh` to rebuild them from the committed
+   generator (see "Git Safety Hooks" above).
 
 This takes 30 seconds. No chat history needed. No memory of the previous
 session needed. The repo IS the state.

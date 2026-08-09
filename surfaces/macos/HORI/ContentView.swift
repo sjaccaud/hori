@@ -8,6 +8,8 @@ import SwiftUI
 /// - `ConversationView` when there are messages (the conversation)
 /// - `MessageInputView` at the bottom (always, once configured)
 /// - `ConnectionSetupView` as a sheet on first launch (no URL set)
+/// In Phase 2, it also shows:
+/// - `PresenceIndicator` in the top-right corner (live presence state)
 ///
 /// Receives `WindowState` (per-window) and `SharedAppState` (shared)
 /// via `@Environment`. The background is always `HoriTheme.background`
@@ -34,36 +36,54 @@ struct ContentView: View {
     @State private var errorMessage: String? = nil
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Conversation area — empty state or message list.
-            // This expands to fill available space; the input field
-            // below takes only its natural height.
-            if windowState.messages.isEmpty {
-                EmptyStateView()
-            } else {
-                ConversationView(
-                    messages: windowState.messages,
-                    isSending: windowState.isSending
-                )
-            }
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                // Conversation area — empty state or message list.
+                // This expands to fill available space; the input field
+                // below takes only its natural height.
+                if windowState.messages.isEmpty {
+                    EmptyStateView()
+                } else {
+                    ConversationView(
+                        messages: windowState.messages,
+                        isSending: windowState.isSending
+                    )
+                }
 
-            // Error banner (if any).
-            if let error = errorMessage {
-                ErrorBanner(text: error) {
-                    withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
-                        errorMessage = nil
+                // Error banner (if any).
+                if let error = errorMessage {
+                    ErrorBanner(text: error) {
+                        withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
+                            errorMessage = nil
+                        }
                     }
                 }
-            }
 
-            // Input field — always visible once configured.
-            // Fixed at bottom; the conversation area above flexes.
+                // Input field — always visible once configured.
+                // Fixed at bottom; the conversation area above flexes.
+                if sharedState.isConnectionConfigured {
+                    MessageInputView(
+                        text: $inputText,
+                        isSending: windowState.isSending,
+                        onSend: sendMessage
+                    )
+                }
+            }
+            // Fill the entire ZStack/window so the conversation area has a
+            // finite amount of space to flex into and the input field stays
+            // anchored at the bottom. Without this, a ZStack child with an
+            // unspecified size proposal can grow indefinitely and push the
+            // input off-screen.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Presence indicator — top-right corner, overlay.
             if sharedState.isConnectionConfigured {
-                MessageInputView(
-                    text: $inputText,
-                    isSending: windowState.isSending,
-                    onSend: sendMessage
+                PresenceIndicator(
+                    presence: sharedState.presence,
+                    isConnected: sharedState.isPresenceConnected
                 )
+                .padding(.top, 12)
+                .padding(.trailing, 16)
             }
         }
         .frame(minWidth: 600, minHeight: 400)

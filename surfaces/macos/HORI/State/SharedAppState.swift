@@ -16,9 +16,16 @@ final class SharedAppState {
 
     /// The aios-core URL (Tailscale IP + port 5680).
     /// Stored in UserDefaults, shared across all windows.
-    var aiosCoreURL: String {
-        get { UserDefaults.standard.string(forKey: "aiosCoreURL") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "aiosCoreURL") }
+    /// Backed by a stored property so @Observable can track changes
+    /// and trigger view re-renders when the URL is set (e.g. from
+    /// ConnectionSetupView). A computed property reading UserDefaults
+    /// directly would be invisible to @Observable, causing views that
+    /// depend on isConnectionConfigured to never update.
+    var aiosCoreURL: String = UserDefaults.standard.string(forKey: "aiosCoreURL") ?? "" {
+        didSet {
+            guard oldValue != aiosCoreURL else { return }
+            UserDefaults.standard.set(aiosCoreURL, forKey: "aiosCoreURL")
+        }
     }
 
     /// Whether the connection has been configured.
@@ -29,9 +36,14 @@ final class SharedAppState {
     // MARK: - Settings
 
     /// Whether feedback sounds are enabled (off by default).
-    var feedbackSoundsEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: "feedbackSoundsEnabled") }
-        set { UserDefaults.standard.set(newValue, forKey: "feedbackSoundsEnabled") }
+    /// Stored property + didSet for @Observable tracking (same pattern
+    /// as aiosCoreURL — a computed property reading UserDefaults would
+    /// be invisible to @Observable).
+    var feedbackSoundsEnabled: Bool = UserDefaults.standard.bool(forKey: "feedbackSoundsEnabled") {
+        didSet {
+            guard oldValue != feedbackSoundsEnabled else { return }
+            UserDefaults.standard.set(feedbackSoundsEnabled, forKey: "feedbackSoundsEnabled")
+        }
     }
 
     // MARK: - Project List (Phase 5)
@@ -46,9 +58,51 @@ final class SharedAppState {
     /// not per-window).
     var presence: PresenceState = .offline
 
+    /// Whether the presence SSE stream is connected.
+    var isPresenceConnected: Bool = false
+
+    /// The presence SSE client. Started/stopped from HORIApp.
+    private var presenceClient: PresenceClient?
+
     // MARK: - Initialization
 
     init() {}
+
+    // MARK: - Presence Stream
+
+    /// Starts the presence SSE stream, connecting to aios-core and
+    /// updating `presence` and `isPresenceConnected` in real time.
+    /// Safe to call multiple times — stops any existing client first.
+    func startPresenceStream() {
+        stopPresenceStream()
+        guard isConnectionConfigured,
+              let url = URL(string: aiosCoreURL) else { return }
+
+        presenceClient = PresenceClient(
+            baseURL: url,
+            onStateChange: { [weak self] state in
+                self?.presence = state
+            },
+            onConnectionChange: { [weak self] connected in
+                self?.isPresenceConnected = connected
+                if !connected {
+                    // Don't overwrite a known state on transient disconnects,
+                    // but mark offline if we were never connected.
+                    if self?.presence == .offline {
+                        // already offline
+                    }
+                }
+            }
+        )
+        presenceClient?.start()
+    }
+
+    /// Stops the presence SSE stream.
+    func stopPresenceStream() {
+        presenceClient?.stop()
+        presenceClient = nil
+        isPresenceConnected = false
+    }
 }
 
 // MARK: - Presence State
@@ -56,10 +110,13 @@ final class SharedAppState {
 /// HORI's presence state. Shared across all windows — HORI has one
 /// presence, not per-window. Drives the presence indicator and koi
 /// mascot reactivity.
+///
+/// The raw value matches the server's wire format (snake_case):
+/// "idle", "thinking", "has_nudge", "offline".
 enum PresenceState: String, Equatable, CaseIterable {
     case idle       // Available, waiting for input
     case thinking   // Processing a request
-    case hasNudge   // Has something to say (proactive)
+    case hasNudge = "has_nudge"   // Has something to say (proactive)
     case offline    // Not connected to aios-core
 
     /// The semantic color for this presence state.

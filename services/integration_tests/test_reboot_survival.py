@@ -68,6 +68,45 @@ EXPECTED_GROUP = "aios-worker"
 EXPECTED_MODE = 0o1777
 
 
+# --- Service file template expansion -------------------------------------
+
+def _expand_service_templates(content):
+    """Apply the same %h template substitution as install_tool_daemon.sh.
+
+    The install script replaces ``%h/Projects/hori`` with the project dir,
+    ``%h/.config`` and ``%h/Projects`` with the installing user's home
+    dir, and ``%i`` with the installing user's username. This helper
+    mirrors that logic so the test can compare the templated repo file
+    against the de-templated installed file.
+
+    Traces to: scripts/hardening/install_tool_daemon.sh (sed block).
+    """
+    # Mirror install_tool_daemon.sh:
+    #   HORI_USER="${SUDO_USER:-$(logname 2>/dev/null || echo $USER)}"
+    hori_user = os.environ.get("SUDO_USER")
+    if not hori_user:
+        try:
+            hori_user = subprocess.check_output(
+                ["logname"], text=True, stderr=subprocess.DEVNULL
+            ).strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            hori_user = os.environ.get("USER", "")
+    #   HORI_HOME=$(getent passwd "$HORI_USER" | cut -d: -f6)
+    try:
+        hori_home = subprocess.check_output(
+            ["getent", "passwd", hori_user], text=True
+        ).strip().split(":")[5]
+    except (subprocess.CalledProcessError, IndexError):
+        hori_home = os.path.expanduser("~")
+    # Apply substitutions in the same order as the install script's sed
+    # (most specific first, so %h/Projects/hori before %h/Projects).
+    content = content.replace("%h/Projects/hori", PROJECT_DIR)
+    content = content.replace("%h/.config", f"{hori_home}/.config")
+    content = content.replace("%h/Projects", f"{hori_home}/Projects")
+    content = content.replace("%i", hori_user)
+    return content
+
+
 # --- Privilege guard -----------------------------------------------------
 
 def _is_root():
@@ -416,16 +455,25 @@ class TestInstalledFilesWorkspaceFix:
             )
 
     def test_installed_service_matches_repo(self):
-        """The installed service file should match the repo service file."""
+        """The installed service file should match the repo service file.
+
+        The repo service file uses ``%h``/``%i`` templates that
+        ``install_tool_daemon.sh`` substitutes with real paths at install
+        time. We apply the same expansion to the repo file before
+        comparing, so this test catches real drift (changed directives,
+        removed hardening) rather than the expected template expansion.
+        """
         if not os.path.isfile(INSTALLED_SERVICE_FILE):
             pytest.skip(f"{INSTALLED_SERVICE_FILE} not found — service not installed")
         with open(REPO_SERVICE_FILE) as f:
             repo_content = f.read()
         with open(INSTALLED_SERVICE_FILE) as f:
             installed_content = f.read()
-        if repo_content.strip() != installed_content.strip():
+        expanded_repo = _expand_service_templates(repo_content)
+        if expanded_repo.strip() != installed_content.strip():
             pytest.fail(
-                "Installed service file differs from repo service file.\n"
+                "Installed service file differs from repo service file "
+                "(after template expansion).\n"
                 "Reinstall with: sudo scripts/hardening/install_tool_daemon.sh && "
                 "sudo systemctl daemon-reload"
             )

@@ -5,20 +5,71 @@
 
 ## Current Slice
 
-(None — ready to plan SLICE-MACOS-02)
+None. SLICE-MACOS-02 demoed and merged. Ready to start SLICE-MACOS-03.
+
+**What's next:**
+- SLICE-MACOS-03: Voice Conversation (branch `slice/macos-03-voice`)
 
 ## Slice Queue
 
-1. SLICE-MACOS-02: HORI Feels Alive — Presence
-2. SLICE-MACOS-03: Voice Conversation
-3. SLICE-MACOS-04: Live Preview — First Taste of Emerging Software
-4. SLICE-MACOS-05: The Workshop — Projects, Files, "Make It Yours"
-5. SLICE-MACOS-06: The Emerging Canvas — Sims Builder Mode
-6. SLICE-MACOS-07: The Koi, Menu Bar, Sound, Accessibility Audit
-7. SLICE-MACOS-08: Install-Time Hardware Sensing
-8. SLICE-MACOS-09: Phone Companion
+1. SLICE-MACOS-03: Voice Conversation
+2. SLICE-MACOS-04: Live Preview — First Taste of Emerging Software
+3. SLICE-MACOS-05: The Workshop — Projects, Files, "Make It Yours"
+4. SLICE-MACOS-06: The Emerging Canvas — Sims Builder Mode
+5. SLICE-MACOS-07: The Koi, Menu Bar, Sound, Accessibility Audit
+6. SLICE-MACOS-08: Install-Time Hardware Sensing
+7. SLICE-MACOS-09: Phone Companion
 
 ## Completed Slices
+
+### SLICE-MACOS-02: HORI Feels Alive — Presence — COMPLETE
+- Branch: `slice/macos-02-presence` (merged to rebrand/hori)
+- What was built: PresenceClient (SSE parser for /v1/presence stream),
+  PresenceIndicator (animated dot + label — green/Available, orange/
+  Thinking, violet/Has something to say, red/Offline), koi reactivity
+  in EmptyStateView (float when idle, wiggle when thinking, glow when
+  hasNudge). Presence stream lifecycle managed by HoriAppDelegate
+  (NSApplicationDelegateAdaptor) so it survives window close. 76 tests
+  total (75 + 1 @Observable tracking test).
+- Surprises:
+  1. `hasNudge` raw value didn't match server wire format — server
+     sends `has_nudge` (snake_case), enum needed `case hasNudge =
+     "has_nudge"`.
+  2. Presence indicator falsely showed "Offline" when chat worked —
+     SSE stream lifecycle was tied to ContentView (destroyed on window
+     close). Moved to HoriAppDelegate via NSApplicationDelegateAdaptor.
+  3. `URLSession.shared` doesn't support custom delegates —
+     PresenceClient needed its own URLSession instance.
+  4. MessageInputView pushed off-screen by ZStack layout regression —
+     added `.frame(maxWidth: .infinity, maxHeight: .infinity)` to the
+     VStack inside the ZStack.
+  5. **@Observable not tracking aiosCoreURL changes** (found at demo):
+     `aiosCoreURL` and `feedbackSoundsEnabled` were computed properties
+     backed by UserDefaults. @Observable only tracks stored properties,
+     so views depending on `isConnectionConfigured` never re-rendered
+     when the URL was set from ConnectionSetupView. Product owner had
+     to restart the app to get the chat input bar to appear after
+     entering the server URL. Fix: made both stored properties with
+     didSet syncing to UserDefaults. Added
+     `isConnectionConfiguredIsObservable` test using
+     withObservationTracking.
+  6. **Koi disappears when chat starts** (found at demo, by design —
+     not a bug): EmptyStateView (with koi) is replaced by
+     ConversationView (no koi) via if/else in ContentView. The koi
+     reactivity can only be observed before chatting. Product owner
+     said the koi isn't the star — going for minimalist canvas. Koi
+     integration deferred to SLICE-MACOS-07 (The Koi, Menu Bar, Sound).
+  7. `test_installed_service_matches_repo` integration test was a
+     false positive — compared templated repo service file against
+     de-templated installed file. Fixed by adding
+     `_expand_service_templates()` mirroring the install script's sed
+     substitution.
+- Skipped: Koi persistent during conversation (deferred to
+  SLICE-MACOS-07). Connection settings accessible after first-run
+  (needs a menu item — deferred).
+- Demo: Product owner verified chat input bar appears immediately after
+  entering server URL (no restart needed — the @Observable fix). 76
+  tests pass on Mac.
 
 ### SLICE-MACOS-01: Native Text Conversation — COMPLETE
 - Branch: `slice/macos-01-text-conversation` (merged to rebrand/hori pending)

@@ -116,6 +116,7 @@ struct ConnectionSetupView: View {
         let trimmed = urlText.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         sharedState.aiosCoreURL = trimmed
+        sharedState.startPresenceStream()
         isPresented = false
     }
 
