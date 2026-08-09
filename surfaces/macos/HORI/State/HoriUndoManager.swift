@@ -31,6 +31,13 @@ extension EnvironmentValues {
 /// ```
 enum HoriUndoManager {
 
+    /// A no-op target object for registerUndo(withTarget:handler:).
+    /// The API requires a class type (AnyObject); the closure captures
+    /// the actual state to restore, so the target is just a formality.
+    /// A shared singleton avoids allocating one object per undo action.
+    private final class UndoTarget {}
+    private static let target = UndoTarget()
+
     /// Registers an undo action with a descriptive label.
     /// The label appears in the Edit menu as "Undo [label]".
     static func register(undoManager: UndoManager?,
@@ -38,7 +45,7 @@ enum HoriUndoManager {
                          undo: @escaping () -> Void) {
         guard let undoManager else { return }
         undoManager.beginUndoGrouping()
-        undoManager.registerUndo(withTarget: undo as Any) { _ in
+        undoManager.registerUndo(withTarget: target) { _ in
             undo()
         }
         undoManager.setActionName(actionName)
