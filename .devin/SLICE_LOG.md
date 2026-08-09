@@ -5,25 +5,24 @@
 
 ## Current Slice
 
-**SLICE-MACOS-00: First Impression + Foundation** — SOURCE COMPLETE, AWAITING MAC VALIDATION
-- Branch: `slice/macos-00-first-impression` (pushed to origin)
-- What was built: The HORI macOS app skeleton — xcodegen project,
-  design system (theme, typography, animations, shapes), five
-  foundational decisions (accessibility, keyboard, localization,
-  multi-window, undo), and the empty state view (koi + "What do you
-  want to make today?"). 5 Swift test files (Theme, EmptyStateView,
-  Accessibility, WindowState, UndoManager).
-- Status: Source written on GPU server and pushed. Needs Mac build/test
-  (xcodegen generate → xcodebuild test → Cmd+R) to validate before
-  marking COMPLETE. See surfaces/macos/README.md for build steps.
-- Next: SLICE-MACOS-01 (Native Text Conversation) — proposed, pending
-  MACOS-00 validation on Mac. Devin will write MACOS-01 source on GPU
-  server in parallel once approved.
+**SLICE-MACOS-01: Native Text Conversation** — PROPOSED
+- Branch: `slice/macos-01-text-conversation` (to be created)
+- What will be built: HoriClient (HTTP client for /v1/voice/chat),
+  ConversationView (message bubbles), MessageInputView (input field +
+  Cmd+Enter), ConnectionSetupView (first-run URL config). Wire
+  WindowState.messages/isSending into live conversation. Tests for
+  HoriClient (request/response/error) and ConversationView (rendering,
+  send flow, history).
+- Demo criterion: On Mac with aios-core running, type "hello" → HORI's
+  reply appears in a bubble. Follow-up turn has context. Change
+  connection URL in settings → reconnects.
+- Uncertainty: No streaming in Phase 1 (uses /v1/voice/chat, not
+  /stream). Audio ignored (Phase 3). DM Sans falls back to SF Pro.
 
 ## Slice Queue
 
-1. SLICE-MACOS-00: First Impression + Foundation (SOURCE COMPLETE — awaiting Mac validation)
-2. SLICE-MACOS-01: Native Text Conversation
+1. SLICE-MACOS-01: Native Text Conversation (PROPOSED)
+2. SLICE-MACOS-02: HORI Feels Alive — Presence
 3. SLICE-MACOS-02: HORI Feels Alive — Presence
 4. SLICE-MACOS-03: Voice Conversation
 5. SLICE-MACOS-04: Live Preview — First Taste of Emerging Software
@@ -34,6 +33,40 @@
 10. SLICE-MACOS-09: Phone Companion
 
 ## Completed Slices
+
+### SLICE-MACOS-00: First Impression + Foundation — COMPLETE
+- Branch: `slice/macos-00-first-impression` (merged to rebrand/hori pending)
+- What was built: The HORI macOS app skeleton — xcodegen project,
+  design system (theme, typography, animations, shapes), five
+  foundational decisions (accessibility, keyboard, localization,
+  multi-window, undo), and the empty state view (koi + "What do you
+  want to make today?"). 5 Swift test files (Theme, EmptyStateView,
+  Accessibility, WindowState, UndoManager).
+- Surprises: Six compile/test issues surfaced on first Mac build — all
+  were API mismatches between the SDK the source was written against and
+  macOS 15 Sequoia / Xcode 16:
+  1. `Font.custom` has no overload taking both `weight:` and `relativeTo:`
+     → chain `.weight()` as a modifier (app + test)
+  2. `registerUndo(withTarget:handler:)` requires a class, not `Any`
+     → shared no-op class instance as target
+  3. `.toolbarVisibility` not a Scene modifier in this SDK → removed
+     (`.windowStyle(.plain)` already gives transparent titlebar)
+  4. `NSColorSpace.sRGBColorSpace` renamed to `.sRGB` → updated
+  5. `UndoManager.groupsByEvent` defaults to true, causing all explicit
+     undo groups to nest inside one event group → set to false so each
+     register() is a top-level group (fixes chained undo)
+  6. `.windowStyle(.plain)` dropped the traffic lights entirely on
+     Sequoia (no close/minimize/zoom, no draggable titlebar) → removed,
+     standard chrome restored. Transparent titlebar deferred to a later
+     cosmetic refinement.
+- Skipped: Transparent titlebar (needs AppKit window customization, not
+  just .windowStyle(.plain) — deferred). DM Sans custom font not bundled
+  yet (SF Pro fallback works).
+- Demo: Mac build → 5 test files pass → Cmd+R → warm near-black window
+  with koi + "What do you want to make today?", violet accent, standard
+  window chrome, multi-window works (Cmd+N), VoiceOver navigable.
+- Pre-push hook fix: Check 3 now uses --diff-filter=AM so deletions of
+  sensitive files aren't flagged as additions (was blocking the push).
 
 ### SLICE-08: hori init setup wizard — COMPLETE
 - Branch: slice/08-hori-init
