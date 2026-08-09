@@ -7,28 +7,35 @@
 
 SLICE-MACOS-02: HORI Feels Alive — Presence (in progress, branch `slice/macos-02-presence`)
 
-**Status:** Presence feature built (SSE client, indicator, koi
-reactivity). Two bugs fixed mid-slice (hasNudge raw value, presence
-stream lifecycle). Now hardening crash recovery infrastructure before
-continuing the slice.
+**Status:** SLICE-MACOS-02 complete and validated. Presence feature
+built (SSE client, indicator, koi reactivity). Multiple bugs fixed
+(hasNudge raw value, presence stream lifecycle, URLSession delegate
+leak, MessageInputView off-screen regression). Crash recovery
+infrastructure hardened. Product owner confirmed the presence indicator
+shows "Available" / green and the text input box is back.
 
 **What's done:**
-- PresenceClient (SSE parser), PresenceIndicator, koi reactivity
+- PresenceClient (SSE parser + URLSession delegate fix), PresenceIndicator, koi reactivity
 - Fixed `hasNudge` raw value to match server wire format (`has_nudge`)
-- Fixed presence indicator showing "Offline" when chat works — moved
-  SSE stream lifecycle from per-window `onAppear`/`onDisappear` to
-  `NSApplicationDelegateAdaptor` (`HoriAppDelegate`). 75 tests pass.
-- Pre-commit PII hook (stops PII entering local git history)
-- `archive/pre-squash` push protected (pushRemote=no-push + hook blocklist)
+- Fixed presence indicator falsely showing "Offline" when chat works —
+  moved SSE stream lifecycle to `NSApplicationDelegateAdaptor`
+  (`HoriAppDelegate`), then fixed `URLSession.shared` not supporting a
+  custom delegate by making `PresenceClient` create its own session.
+- Fixed `MessageInputView` pushed off-screen by `ZStack` layout regression
+- Added Xcode 16 recommended build settings to `project.yml`
+- Hardened crash recovery: accurate SLICE_LOG state, reconstructible
+  git hooks, `scripts/devin_resume.sh`, pre-commit PII hook, archive
+  branch push protection
+- 75 tests pass; product owner verified presence indicator is
+  "Available" / green and the text input box is visible
 
 **What's in progress (this session):**
-- Crash recovery hardening: accurate SLICE_LOG state at session start,
-  reconstructible git hooks (survive re-clone), `scripts/devin_resume.sh`
-  to automate the resume protocol.
+- Nothing. SLICE-MACOS-02 is ready for demo / merge.
 
 **What's next after this session:**
-- Demo SLICE-MACOS-02 to product owner (presence indicator + koi)
-- Then SLICE-MACOS-03: Voice Conversation
+- Demo SLICE-MACOS-02 to product owner
+- Merge `slice/macos-02-presence` to `rebrand/hori`
+- SLICE-MACOS-03: Voice Conversation
 
 ## Slice Queue
 
