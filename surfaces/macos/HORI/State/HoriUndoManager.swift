@@ -40,10 +40,19 @@ enum HoriUndoManager {
 
     /// Registers an undo action with a descriptive label.
     /// The label appears in the Edit menu as "Undo [label]".
+    ///
+    /// We manage grouping explicitly (beginUndoGrouping/endUndoGrouping),
+    /// so groupsByEvent is set to false. When groupsByEvent is true (the
+    /// default), the UndoManager auto-creates an event-level group, and
+    /// our explicit groups become *nested* inside it. undo() then undoes
+    /// the entire event group at once — all nested groups — instead of
+    /// one at a time. Setting groupsByEvent = false makes each explicit
+    /// group a top-level group, so undo() undoes one action per call.
     static func register(undoManager: UndoManager?,
                          actionName: String,
                          undo: @escaping () -> Void) {
         guard let undoManager else { return }
+        undoManager.groupsByEvent = false
         undoManager.beginUndoGrouping()
         undoManager.registerUndo(withTarget: target) { _ in
             undo()
