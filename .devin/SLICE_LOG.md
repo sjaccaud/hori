@@ -5,34 +5,60 @@
 
 ## Current Slice
 
-**SLICE-MACOS-01: Native Text Conversation** — PROPOSED
-- Branch: `slice/macos-01-text-conversation` (to be created)
-- What will be built: HoriClient (HTTP client for /v1/voice/chat),
-  ConversationView (message bubbles), MessageInputView (input field +
-  Cmd+Enter), ConnectionSetupView (first-run URL config). Wire
-  WindowState.messages/isSending into live conversation. Tests for
-  HoriClient (request/response/error) and ConversationView (rendering,
-  send flow, history).
-- Demo criterion: On Mac with aios-core running, type "hello" → HORI's
-  reply appears in a bubble. Follow-up turn has context. Change
-  connection URL in settings → reconnects.
-- Uncertainty: No streaming in Phase 1 (uses /v1/voice/chat, not
-  /stream). Audio ignored (Phase 3). DM Sans falls back to SF Pro.
+(None — ready to plan SLICE-MACOS-02)
 
 ## Slice Queue
 
-1. SLICE-MACOS-01: Native Text Conversation (PROPOSED)
-2. SLICE-MACOS-02: HORI Feels Alive — Presence
-3. SLICE-MACOS-02: HORI Feels Alive — Presence
-4. SLICE-MACOS-03: Voice Conversation
-5. SLICE-MACOS-04: Live Preview — First Taste of Emerging Software
-6. SLICE-MACOS-05: The Workshop — Projects, Files, "Make It Yours"
-7. SLICE-MACOS-06: The Emerging Canvas — Sims Builder Mode
-8. SLICE-MACOS-07: The Koi, Menu Bar, Sound, Accessibility Audit
-9. SLICE-MACOS-08: Install-Time Hardware Sensing
-10. SLICE-MACOS-09: Phone Companion
+1. SLICE-MACOS-02: HORI Feels Alive — Presence
+2. SLICE-MACOS-03: Voice Conversation
+3. SLICE-MACOS-04: Live Preview — First Taste of Emerging Software
+4. SLICE-MACOS-05: The Workshop — Projects, Files, "Make It Yours"
+5. SLICE-MACOS-06: The Emerging Canvas — Sims Builder Mode
+6. SLICE-MACOS-07: The Koi, Menu Bar, Sound, Accessibility Audit
+7. SLICE-MACOS-08: Install-Time Hardware Sensing
+8. SLICE-MACOS-09: Phone Companion
 
 ## Completed Slices
+
+### SLICE-MACOS-01: Native Text Conversation — COMPLETE
+- Branch: `slice/macos-01-text-conversation` (merged to rebrand/hori pending)
+- What was built: HoriClient (HTTP client for POST /v1/voice/chat —
+  text only, audio ignored until Phase 3), ConversationView (scrollable
+  message bubbles — user right/accent, HORI left/surface, spring
+  animations, typing indicator), MessageInputView (multi-line input +
+  send button bound to Cmd+Return), ConnectionSetupView (first-run
+  sheet for aios-core URL with "Test Connection"), ContentView wired
+  with send logic (user message → HORI reply → error banner on
+  failure). 54 tests total (8 HoriClient + 12 ConversationView + 34
+  existing).
+- Surprises:
+  1. `TestResult.success` collided with SwiftUI's `SensoryFeedback.success`
+     (macOS 15) — fixed by making TestResult Equatable.
+  2. `localizedDescription` returns String (non-optional) — optional
+     chaining on it was invalid. Removed `?`.
+  3. MockURLProtocol: URLProtocol instantiates a new instance per
+     request, so instance properties can't be shared with the test.
+     Moved all config to static vars. Also URLProtocol strips httpBody
+     from POST requests — read it from httpBodyStream in startLoading().
+  4. Swift Testing runs tests in parallel by default — shared static
+     mock state leaked between tests. Added `.serialized` to the suite.
+  5. EmptyStateView had `.frame(maxHeight: .infinity)` which greedily
+     consumed all vertical space, pushing the input field off-screen.
+     Removed `maxHeight: .infinity`.
+  6. aios-core serves HTTP only (Tailscale Serve proxies HTTPS). The
+     app uses HTTP over Tailscale — ATS is disabled via
+     NSAllowsArbitraryLoads in Info.plist.
+- Infrastructure: Set up SSH from GPU server to Mac via Tailscale
+  (standard SSH key, not Tailscale SSH — the Mac GUI app doesn't
+  support Tailscale SSH server). Devin can now build and test on the
+  Mac directly via SSH over the Tailscale IP, eliminating the
+  push/pull/paste loop. Visual demo still requires the product owner.
+- Skipped: Streaming (uses /v1/voice/chat, not /stream — deferred).
+  Audio (Phase 3). Connection settings accessible after first-run
+  (needs a menu item or button — deferred to Phase 2+).
+- Demo: Mac app → connection setup (enter aios-core Tailscale URL) →
+  type "hello" + Cmd+Return → HORI replies in a bubble. Follow-up turn
+  has context. 54 tests pass.
 
 ### SLICE-MACOS-00: First Impression + Foundation — COMPLETE
 - Branch: `slice/macos-00-first-impression` (merged to rebrand/hori pending)
