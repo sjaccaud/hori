@@ -14,12 +14,23 @@ import AppKit
 /// The first thing you see is `ContentView`, which shows the
 /// `EmptyStateView` — a warm dark window with a koi placeholder
 /// and "What do you want to make today?"
+///
+/// The presence SSE stream is owned by the app delegate, not per-window.
+/// It starts at app launch and stops at app termination. Tying it to
+/// `WindowGroup`'s `onAppear`/`onDisappear` caused the stream to be torn
+/// down whenever any window disappeared (closed or reclaimed by SwiftUI),
+/// which flipped the presence indicator to "Offline" for all windows
+/// even though the chat endpoint (a separate one-shot HTTP request)
+/// still worked. The stream is shared — one HORI, one presence — so its
+/// lifetime must match the app, not a single window.
 @main
 struct HORIApp: App {
 
-    /// Shared state — one instance for the entire app.
-    /// Connection config, project list, presence, settings.
-    @State private var sharedState = SharedAppState()
+    /// Owns `SharedAppState` and the presence stream lifecycle.
+    /// The delegate starts the stream at launch and stops it at
+    /// termination; `SharedAppState` is injected into SwiftUI from here.
+    @NSApplicationDelegateAdaptor(HoriAppDelegate.self)
+    private var appDelegate
 
     var body: some Scene {
 
@@ -27,13 +38,7 @@ struct HORIApp: App {
 
         WindowGroup {
             ContentView()
-                .environment(sharedState)
-                .onAppear {
-                    sharedState.startPresenceStream()
-                }
-                .onDisappear {
-                    sharedState.stopPresenceStream()
-                }
+                .environment(appDelegate.sharedState)
         }
         .commands {
             // Edit menu — Undo/Redo wired to the responder chain.
@@ -62,5 +67,33 @@ struct HORIApp: App {
         }
         .defaultSize(width: 900, height: 640)
         .windowResizability(.contentMinSize)
+    }
+}
+
+// MARK: - App Delegate
+
+/// Owns `SharedAppState` and manages the presence SSE stream lifetime.
+///
+/// The presence stream is shared across all windows (one HORI, one
+/// presence), so it must live for the app's lifetime — not tied to any
+/// single window's appear/disappear cycle. Starting it here at launch
+/// and stopping it at termination keeps the indicator accurate even as
+/// windows open and close.
+///
+/// `startPresenceStream()` is a no-op when the connection isn't
+/// configured yet (first run); `ConnectionSetupView.save()` starts it
+/// once the URL is set. Safe to call multiple times.
+final class HoriAppDelegate: NSObject, NSApplicationDelegate {
+
+    /// Shared state — one instance for the entire app.
+    /// Connection config, project list, presence, settings.
+    let sharedState = SharedAppState()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        sharedState.startPresenceStream()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        sharedState.stopPresenceStream()
     }
 }
