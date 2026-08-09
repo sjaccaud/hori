@@ -28,6 +28,12 @@ struct HORIApp: App {
         WindowGroup {
             ContentView()
                 .environment(sharedState)
+                .onAppear {
+                    sharedState.startPresenceStream()
+                }
+                .onDisappear {
+                    sharedState.stopPresenceStream()
+                }
         }
         .commands {
             // Edit menu — Undo/Redo wired to the responder chain.

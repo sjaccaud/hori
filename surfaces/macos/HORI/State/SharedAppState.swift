@@ -46,9 +46,51 @@ final class SharedAppState {
     /// not per-window).
     var presence: PresenceState = .offline
 
+    /// Whether the presence SSE stream is connected.
+    var isPresenceConnected: Bool = false
+
+    /// The presence SSE client. Started/stopped from HORIApp.
+    private var presenceClient: PresenceClient?
+
     // MARK: - Initialization
 
     init() {}
+
+    // MARK: - Presence Stream
+
+    /// Starts the presence SSE stream, connecting to aios-core and
+    /// updating `presence` and `isPresenceConnected` in real time.
+    /// Safe to call multiple times — stops any existing client first.
+    func startPresenceStream() {
+        stopPresenceStream()
+        guard isConnectionConfigured,
+              let url = URL(string: aiosCoreURL) else { return }
+
+        presenceClient = PresenceClient(
+            baseURL: url,
+            onStateChange: { [weak self] state in
+                self?.presence = state
+            },
+            onConnectionChange: { [weak self] connected in
+                self?.isPresenceConnected = connected
+                if !connected {
+                    // Don't overwrite a known state on transient disconnects,
+                    // but mark offline if we were never connected.
+                    if self?.presence == .offline {
+                        // already offline
+                    }
+                }
+            }
+        )
+        presenceClient?.start()
+    }
+
+    /// Stops the presence SSE stream.
+    func stopPresenceStream() {
+        presenceClient?.stop()
+        presenceClient = nil
+        isPresenceConnected = false
+    }
 }
 
 // MARK: - Presence State
