@@ -35,19 +35,19 @@ enum HoriTypography {
 
     /// Label — semibold, 13pt.
     /// Used for buttons, field labels, metadata.
-    static let label = Font.custom(customFontName, size: 13, weight: .semibold, relativeTo: .caption)
+    static let label = Font.custom(customFontName, size: 13, relativeTo: .caption).weight(.semibold)
 
     /// Header — semibold, 17pt.
     /// Used for section headers, project names.
-    static let header = Font.custom(customFontName, size: 17, weight: .semibold, relativeTo: .headline)
+    static let header = Font.custom(customFontName, size: 17, relativeTo: .headline).weight(.semibold)
 
     /// Display — bold, 24pt.
     /// Used for the empty state prompt, large titles.
-    static let display = Font.custom(customFontName, size: 24, weight: .semibold, relativeTo: .largeTitle)
+    static let display = Font.custom(customFontName, size: 24, relativeTo: .largeTitle).weight(.semibold)
 
     /// Caption — regular, 12pt, secondary color.
     /// Used for timestamps, hints, subtle metadata.
-    static let caption = Font.custom(customFontName, size: 12, weight: .regular, relativeTo: .caption2)
+    static let caption = Font.custom(customFontName, size: 12, relativeTo: .caption2).weight(.regular)
 
     // MARK: - View Extensions
 
