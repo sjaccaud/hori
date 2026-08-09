@@ -57,7 +57,13 @@ final class VoiceViewModel {
             self?.handleFinalTranscript(text)
         }
         speechRecognizer.onError = { [weak self] msg in
-            self?.handleError(msg)
+            // "No speech detected" is not a real error — the user just
+            // didn't say anything. Go back to idle without showing an error.
+            if msg.lowercased().contains("no speech") {
+                self?.voiceState.reset()
+            } else {
+                self?.handleError(msg)
+            }
         }
 
         // Wire audio player

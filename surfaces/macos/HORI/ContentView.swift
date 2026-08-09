@@ -154,8 +154,13 @@ struct ContentView: View {
 
                 VoiceInputButton(
                     voiceState: vm.voiceState,
-                    onPress: { vm.startTalking() },
-                    onRelease: { vm.stopTalking() }
+                    onToggle: {
+                        if vm.voiceState.phase == .idle {
+                            vm.startTalking()
+                        } else if vm.voiceState.phase == .listening {
+                            vm.stopTalking()
+                        }
+                    }
                 )
             }
         }

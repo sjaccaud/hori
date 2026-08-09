@@ -1,64 +1,45 @@
 import SwiftUI
 
-/// Push-to-talk microphone button.
+/// Microphone button for voice input.
 ///
-/// Press and hold to record, release to send. Visual states:
-/// - idle: mic icon, subtle
-/// - listening: pulsing red circle, "Listening..."
-/// - processing: spinner, "Thinking..."
-/// - speaking: animated sound waves, "Speaking..."
+/// Click to start listening, click again to stop and send. This is a
+/// toggle, not push-to-talk — macOS mouse events don't reliably support
+/// press-and-hold via SwiftUI gestures (a quick click fires press+release
+/// almost instantly). Toggle is more standard on macOS and more reliable.
 ///
-/// The press gesture is attached to the outer container, NOT to the
-/// state-dependent content. This is critical: if the gesture were on
-/// the inner view, SwiftUI would replace it when the state changes
-/// (idle → listening), and the original gesture's onEnded (release)
-/// would never fire — the user would be stuck "holding" with no way
-/// to release.
+/// Visual states:
+/// - idle: mic icon, subtle — click to start
+/// - listening: pulsing red circle, "Listening..." — click to stop & send
+/// - processing: spinner, "Thinking..." — disabled
+/// - speaking: animated sound waves, "Speaking..." — disabled
 ///
 /// Accessibility:
 /// - VoiceOver label changes with state
-/// - Keyboard accessible (Space to hold, Enter to toggle)
 /// - Reduce Motion: static states instead of animations
 ///
 /// Traces to: docs/roadmap.md MAC-3 (Voice Conversation), Phase 3.
 struct VoiceInputButton: View {
 
     let voiceState: VoiceState
-    let onPress: () -> Void
-    let onRelease: () -> Void
+    let onToggle: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Whether the button is currently being pressed (mouse down).
-    @State private var isPressed = false
-
     var body: some View {
-        // The gesture is on the OUTER container — it stays active
-        // even when the inner content changes with voice state.
-        // This prevents the "stuck holding" bug where the original
-        // gesture's onEnded never fires after a state change.
         buttonContent
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if !isPressed {
-                            isPressed = true
-                            onPress()
-                        }
-                    }
-                    .onEnded { _ in
-                        isPressed = false
-                        onRelease()
-                    }
-            )
+            .onTapGesture {
+                if voiceState.phase == .idle || voiceState.phase == .listening {
+                    onToggle()
+                }
+            }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
-            .accessibilityHint("Hold to talk, release to send")
+            .accessibilityHint(accessibilityHint)
             .accessibilityAddTraits(.isButton)
     }
 
-    // MARK: - Button Content (visual only, no gestures)
+    // MARK: - Button Content
 
     @ViewBuilder
     private var buttonContent: some View {
@@ -70,10 +51,10 @@ struct VoiceInputButton: View {
             micButton(icon: "mic.fill", color: HoriTheme.semanticError)
                 .overlay(pulsingCircle)
                 .overlay(
-                    Text("Listening...")
+                    Text("Listening...  Click to send")
                         .font(HoriTypography.caption)
                         .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
-                        .offset(y: 32)
+                        .offset(y: 36)
                 )
 
         case .processing:
@@ -81,13 +62,13 @@ struct VoiceInputButton: View {
                 .overlay(
                     ProgressView()
                         .controlSize(.small)
-                        .offset(y: 32)
+                        .offset(y: 36)
                 )
                 .overlay(
                     Text("Thinking...")
                         .font(HoriTypography.caption)
                         .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
-                        .offset(y: 48)
+                        .offset(y: 52)
                 )
 
         case .speaking:
@@ -96,7 +77,7 @@ struct VoiceInputButton: View {
                     Text("Speaking...")
                         .font(HoriTypography.caption)
                         .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
-                        .offset(y: 32)
+                        .offset(y: 36)
                 )
         }
     }
@@ -108,7 +89,7 @@ struct VoiceInputButton: View {
             .font(.system(size: 20, weight: .medium))
             .foregroundStyle(color)
             .frame(width: 44, height: 44)
-            .contentShape(Circle())  // ensures the whole circle is tappable
+            .contentShape(Circle())
             .background(
                 Circle()
                     .fill(HoriTheme.surface(for: colorScheme))
@@ -126,11 +107,11 @@ struct VoiceInputButton: View {
             if !reduceMotion {
                 Circle()
                     .stroke(HoriTheme.semanticError.opacity(0.4), lineWidth: 2)
-                    .scaleEffect(isPressed ? 1.3 : 1.0)
-                    .opacity(isPressed ? 0.0 : 0.6)
+                    .scaleEffect(1.3)
+                    .opacity(0.0)
                     .animation(
-                        .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
-                        value: isPressed
+                        .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                        value: voiceState.phase == .listening
                     )
             }
         }
@@ -140,10 +121,18 @@ struct VoiceInputButton: View {
 
     private var accessibilityLabel: String {
         switch voiceState.phase {
-        case .idle:       return "Talk to HORI"
-        case .listening:  return "Listening. Release to send."
+        case .idle:       return "Talk to HORI. Click to start listening."
+        case .listening:  return "Listening. Click to stop and send."
         case .processing: return "HORI is thinking"
         case .speaking:   return "HORI is speaking"
+        }
+    }
+
+    private var accessibilityHint: String {
+        switch voiceState.phase {
+        case .idle:      return "Click to start recording"
+        case .listening: return "Click to stop recording and send your message"
+        default:         return ""
         }
     }
 }
