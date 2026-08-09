@@ -1,0 +1,68 @@
+# xcodegen project specification for HORI macOS app
+# Generate the Xcode project with: xcodegen generate
+# Install xcodegen: brew install xcodegen
+
+name: HORI
+options:
+  bundleIdPrefix: ai.hori
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    HARDENED_RUNTIME: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  HORI:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: HORI
+        excludes:
+          - "**/.DS_Store"
+    resources:
+      - path: HORI/Assets.xcassets
+    info:
+      path: HORI/Info.plist
+      properties:
+        CFBundleName: HORI
+        CFBundleDisplayName: HORI
+        CFBundleIdentifier: ai.hori.macos
+        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.1.0"
+        LSMinimumSystemVersion: "15.0"
+        LSUIElement: false
+        NSMicrophoneUsageDescription: "HORI needs microphone access to hear your voice commands."
+        NSSpeechRecognitionUsageDescription: "HORI uses speech recognition to understand your spoken requests."
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        SUEnableAutomaticUpdates: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.hori.macos
+        PRODUCT_NAME: HORI
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  HORITests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: HORI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.hori.macos.tests
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/HORI.app/Contents/MacOS/HORI"
+        GENERATE_INFOPLIST_FILE: YES

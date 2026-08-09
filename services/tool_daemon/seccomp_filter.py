@@ -41,7 +41,7 @@ DESIGN:
 
 TRACES TO:
   docs/roadmap.md Tier 2A, PoC 15.0d.
-  docs/tool_safety.md "Layer 1: The Cage (Kernel)".
+  docs/safety.md "Layer 1: The Cage (Kernel)".
 """
 from __future__ import annotations
 

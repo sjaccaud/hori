@@ -164,7 +164,7 @@ def generate_before_after():
     lines = []
     lines.append(section("PoC 13.7 — DEFLECTION MITIGATION BEFORE/AFTER"))
 
-    # Data from docs/elastic_context_window.md
+    # Data from docs/operations.md
     # Before: without consolidation (first run)
     before = [
         {"turn": 0, "recall": 1.000, "repetition": 0.00},

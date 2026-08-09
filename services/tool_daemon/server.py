@@ -9,7 +9,7 @@ executes. The LLM cannot influence validation logic.
 IPC via Unix domain socket — never exposed over TCP or the Tailscale Funnel.
 
 Traces to: docs/roadmap.md Tier 2C, PoC 15.5.
-Traces to: docs/tool_safety.md "Layer 2: The Cage".
+Traces to: docs/safety.md "Layer 2: The Cage".
 
 Protocol:
   aios-core sends a JSON request: {"tool": "count_files", "args": {...}}

@@ -72,7 +72,7 @@ MAX_RESPONSE_CHARS = 500  # cap response length to keep things manageable
 # Max conversation history sent per turn. This simulates a realistic UI
 # scrollback buffer — a human's chat UI shows ~10-20 recent turns, not 6.
 # The server then does elastic retrieval for older context (when --elastic
-# is set). See docs/elastic_context_window.md "The human behaviour model".
+# is set). See docs/operations.md "The human behaviour model".
 MAX_HISTORY_TURNS = 10
 RESULTS_DIR = Path(__file__).parent / "results"
 
@@ -623,7 +623,7 @@ def run_stress_test(
     so aios-core uses the elastic context window (semantic retrieval of
     past turns from Qdrant) instead of the fixed 6-turn window. This is
     what fixes the deflection collapse at turns 443-478 — see
-    docs/elastic_context_window.md.
+    docs/operations.md.
     """
 
     prompts = generate_prompts(turns, theme=theme)
@@ -706,7 +706,7 @@ def run_stress_test(
                 # Elastic context window: opt in so the server retrieves
                 # older turns from this conversation semantically instead
                 # of using the fixed 6-turn window. See
-                # docs/elastic_context_window.md.
+                # docs/operations.md.
                 if elastic:
                     payload["elastic_context"] = True
                 resp = client.post(url, json=payload)
@@ -1115,7 +1115,7 @@ def main():
                         help="Enable the elastic context window (elastic_context: true "
                              "on each request) so the server retrieves older turns "
                              "semantically instead of using the fixed 6-turn window. "
-                             "See docs/elastic_context_window.md.")
+                             "See docs/operations.md.")
     parser.add_argument("--theme", type=str, default="aios",
                         choices=list(PROMPT_THEMES.keys()),
                         help="Prompt theme: 'aios' (AIOS project planning) or "

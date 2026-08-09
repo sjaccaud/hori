@@ -4,25 +4,41 @@ import uuid
 from typing import Any, Dict, Optional
 
 import requests
-from jsonschema import validate, ValidationError
+from jsonschema import ValidationError, validate
 
 from .config import (
-    INTENT_SCHEMA_PATH,
     LLM_API_URL,
     LLM_MODEL,
 )
 
 logger = logging.getLogger(__name__)
 
+# Inline work_order schema (was core/intent/schema.json).
+# Kept here so the intent parser is self-contained with no external file deps.
+WORK_ORDER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "type": {"type": "string", "enum": ["work_order"]},
+        "id": {"type": "string"},
+        "parent_charter_id": {"type": "string"},
+        "version": {"type": "string"},
+        "description": {"type": "string"},
+        "status": {
+            "type": "string",
+            "enum": ["backlog", "in_progress", "done", "blocked"],
+        },
+        "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+    },
+    "required": ["type", "id", "description", "status", "priority"],
+}
+
 
 def parse_intent(text: str, context: str = "") -> Optional[Dict[str, Any]]:
     """
     Parse natural language text into a structured work_order using the LLM.
-    Validates the result against core/intent/schema.json.
+    Validates the result against the inline WORK_ORDER_SCHEMA.
     Returns None on failure.
     """
-    schema = _load_json(INTENT_SCHEMA_PATH)
-
     system_prompt = (
         "You are the AIOS Intent Parser. Convert natural language into a "
         "structured JSON work_order object. Return ONLY valid JSON, no "
@@ -54,7 +70,7 @@ def parse_intent(text: str, context: str = "") -> Optional[Dict[str, Any]]:
         work_order.setdefault("status", "backlog")
         work_order.setdefault("priority", "medium")
         work_order["type"] = "work_order"
-        validate(instance=work_order, schema=schema)
+        validate(instance=work_order, schema=WORK_ORDER_SCHEMA)
         return work_order
     except (json.JSONDecodeError, ValidationError) as e:
         logger.warning(f"Intent parse/validation failed: {e}")
@@ -78,8 +94,3 @@ def _call_llm(system_prompt: str, user_prompt: str) -> str:
     response = requests.post(LLM_API_URL, json=payload, timeout=60)
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
-
-
-def _load_json(path) -> Dict[str, Any]:
-    with open(path, "r") as f:
-        return json.load(f)

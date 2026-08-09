@@ -20,9 +20,9 @@ while delegating tactical implementation to the AI (Manifesto Pillar VII,
 
 ## Read first
 
-1. `core/intent/schema.json` — the `work_order` and `charter` definitions.
+1. `services/aios_core/intent.py (inline schema)` — the `work_order` and `charter` definitions.
    Your output must conform.
-2. `core/intent/work_order.json` and `core/intent/charter.json` — style/ID
+2. `services/aios_core/intent.py (inline schema)` and `docs/manifesto.md` — style/ID
    examples.
 3. `docs/manifesto.md` — confirm the PRD does not violate a pillar.
 4. `docs/roadmap.md` — locate the matching tier/PoC, or mark off-roadmap.
@@ -31,7 +31,7 @@ while delegating tactical implementation to the AI (Manifesto Pillar VII,
 
 ## PRD sections (write all of them)
 
-Produce a single markdown file at `docs/prd/<slug>.md` containing:
+Produce a single markdown file at `.devin/prd/<slug>.md` containing:
 
 1. **Intent trace** — which manifesto pillar and roadmap PoC this satisfies,
    or an explicit "off-roadmap" justification.

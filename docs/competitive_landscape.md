@@ -324,7 +324,7 @@ for safe local agents.
 
 This analysis was compiled from:
 - Public documentation and repositories for each project
-- The HORI red-team analysis (`docs/tool_safety_redteam.md`)
+- The HORI red-team analysis (`docs/safety.md`)
 - The HORI manifesto (`docs/manifesto.md`) for the 8 differentiators
 - The HORI roadmap (`docs/roadmap.md`) for implementation status
 - The 500-turn stress test results for memory and safety claims

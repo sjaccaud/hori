@@ -7,7 +7,7 @@ is built until the test PASSES. These tests become regression tests after
 the spine is built.
 
 Traces to: docs/roadmap.md Tier 2F.
-Traces to: docs/tool_safety_redteam.md (attack vector coverage matrix).
+Traces to: docs/safety.md (attack vector coverage matrix).
 
 Test status legend:
   - Tests that PASS already: the safety property is defended by the code

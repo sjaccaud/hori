@@ -3,7 +3,7 @@
 Tests that the /v1/presence SSE endpoint (UX-1.3) exists, emits the
 correct state enum, and is rate-limited.
 
-Traces to: UX-1.3 PRD (docs/prd/ux-1-3-ambient-presence.md),
+Traces to: UX-1.3 (ambient presence),
 Manifesto Pillar V (visible autonomy) + IV (presence).
 """
 import re

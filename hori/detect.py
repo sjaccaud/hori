@@ -17,7 +17,7 @@ Model tiers (based on GGUF IQ4_NL quantization, ~0.55 bytes/param):
   - 4GB+  VRAM : 3B models   (Llama-3.2-3B, etc.)
   - <4GB       : 1.5B models (Qwen2.5-1.5B, etc.) or CPU-only
 
-Traces to: docs/stack.md (hardware config), docs/operations.md (model config).
+Traces to: docs/operations.md (hardware config), docs/operations.md (model config).
 """
 from __future__ import annotations
 

@@ -8,8 +8,8 @@ import requests
 
 # --- CONFIGURATION ---
 PERSONAS_PATH = "services/red_teaming/personas.json"
-MANIFESTO_PATH = "core/intent/manifesto.json"
-GOVERNANCE_PATH = "docs/governance_safety.md"
+MANIFESTO_PATH = "docs/manifesto.md"
+GOVERNANCE_PATH = "docs/safety.md"
 LOG_FILE = "logs/aios_audit.log"
 
 # LLM Configuration (llama-server OpenAI-compatible endpoint)
@@ -31,13 +31,17 @@ logger = logging.getLogger(__name__)
 class RedTeamingEngine:
     def __init__(self):
         self.personas = self._load_json(PERSONAS_PATH)["personas"]
-        self.manifesto = self._load_json(MANIFESTO_PATH)
+        self.manifesto = self._load_text(MANIFESTO_PATH)
         with open(GOVERNANCE_PATH, 'r') as f:
             self.governance_rules = f.read()
 
     def _load_json(self, path: str) -> Dict[str, Any]:
         with open(path, 'r') as f:
             return json.load(f)
+
+    def _load_text(self, path: str) -> str:
+        with open(path, 'r') as f:
+            return f.read()
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """
@@ -70,7 +74,7 @@ class RedTeamingEngine:
         logger.info(f"🛡️ [RED TEAM] Evaluating action: {proposed_action.get('description', 'No description')}")
         
         action_str = json.dumps(proposed_action, indent=2)
-        context = f"MANIFESTO:\n{json.dumps(self.manifesto, indent=2)}\n\nGOVERNANCE RULES:\n{self.governance_rules}"
+        context = f"MANIFESTO:\n{self.manifesto}\n\nGOVERNANCE RULES:\n{self.governance_rules}"
         
         results = {}
         verdict = "APPROVED"

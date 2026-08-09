@@ -126,7 +126,7 @@ class OAIChatRequest(BaseModel):
     # under the same Qdrant conversation cluster, which lets the
     # memory consolidation distill multi-turn insights.
     conversation_id: Optional[str] = None
-    # Opt-in elastic context window (docs/elastic_context_window.md).
+    # Opt-in elastic context window (docs/operations.md).
     # When True AND conversation_id is set, the server semantically
     # retrieves past turns from this conversation (filtered Qdrant query
     # on aios_working) and assembles an elastic context: retrieved older
@@ -1144,7 +1144,7 @@ async def openai_chat_completions(req: OAIChatRequest):
     # This is what makes "turn 10000 = turn 1" - the LLM always gets curated context,
     # not raw history. Memory retrieval + state files carry the distilled knowledge.
     #
-    # Elastic context window (docs/elastic_context_window.md): when the
+    # Elastic context window (docs/operations.md): when the
     # client opts in with elastic_context=True AND supplies a
     # conversation_id, retrieve past turns from this conversation
     # semantically instead of using the fixed 6-turn window. This fixes
@@ -1231,7 +1231,7 @@ async def text_to_speech(req: TTSRequest):
 # response text, or nudge content. This is a privacy property.
 #
 # Traces to: Manifesto Pillar V (visible autonomy), Pillar IV (presence),
-# UX Gameplan UX-1.3. See docs/ubiquitous_language.md "Ambient Presence".
+# UX Gameplan UX-1.3. See .devin/ubiquitous_language.md "Ambient Presence".
 
 import asyncio as _asyncio_presence
 
@@ -2350,7 +2350,7 @@ def _strip_markdown_for_tts(text: str) -> str:
 # to the memory system." are pronoun-heavy: their meaning lives in the
 # previous turn, not the prompt itself. Their embedding is therefore generic
 # and matches nothing in Qdrant — exactly the prompts that need retrieval
-# most get the least of it. This is docs/elastic_context_window.md "Remaining
+# most get the least of it. This is docs/operations.md "Remaining
 # Issues" #3 (retrieval quality depends on the embedding model having
 # something specific to embed).
 #
@@ -2454,7 +2454,7 @@ def _is_deflection(text: str) -> bool:
     2. _elastic_context: filter deflections out of retrieved hits (don't
        feed past deflections back as "relevant context")
 
-    Defends: docs/elastic_context_window.md deflection collapse at turns
+    Defends: docs/operations.md deflection collapse at turns
     443-478 (observed as early as turn 100 in practice).
     """
     lower = text.lower()
@@ -2531,7 +2531,7 @@ async def _elastic_context(
     architecture we discussed?" pulls in turn 105 where the architecture
     was actually discussed, instead of just showing the last 6 turns.
 
-    See docs/elastic_context_window.md for the full design, rationale,
+    See docs/operations.md for the full design, rationale,
     and competitive moat analysis. Traces to Manifesto Pillar III
     (Persistent Context & Memory), PoC 13.1 (10K-Turn Stress Test).
 
@@ -2552,7 +2552,7 @@ async def _elastic_context(
     Vague context_reference prompts ("Tell me more about that.") are
     enriched with the previous assistant reply before retrieval, so the
     embedding has a semantic anchor. See _is_vague_reference /
-    _enrich_query and docs/elastic_context_window.md "Remaining Issues"
+    _enrich_query and docs/operations.md "Remaining Issues"
     #3. The enriched text is used only for the Qdrant query; the LLM
     still sees the raw user prompt.
 

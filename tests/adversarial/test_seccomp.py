@@ -17,7 +17,7 @@ KILL_PROCESS terminates the process with SIGSYS.
 Defends: PoC 15.0d (seccomp-bpf syscall filter).
 
 Traces to: docs/roadmap.md Tier 2A, PoC 15.0d.
-Traces to: docs/tool_safety.md "Layer 1: The Cage (Kernel)".
+Traces to: docs/safety.md "Layer 1: The Cage (Kernel)".
 """
 import ctypes
 import json

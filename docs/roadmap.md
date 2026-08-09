@@ -1,141 +1,13 @@
 # HORI Development Roadmap
 
-This roadmap outlines the incremental build-out of HORI — a local-first
-agent runtime with a safety spine — moving from core intelligence to a
-fully integrated, self-healing mesh.
+This roadmap tracks the incremental build-out of HORI — a local-first
+agent runtime with a safety spine. Work is organized in tiers: each
+tier has a goal, entry conditions, and concrete proof-of-concept items.
 
-**Autonomy legend:** `[A]` = Devin can do autonomously | `[S]` = needs sudo/user | `[H]` = needs hardware/hands
-
-## Phase 1: Foundation (The Core, Observability & Intent Schema)
-*Goal: Establish a reliable, monitored, and architecturally aligned intelligence core.*
-
-- [x] **PoC 1.1: Local Inference Engine (Initial)** (Install and configure Ollama on "<your-hostname>")
-- [x] **PoC 1.1b: High-Fidelity Inference Upgrade** (Migrate to llama.cpp ROCm/HIP, I-Quants, and uncompressed KV Cache)
-- [x] **PoC 1.1c: Ollama Decommission** (Disable Ollama service, delete 103GB blob files, free up storage)
-- [x] **PoC 1.1d: ROCm 7.14 Upgrade** `[S]` (Runfile installer, fixes HipVMM crashes, enables turbo4 with Qwen3.6)
-- [x] **PoC 1.2: Mesh-Wide Intelligence** (Verify Tailscale connectivity for distributed access)
-- [x] **PoC 1.3: Unified Interface** (Deploy Open WebUI via Docker)
-- [x] **PoC 1.4: System Observability** (Deploy Prometheus + Grafana to monitor system health)
-- [x] **PoC 1.5: Intent Schema Foundation** (Implement hierarchical structure: Manifesto $\rightarrow$ Charter $\rightarrow$ Work Order)
-
-## Phase 2: Orchestration (The Nervous System)
-*Goal: Create the "glue" that connects disparate devices and automates workflows.*
-
-- [x] **PoC 2.1: Workflow Automation** (Deploy n8n to automate cross-service workflows)
-- [x] **PoC 2.2: Device/IoT Integration** (Integrate Home Assistant for hardware/IoT control)
-
-## Phase 3: Memory (The Soul)
-*Goal: Build a persistent, high-fidelity long-term memory and manage information entropy.*
-
-- [x] **PoC 3.1: Vector Database Setup** (Deploy Qdrant or ChromaDB on "<your-hostname>")
-- [x] **PoC 3.2: Massive RAG Ingestion** (Automate indexing of NAS data for context-aware retrieval)
-- [x] **PoC 3.3: Information Entropy Management** (Implement "Sleep & Dream" consolidation cycles for memory fidelity)
-
-## Phase 4: Interaction (The Senses)
-*Goal: Enable natural, ubiquitous interaction through voice and mobile surfaces.*
-
-- [ ] **PoC 4.1: Edge Voice Listener** `[H]` → *moved to Deep Backlog (Tier 5)*
-- [x] **PoC 4.2: Remote Control Surface** (Develop/Configure mobile interfaces for on-the-go control)
-
-## Phase 5: Autonomy & Enforcement (The Will & LEP)
-*Goal: Implement the agentic framework for intent integrity and proactive system maintenance.*
-
-- [x] **PoC 5.1: Agentic Red-Teaming** (Deploy specialized personas: Strategist, Architect, and Guardian)
-- [x] **PoC 5.2: Automated Recovery Protocols** (Implement self-healing scripts for service restarts and resource management)
-- [x] **PoC 5.3: Alignment Telemetry** (Implement the "Alignment Score" to measure system entropy)
-
-## Phase 6: Quality Assurance & Reliability (The Shield)
-*Goal: Ensure system stability, integrity, and prevent regressions through automated testing and continuous verification.*
-
-- [x] **PoC 6.1: Unified Testing Framework** (Implement `pytest` suite for all services)
-- [x] **PoC 6.2: Comprehensive Unit Testing** (Expand coverage for all core modules)
-- [x] **PoC 6.3: Integration & E2E Testing** (Develop tests for cross-service workflows)
-- [x] **PoC 6.4: Automated Regression Suite** (Regression tests for recovery, red-teaming, and telemetry)
-- [x] **PoC 6.5: Static Analysis & Linting** (Integrate `ruff` and `mypy` for code quality)
-- [x] **PoC 6.6: 10,000-Turn Stress Test** `[A]` (Headless E2E conversation simulation at 100/1K/10K turns - see Phase 13)
-- [x] **PoC 6.7: Web Search Integration** `[A]` (aios-core can search the web via DuckDuckGo for current info - "is Qwen 3.8 worth it?", "latest llama.cpp release", "what's today's date?")
-
-## Phase 7: Unified Smart Layer (The Brain)
-*Goal: Extract intelligence glue into a shared service so all surfaces (text, voice, proactive) use the same brain.*
-
-- [x] **PoC 7.1: Ollama Drift Cleanup** (Repoint watchdog, red-team, RAG, and tests from dead Ollama to llama-server)
-- [x] **PoC 7.2: aios-core Service** (FastAPI on :5680 with intent parse, memory retrieval, red-team gate, LLM call, memory persistence)
-- [x] **PoC 7.3: Yes-AND Red-Team** (Upgrade red-team from binary APPROVED/REJECTED to include YES_AND with alternatives[])
-- [x] **PoC 7.4: Embedding Server** (Dedicated nomic-embed-text on :8081, CPU-only, no VRAM contention)
-- [x] **PoC 7.5: Retire Mock Surface** (Removed interaction_surface :5679; Open WebUI + aios-core are the real front doors)
-
-## Phase 8: Compounding Memory (No Groundhog's Day)
-*Goal: The system starts every session already knowing the user, their projects, and where things left off.*
-
-- [x] **PoC 8.1: Living State Files** (user_model.json + project_state.json injected into every prompt)
-- [x] **PoC 8.2: Hierarchical Memory Tiers** (aios_working -> aios_project -> aios_longterm in Qdrant)
-- [x] **PoC 8.3: Distill-and-Promote Consolidation** (Sleep & Dream cycle: cluster -> LLM-distill -> promote -> update state)
-- [x] **PoC 8.4: Foundational Docs Ingestion** (Manifesto, charter, governance, architecture ingested into aios_longterm)
-- [ ] **PoC 8.5: Scheduled Consolidation** `[S]` → *moved to Tier 1B (Core Stabilization)*
-
-## Phase 8b: Inference Optimization (The Edge)
-*Goal: Push local inference to the cutting edge - maximum speed, minimum VRAM, zero quality loss.*
-
-- [x] **PoC 8b.1: Open WebUI Integration** (aios-core as OpenAI-compatible backend, streaming, async httpx)
-- [x] **PoC 8b.2: Context Window Right-Sizing** (65K -> 16K, KV cache 16GB -> 2GB, context trimming to 6 turns + memory)
-- [x] **PoC 8b.3: KV Cache Quantization** (q8_0 first, then upgraded to TurboQuant turbo4)
-- [x] **PoC 8b.4: N-gram Speculative Decoding** (ngram-mod, self-speculative, lossless, no draft model)
-- [x] **PoC 8b.5: Background Task Elimination** (Disabled Open WebUI title/tags/follow-up/search LLM calls)
-- [x] **PoC 8b.6: Non-Reasoning Model Selection** (Qwen3.5-27B reasoning -> Qwen2.5-Coder-32B non-reasoning)
-- [x] **PoC 8b.7: TurboQuant KV Cache** (turbo4, 3.6x compression, Spiritbuun fork installed)
-- [x] **PoC 8b.8: VBR Variable Bit-Rate KV** (Tested at 65K context, works, available on demand)
-- [x] **PoC 8b.9: DFlash Draft Model** (Downloaded + converted Qwen3.5-27B-DFlash, OOM on 34GB VRAM, ready for GPU upgrade)
-- [x] **PoC 8b.10: Qwen3.6-27B + ROCm 7.14** (New model, hybrid Gated DeltaNet + SSM, turbo4 KV cache works)
-- [ ] **PoC 8b.11: EAGLE-3 Draft Model** `[H]` → *moved to Deep Backlog (Tier 5)*
-- [ ] **PoC 8b.12: Paged KV Cache** `[A]` → *moved to Deep Backlog (Tier 5)*
-- [ ] **PoC 8b.13: Assess Qwen3.8-27B on Drop** `[A][S]` (When bartowski publishes an IQ4_NL GGUF — expected week of 2026-08-10 per Alibaba's Aug 3 launch — run the gate sequence from `core/state/proposed_work_orders/aios-inference-edge-wo-001.json` against the current Qwen3.6-27B baseline and decide go/no-go. No production swap unless all gates pass and benchmarks beat the 3.6 row. Blocked on the external weight release.)
-
-## Phase 9: Voice Bidirectional (The Senses, Realized)
-*Goal: Talk to HORI via voice from any device; it talks back via a natural-sounding vocalizer.*
-
-- [x] **PoC 9.1: Deploy n8n Voice Workflow** `[A]` (Apple Shortcut -> aios-core /v1/voice/chat/audio directly, no n8n needed. Setup guide in docs/apple_shortcut_setup.md)
-- [x] **PoC 9.2: TTS Vocalizer** `[A]` (Kokoro-82M on CPU, #1 TTS Arena, 24kHz, 6x realtime, 54 voices. Migrated from Piper for quality upgrade. Piper retained as fallback via AIOS_TTS_BACKEND env var.)
-- [ ] **PoC 9.3: Bidirectional Voice Loop** `[H]` → *moved to Deep Backlog (Tier 5)*
-
-## Phase 10: Proactive Opportunity Agent (The Business Partner)
-*Goal: A scheduled agent that hunts the landscape for opportunities and proposes work orders through the red-team gate.*
-
-- [x] **PoC 10.1: Landscape Survey** `[A]` (GitHub trending, Hacker News, RSS feeds -> scored by relevance to user interests + projects)
-- [x] **PoC 10.2: Opportunity Proposer** `[A]` (LLM proposes 1-3 concrete work orders from top opportunities, grounded in user_model + project_state)
-- [x] **PoC 10.3: Notification Pipeline** `[A]` → *moved to Tier 1B (Core Stabilization)*
-
-## Phase 11: Graph-RAG / Intent Graph (The Soul, Deepened)
-*Goal: Relational low-entropy recall at scale - the ultimate defense against groundhog's day over months/years.*
-
-- [x] **PoC 11.1: Intent Graph** `[A]` (services/aios_core/intent_graph.py - 887 nodes, 1415 edges, 23 topic clusters built from Qdrant memory payloads)
-- [x] **PoC 11.2: Graph-RAG Retrieval** `[A]` (Graph traversal in chat pipeline: co-occurrence edges expand semantic search with related topics and memories)
-
-## Phase 12: Self-Healing & System Awareness (The Immune System)
-*Goal: HORI is aware of its codebase, the system it's running on, and can self-heal safely while the user is away.*
-*Origin: Deep backlog "Self-Healing + Persistent File System Awareness"*
-
-- [x] **PoC 12.1: System State Snapshot** `[A]` (aios-core /system/state endpoint: service status, VRAM, disk, ROCm version, model loaded, uptime)
-- [x] **PoC 12.2: Codebase Awareness** `[A]` (HORI's own codebase ingested into aios_longterm via scripts/ingest_codebase.py - 114 chunks, can answer questions about its own architecture)
-- [x] **PoC 12.3: Health Check Pipeline** `[A]` (Watchdog reports incidents to aios-core /system/incident endpoint, stored in incident memory)
-- [ ] **PoC 12.4: Safe Self-Update** `[S]` → *moved to Tier 1B (Core Stabilization)*
-- [x] **PoC 12.5: Incident Memory** `[A]` (Incidents stored in core/state/incidents.json + aios_working Qdrant tier, retrievable via /system/incidents endpoint)
-- [x] **PoC 12.6: Remote Status Query** `[A]` (User asks "how'd that upgrade go?" - aios-core injects system state + incidents into context, LLM responds with natural language summary)
-
-## Phase 13: 10,000-Turn Stress Test (The Crucible)
-*Goal: Prove the system can sustain long conversations without descending into hallucination or entropy.*
-*Origin: Deep backlog "True 10,000 Turns Test"*
-
-- [x] **PoC 13.1: Headless Conversation Simulator** `[A]` (tests/stress/test_ten_thousand_turns.py - drives 100/1K/10K turn CHAINED conversations through aios-core. Turns send conversation history from prior turns, with planning/strategy prompts that build on each other. 7 prompt phases: opening, factual, context_reference, planning, coding, creative, meta.)
-- [x] **PoC 13.2: Entropy Detection** `[A]` (Repetition ratio, gibberish/loop detection, topic drift score, early vs late recall quality (context drift detection), per-category stats - automated pass/fail per turn)
-- [x] **PoC 13.3: Memory Pressure Test** `[A]` (tests/stress/test_memory_pressure.py - 8 tests verifying tier fill, consolidation, state updates, cross-conversation recall, tier isolation)
-- [x] **PoC 13.4: Resource Monitoring** `[A]` (VRAM tracking per turn, peak/growth metrics, auto-pause at 90% VRAM to prevent hardware issues)
-- [x] **PoC 13.5: Regression Baseline** `[A]` (tests/stress/test_regression_baseline.py - 10 golden prompts with keyword coverage, response time, length, and hallucination checks)
-- [x] **PoC 13.6: Safety Stress Test** `[A]` (tests/stress/test_safety_stress.py - stateless turns with adversarial prompts to exercise the hallucination interception rate (PoC 15.14/16.2) and Sherpa behavioral guardian (PoC 15.50). Hits both /v1/chat/completions (no tools) and /v1/voice/chat (tools advertised). 4 prompt categories: hallucination_bait, injection_attempt, rapid_tool_calls, normal. Gate API deltas measure interceptions, Sherpa triggers, and tool call stats. Separate from the entropy test because the requirements are fundamentally opposed: stateless vs chained, adversarial vs planning, short vs long.)
-- [x] **PoC 13.7: Elastic Context Deflection Mitigation** `[A]` (Five fixes to the elastic context window addressing the deflection collapse at turns 100+ in the 500-turn stress test: (1) `recent_turns` 3→6 matching the design doc's "last 2-3 turns" = 4-6 messages, and fixing the fallback under-windowing bug where vague prompts that retrieve nothing got LESS context than the dumb window; (2) vague-query enrichment `_is_vague_reference()` + `_enrich_query()` anchors pronoun-heavy prompts ("Tell me more about that.") with the previous *substantive* (non-deflection) assistant reply so the embedding has a semantic anchor; (3) self-match filtering removes hits where the query matches its own past instances in Qdrant (a vague prompt appears dozens of times in a long conversation and matches itself); (4) deflection filtering via `_is_deflection()` removes past "I don't know" replies from retrieved hits, breaking the cascading feedback loop where deflections get stored, retrieved as "context", and cause more deflections — covers both contracted ("I don't know") and uncontracted ("I do not know") forms; (5) retrieval limit 10→20 for a larger pool after filtering. 17 unit tests in test_main.py. 500-turn stress test confirms recovery at turn 400 (0.03→0.38 recall) — previously collapse was monotonic. Also expanded the stress test's deflection detector to include uncontracted forms. Three failed approaches documented in docs/elastic_context_window.md "Failed Approaches" section. Traces to docs/elastic_context_window.md, Manifesto Pillar III.)
-
-<!-- Phase 14 (Pi4 Voice Command Center) moved to Deep Backlog. -->
+**Autonomy legend:** `[A]` = autonomous | `[S]` = needs sudo/user | `[H]` = needs hardware/hands
 
 ---
+
 
 ## Tier 1: HORI 1.0 — Core Stabilization
 *Goal: Close security holes from the system audit, finish loose ends from
@@ -173,8 +45,8 @@ no network access. The spine ensures: credentials are invisible, the LLM
 can't fabricate results, every call is audited, the system fails closed, and
 the Sherpa watches for behavioral patterns the per-call validator can't see.*
 
-*See docs/tool_safety.md for the full architecture, including the Sherpa
-design. See docs/tool_safety_redteam.md for adversarial analysis and the
+*See docs/safety.md for the full architecture, including the Sherpa
+design. See docs/safety.md for adversarial analysis and the
 attack vector coverage matrix.*
 
 ### 2A: System Hardening (kernel-level, before any tool code)
@@ -205,7 +77,7 @@ attack vector coverage matrix.*
 outside HORI's control. It monitors the PATTERN of tool calls, not individual
 calls. When the pattern is concerning, it gently and temporarily restricts
 HORI's tool capabilities. Not a cop — a sherpa that keeps HORI from hurting
-itself. See docs/tool_safety.md "The Sherpa" section for full design.*
+itself. See docs/safety.md "The Sherpa" section for full design.*
 
 - [x] **PoC 15.50: The Sherpa — Behavioral Guardian** `[S]` (Go binary in services/sherpa/, 3MB static binary, no runtime deps. Runs as systemd service `aios-sherpa.service` as root (to read the permission-separated audit log). Reads the audit log in real-time. Performs pattern matching on tool call sequences: rate anomaly (Level 1), scope escalation (Level 2), user inactivity (Level 2). Sends capability-reduction signals to the tool daemon via a polled file /run/sherpa/capability_level. **Red-team fix #3: fail-closed design** — the capability file defaults to "Level 4 (stopped)"; the Sherpa must actively write "Level 0 (normal)" with a freshness timestamp every 3 seconds. If the tool daemon sees a stale timestamp (>10s), it drops to Level 4. The Sherpa dying is equivalent to the Sherpa stopping tools — fail closed, always, even for the guardian itself. **Red-team fix #4: activity-based after-hours trigger** — the Sherpa keys off user session inactivity (no voice/text/web interaction for 30 minutes), not time of day. HORI cannot: send signals to sherpa, modify sherpa's config, read sherpa's process memory, or reach sherpa's filesystem. The tool daemon checks the capability level before every tool call via services/tool_daemon/sherpa_interface.py. 6 adversarial tests in test_sherpa_trigger.py.)
 
@@ -346,8 +218,8 @@ less and let the soak tell you what you need.
   perseverance and
   transformation). Tagline: "solve problems at the speed of intent, not
   the speed of AI." Audience: latent builders. Flow: converse first,
-  build second. Update: manifesto (full rewrite), README, AGENTS.md,
-  roadmap, ubiquitous_language.md, manifesto.json. Service names
+  build second. Update: manifesto (full rewrite), README, CONTRIBUTING.md,
+  roadmap, ubiquitous_language.md. Service names
   (aios_core, aios-sherpa, etc.) remain as legacy technical identifiers
   — a future migration task. Traces to: Manifesto Pillar VII — don't
   claim what we're not.)
@@ -367,28 +239,15 @@ less and let the soak tell you what you need.
   voice-first, progressive capability unlock, adversarial TDD). This
   doc is the evidence backing STRAT-1.)
 - [x] **STRAT-3: Sherpa Patent Exploration** `[A]` (Research prior art
-  for the Sherpa pattern. Novel elements to assess: (a) guardian in a
-  different language (Go) than the agent (Python) — cross-language
-  isolation; (b) fail-closed by default — guardian must actively write
-  "normal" every 3s, stale timestamp → tools stop; (c) pattern-based
-  detection (rate anomaly, scope escalation, user inactivity) not
-  per-call rules; (d) agent cannot signal, configure, read memory of,
-  or reach filesystem of the guardian; (e) gentle temporary capability
-  reduction (nudge → restrict → sequester → stop), not binary kill;
-  (f) activity-based after-hours trigger (session inactivity, not
-  clock time). Closest prior art: AriaOS compliance agents (same-system,
-  not out-of-band), oikOS 7-layer middleware (in-process Python, not
-  cross-language), PraisonAI sandbox (failed open — the CVE we learned
-  from), systemd-watchdog (process monitoring, not behavioral pattern).
-  Deliverable: prior art search + novelty assessment + go/no-go on
-  provisional patent. If go: US provisional patent application (~$65
-  USPTO fee, 12-month priority window to decide full patent vs.
-  open-source vs. paper publication). Traces to: PoC 15.50.)
+  for the Sherpa pattern and assess patentability. The full analysis is
+  kept in a private document (not in this public repo) to preserve
+  patent novelty. Outcome: go/no-go decision recorded internally.
+  Traces to: PoC 15.50.)
 - [ ] **STRAT-4: External Review Package** `[A]` (Prepare the
   architecture review document for an external reviewer — this is prep
   for PoC 15.31, not the review itself. Contents: threat model, safety
   spine architecture, attack vector coverage matrix (from
-  docs/tool_safety_redteam.md), adversarial test methodology (92 tests,
+  docs/safety.md), adversarial test methodology (92 tests,
   TDD-for-safety), the Aug 8 blind-Sherpa incident post-mortem, the
   gate criteria and current soak metrics. The reviewer gets this
   package + read access to the repo. The critics' #1 "AI slop"
@@ -445,11 +304,9 @@ less and let the soak tell you what you need.
   gaps — the Aug 8 incident proves self-review has blind spots. This
   fulfills PoC 15.31. Entry condition: soak gate passed.)
 - [ ] **STRAT-10: Provisional Patent Filing** `[S]` (If STRAT-3
-  assesses the Sherpa pattern as novel, file a US provisional patent
-  application. 12-month priority window to decide on full patent vs.
-  open-source vs. paper. We want the spine proven in production before
-  patenting — the soak gate passing is the proof. Entry condition:
-  STRAT-3 complete + soak gate passed.)
+  recommends filing, file a US provisional patent application. Details
+  kept private to preserve novelty. Entry condition: STRAT-3 complete
+  + soak gate passed.)
 - [x] **STRAT-11: Intent Hierarchy Tooling** `[A]` (Work order
   management improvements, red-team gate enhancements, the Yes-AND
   mechanism. This touches aios-core and is NOT soak-safe — the
@@ -576,7 +433,7 @@ HORI 2.0.*
 ### Future Expansion
 - [ ] **Federated Memory:** Sync aios_project/aios_longterm across multiple HORI instances (home, work, travel laptop).
 - [ ] **Proactive Code Review:** HORI watches git commits on project repos and offers suggestions via the red-team gate.
-- [ ] **Gemini Grounding Augment:** Add Gemini API with `google_search` tool as a premium source in the multi-source search fan-out. Google AI Pro subscription includes $10/month in Cloud credits + 5,000 free grounded searches/month. Would augment (not replace) the local-first 6-source fan-out with Google Search quality for queries that need it. Activation requires: linking Cloud Billing in AI Studio (one-time $10 prepay), generating an API key, adding `GEMINI_API_KEY` to `/etc/aios/secrets.env`. Privacy tradeoff: Google sees queries that use this source. Implementation: new `_search_gemini()` fetcher in `multi_search.py`, used when API key is present, fallback to 6-source fan-out if absent or quota exhausted. See `docs/ubiquitous_language.md` → Multi-Source Search.
+- [ ] **Gemini Grounding Augment:** Add Gemini API with `google_search` tool as a premium source in the multi-source search fan-out. Google AI Pro subscription includes $10/month in Cloud credits + 5,000 free grounded searches/month. Would augment (not replace) the local-first 6-source fan-out with Google Search quality for queries that need it. Activation requires: linking Cloud Billing in AI Studio (one-time $10 prepay), generating an API key, adding `GEMINI_API_KEY` to `/etc/aios/secrets.env`. Privacy tradeoff: Google sees queries that use this source. Implementation: new `_search_gemini()` fetcher in `multi_search.py`, used when API key is present, fallback to 6-source fan-out if absent or quota exhausted. See `.devin/ubiquitous_language.md` → Multi-Source Search.
 
 ---
 
@@ -632,3 +489,85 @@ top.*
   over time: do they prefer to plan extensively or jump in? Do they want
   friction or momentum? The profile adjusts the converse-first flow.
   Stored in `core/state/user_model.json`, already partially implemented.)
+
+## Tier 7: macOS Surface — The Workshop
+
+*Goal: A native macOS app (SwiftUI, macOS 15+) that is the creation
+surface for HORI — a workshop where you make personal software through
+conversation, with the software emerging live behind the conversation.
+Tagline: "AI you own. No tokens or subscriptions necessary."*
+
+*Architecture: Lean UX — UX leads, architecture follows. Each phase is
+one UX moment with just enough architecture to make it real. The design
+system is established in Phase 0 and applied from the first pixel.
+Quality bar: "2027 Product, Not Windows 95."*
+
+*Foundational decisions (can't be grafted in later): accessibility,
+keyboard-first, localization-ready, multi-window, undo/redo. All
+established in Phase 0.*
+
+*Plan: see the macOS surface plan in the project planning directory.*
+*Architecture: `surfaces/macos/ARCHITECTURE.md`*
+
+### Phase 0: First Impression + Foundation
+- [ ] **MAC-0: First Impression + Design System + Foundation** `[A]`
+  (The warm, dark window with the koi placeholder and "What do you want
+  to make today?" Establishes the design system (theme, typography,
+  animations, shapes) and the five foundational decisions (accessibility,
+  keyboard, localization, multi-window, undo). The empty window already
+  looks better than a default SwiftUI window. Directory: `surfaces/macos/`.)
+
+### Phase 1: First Conversation
+- [ ] **MAC-1: Native Text Conversation** `[A]` (Replace chat.html with
+  a native Mac conversation. Type a message, see HORI's response in a
+  native message bubble. Just enough networking: one HTTP client, one
+  endpoint. Empty state transforms into conversation.)
+
+### Phase 2: Presence
+- [ ] **MAC-2: HORI Feels Alive — Presence** `[A]` (HORI's presence
+  becomes visible. The koi reacts. The breathing dot appears. SSE client
+  for /v1/presence. Presence states: idle, thinking, has_nudge, offline.)
+
+### Phase 3: Voice
+- [ ] **MAC-3: Voice Conversation** `[A]` (Replace voice.html with
+  native voice. SFSpeechRecognizer for STT, audio playback for TTS.
+  Voice state machine: idle → listening → processing → speaking.)
+
+### Phase 4: Live Preview
+- [ ] **MAC-4: Live Preview — First Taste of Emerging Software** `[A]`
+  (When HORI generates HTML in conversation, render it live in a preview
+  pane. Split view: conversation | preview. HTML extraction from
+  ```html blocks. WKWebView.)
+
+### Phase 5: Projects + Baked-In Rigor
+- [ ] **MAC-5: The Workshop — Projects, Files, "Make It Yours"** `[A]`
+  (Projects persist. Files live on the Mac at ~/HORI/projects/. Generated
+  projects include tests, README, hori.log. The "make it yours" feeling
+  begins. Capability topology created. Structure view shows the shape of
+  the project.)
+
+### Phase 6: Emerging Canvas
+- [ ] **MAC-6: The Emerging Canvas — Sims Builder Mode** `[A]`
+  (Conversation becomes modal over a greyed-out canvas. Software emerges
+  behind the conversation. Click outside to interact, click back to
+  refine. Guidance flyouts for COULDN'T/SHOULDN'T operations — the "No
+  Wrong Notes" principle, made visible. CapabilityChecker consults the
+  topology before any operation.)
+
+### Phase 7: Personality
+- [ ] **MAC-7: The Koi, Menu Bar, Sound, Accessibility Audit** `[A]`
+  (Animated koi mascot (Rive/Lottie). Menu bar presence with global
+  hotkey. Sound design (opt-in). Full accessibility audit across all
+  views built in Phases 1-6. Animation refinement.)
+
+### Phase 8: Hardware Sensing
+- [ ] **MAC-8: Install-Time Hardware Sensing** `[A]` (On first launch,
+  HORI checks the Mac and tells you what you can do. Setup wizard: detect
+  Apple Silicon, RAM, macOS version, Tailscale, GPU server reachability.
+  Three configs: golden path, potato spec, cloud key.)
+
+### Phase 9: Phone Companion
+- [ ] **MAC-9: Phone Companion** `[A]` (Check in from phone. Capture
+  voice notes. Approve actions. New aios-core endpoints: /v1/summary,
+  /v1/capture, /v1/approvals. Thin iOS app, widgets, Live Activity,
+  Siri Shortcuts. Phone is companion, not creation surface.)

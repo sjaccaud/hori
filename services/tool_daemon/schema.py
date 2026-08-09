@@ -6,7 +6,7 @@ calls (not free text), and every call is validated against its schema before
 execution. This is the skeleton that prevents the LLM from fabricating results.
 
 Traces to: docs/roadmap.md Tier 2B, PoC 15.1.
-Traces to: docs/tool_safety.md "Layer 1: Structured Output".
+Traces to: docs/safety.md "Layer 1: Structured Output".
 
 Design:
   - Each tool is defined as a ToolSchema with name, description, parameters,

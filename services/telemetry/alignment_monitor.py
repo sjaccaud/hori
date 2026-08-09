@@ -14,18 +14,16 @@ logging.basicConfig(
     ]
 )
 
-MANIFESTO_PATH = "core/intent/manifesto.json"
-CHARTER_PATH = "core/intent/charter.json"
+MANIFESTO_PATH = "docs/manifesto.md"
 WATCHDOG_LOG_PATH = "logs/watchdog.log"
 CHECK_INTERVAL_SECONDS = 30
 
 def main():
     logging.info("Alignment Monitor started.")
-    
+
     try:
         engine = AlignmentEngine(
             MANIFESTO_PATH,
-            CHARTER_PATH,
             WATCHDOG_LOG_PATH
         )
         

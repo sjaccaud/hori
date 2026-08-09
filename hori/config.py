@@ -223,15 +223,12 @@ HASS_NOTIFY_SERVICE = config["notifications"]["hass_notify_service"]
 
 # --- Paths that are derived from the project root (not user-configurable) ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CORE_INTENT_DIR = PROJECT_ROOT / "core" / "intent"
 CORE_STATE_DIR = PROJECT_ROOT / "core" / "state"
 DOCS_DIR = PROJECT_ROOT / "docs"
-INTENT_SCHEMA_PATH = CORE_INTENT_DIR / "schema.json"
-MANIFESTO_PATH = CORE_INTENT_DIR / "manifesto.json"
-CHARTER_PATH = CORE_INTENT_DIR / "charter.json"
 USER_MODEL_PATH = CORE_STATE_DIR / "user_model.json"
 PROJECT_STATE_PATH = CORE_STATE_DIR / "project_state.json"
-GOVERNANCE_PATH = DOCS_DIR / "governance_safety.md"
+MANIFESTO_PATH = DOCS_DIR / "manifesto.md"
+GOVERNANCE_PATH = DOCS_DIR / "safety.md"
 
 # --- Non-configurable constants ---
 # The Sherpa capability file is a well-known IPC path between the Sherpa

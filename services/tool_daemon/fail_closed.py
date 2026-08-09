@@ -6,7 +6,7 @@ at tool-daemon startup, the daemon refuses to start and aios-core refuses
 to issue tool calls. No silent fallback to unrestricted execution.
 
 Traces to: docs/roadmap.md Tier 2C, PoC 15.38.
-Traces to: docs/tool_safety.md "Fail-Closed Design".
+Traces to: docs/safety.md "Fail-Closed Design".
 
 From the PraisonAI CVE lesson: a sandbox that fails open is worse than no
 sandbox. If Landlock is unavailable, the daemon must refuse to start, not

@@ -1,7 +1,26 @@
 # HORI Operational Notes
 
-This file captures discovered runtime details for the local LLM inference
-stack. Paths shown are examples — adjust to your own build locations.
+This file is the canonical source of truth for hardware, runtime
+details, build/test commands, and inference configuration. Paths shown
+are examples — adjust to your own build locations.
+
+## Reference Hardware
+
+HORI is designed to run on a local GPU server with remote access via
+Tailscale. The reference setup:
+
+- **GPU server:** Headless Linux box with an AMD Radeon AI PRO R9700
+  (32GB VRAM), Ryzen 7800X3D, ROCm 7.14. This is where llama.cpp and
+  aios-core run.
+- **Laptop:** Any macOS/Linux/Windows laptop as a thin client (chat
+  surface, IDE, admin panel). No GPU needed.
+- **Phone:** Any smartphone for voice chat via the mobile web app.
+- **Optional edge device:** A Raspberry Pi or similar SBC for
+  wake-word detection and always-on voice.
+
+All devices are connected via Tailscale mesh VPN. aios-core listens on
+port 5680, accessible via Tailscale Serve (Tailnet-only HTTPS, no public
+exposure).
 
 ## Build & Test Commands
 
@@ -194,6 +213,27 @@ GPU (Radeon AI PRO R9700, gfx1201) using the **Vulkan** backend (RADV vs AMDVLK)
 
 **Current performance (Aug 8 2026):** 32.1 t/s decode, 79% of 640 GB/s
 bandwidth ceiling. This is near the hardware limit for a 15GB dense model.
+
+## Elastic Context Window
+
+Instead of a fixed 6-turn history window, aios-core uses semantic
+retrieval of past turns from Qdrant, ranked by relevance to the current
+prompt. This is the mechanism that makes the "10K guarantee" real: your
+conversation stays smart at turn 10,000.
+
+**How it works:**
+1. Always include the last 2-3 turns (immediate continuity)
+2. Semantically retrieve top-K past turns from the same conversation,
+   ranked by similarity to the current prompt, up to a token budget
+3. Inject distilled memory context from project/longterm tiers
+
+**Test results (500-turn stress test):** Deflection collapse (LLM saying
+"I don't know what 'that' is" repeatedly) was significantly mitigated by
+PoC 13.7. Remaining issues are model-level (1-5 token degeneration at
+certain context configurations), not architecture-level.
+
+**Traces to:** Manifesto Pillar III (Persistent Context & Memory),
+PoC 13.1 (10,000-Turn Stress Test), PoC 13.7 (Deflection Mitigation).
 
 ## Tailscale / Endpoints
 

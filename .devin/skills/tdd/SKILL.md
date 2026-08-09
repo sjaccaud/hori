@@ -63,7 +63,7 @@ runs, stop — the step is too big. Back out and write a smaller test.
 
 ## Before starting
 
-If a PRD exists at `docs/prd/<slug>.md` or a work order at
+If a PRD exists at `.devin/prd/<slug>.md` or a work order at
 `core/state/proposed_work_orders/<id>.json`, read it first and implement
 against its test contract (section 4 of the PRD). If neither exists for a
 non-trivial feature, stop and suggest the user run `/grill-me` or

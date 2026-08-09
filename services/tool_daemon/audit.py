@@ -5,7 +5,7 @@ Every tool call is logged: timestamp, tool name, args, result, LLM reasoning,
 and data taint status. The log is append-only JSONL at logs/tool_audit.jsonl.
 
 Traces to: docs/roadmap.md Tier 2C, PoC 15.9.
-Traces to: docs/tool_safety.md "Layer 3: The Audit Trail".
+Traces to: docs/safety.md "Layer 3: The Audit Trail".
 
 Permission separation (red-team fix #2):
   The log file is owned by root:aios-worker, mode 0620. aios-worker can

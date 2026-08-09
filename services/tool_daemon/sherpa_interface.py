@@ -35,7 +35,7 @@ CAPABILITY FILE FORMAT:
 
 TRACES TO:
   docs/roadmap.md Tier 2E, PoC 15.50.
-  docs/tool_safety.md "The Sherpa — Behavioral Guardian".
+  docs/safety.md "The Sherpa — Behavioral Guardian".
 """
 from __future__ import annotations
 
