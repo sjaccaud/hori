@@ -14,16 +14,15 @@ struct HoriClientTests {
 
     @Test("Request body encodes text and history correctly")
     func requestEncoding() async throws {
-        let mock = MockURLProtocol()
-        mock.responseData = """
+        MockURLProtocol.reset()
+        MockURLProtocol.responseData = """
         {"text": "Hello!", "audio": "", "audio_format": "wav", "conversation_id": "abc"}
         """.data(using: .utf8)!
-        mock.statusCode = 200
+        MockURLProtocol.statusCode = 200
 
-        let session = makeSession(with: mock)
         let client = HoriClient(
             baseURL: URL(string: "https://example.com:5680")!,
-            session: session
+            session: makeSession()
         )
 
         let history: [WindowState.Message] = [
@@ -34,7 +33,7 @@ struct HoriClientTests {
         _ = try await client.sendMessage("What's up?", history: history)
 
         // Verify the request was captured.
-        let request = try #require(mock.lastRequest)
+        let request = try #require(MockURLProtocol.lastRequest)
         #expect(request.url?.absoluteString == "https://example.com:5680/v1/voice/chat")
         #expect(request.httpMethod == "POST")
         #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
@@ -57,15 +56,15 @@ struct HoriClientTests {
 
     @Test("User messages map to 'user' role, HORI messages to 'assistant'")
     func roleMapping() async throws {
-        let mock = MockURLProtocol()
-        mock.responseData = """
+        MockURLProtocol.reset()
+        MockURLProtocol.responseData = """
         {"text": "ok", "audio": null, "audio_format": null, "conversation_id": null}
         """.data(using: .utf8)!
-        mock.statusCode = 200
+        MockURLProtocol.statusCode = 200
 
         let client = HoriClient(
             baseURL: URL(string: "https://example.com")!,
-            session: makeSession(with: mock)
+            session: makeSession()
         )
 
         let history: [WindowState.Message] = [
@@ -75,7 +74,7 @@ struct HoriClientTests {
 
         _ = try await client.sendMessage("next", history: history)
 
-        let body = try #require(mock.lastRequest?.httpBody)
+        let body = try #require(MockURLProtocol.lastRequest?.httpBody)
         let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         let historyArray = try #require(json?["history"] as? [[String: String]])
         #expect(historyArray[0]["role"] == "user")
@@ -86,15 +85,15 @@ struct HoriClientTests {
 
     @Test("Decodes a successful response and returns the text")
     func responseDecoding() async throws {
-        let mock = MockURLProtocol()
-        mock.responseData = """
+        MockURLProtocol.reset()
+        MockURLProtocol.responseData = """
         {"text": "Hello from HORI!", "audio": "base64data", "audio_format": "wav", "conversation_id": "conv-123"}
         """.data(using: .utf8)!
-        mock.statusCode = 200
+        MockURLProtocol.statusCode = 200
 
         let client = HoriClient(
             baseURL: URL(string: "https://example.com")!,
-            session: makeSession(with: mock)
+            session: makeSession()
         )
 
         let reply = try await client.sendMessage("Hi", history: [])
@@ -103,15 +102,15 @@ struct HoriClientTests {
 
     @Test("Handles response with null optional fields")
     func responseWithNulls() async throws {
-        let mock = MockURLProtocol()
-        mock.responseData = """
+        MockURLProtocol.reset()
+        MockURLProtocol.responseData = """
         {"text": "Reply", "audio": null, "audio_format": null, "conversation_id": null}
         """.data(using: .utf8)!
-        mock.statusCode = 200
+        MockURLProtocol.statusCode = 200
 
         let client = HoriClient(
             baseURL: URL(string: "https://example.com")!,
-            session: makeSession(with: mock)
+            session: makeSession()
         )
 
         let reply = try await client.sendMessage("Hi", history: [])
@@ -122,13 +121,13 @@ struct HoriClientTests {
 
     @Test("Server error (non-2xx) throws serverError")
     func serverError() async throws {
-        let mock = MockURLProtocol()
-        mock.responseData = "Internal Server Error".data(using: .utf8)!
-        mock.statusCode = 500
+        MockURLProtocol.reset()
+        MockURLProtocol.responseData = "Internal Server Error".data(using: .utf8)!
+        MockURLProtocol.statusCode = 500
 
         let client = HoriClient(
             baseURL: URL(string: "https://example.com")!,
-            session: makeSession(with: mock)
+            session: makeSession()
         )
 
         await #expect(throws: HoriClientError.self) {
@@ -138,13 +137,13 @@ struct HoriClientTests {
 
     @Test("Malformed JSON throws decodingFailed")
     func decodingError() async throws {
-        let mock = MockURLProtocol()
-        mock.responseData = "not json at all".data(using: .utf8)!
-        mock.statusCode = 200
+        MockURLProtocol.reset()
+        MockURLProtocol.responseData = "not json at all".data(using: .utf8)!
+        MockURLProtocol.statusCode = 200
 
         let client = HoriClient(
             baseURL: URL(string: "https://example.com")!,
-            session: makeSession(with: mock)
+            session: makeSession()
         )
 
         await #expect(throws: HoriClientError.self) {
@@ -154,12 +153,12 @@ struct HoriClientTests {
 
     @Test("Network failure throws networkFailed")
     func networkError() async throws {
-        let mock = MockURLProtocol()
-        mock.error = URLError(.notConnectedToInternet)
+        MockURLProtocol.reset()
+        MockURLProtocol.error = URLError(.notConnectedToInternet)
 
         let client = HoriClient(
             baseURL: URL(string: "https://example.com")!,
-            session: makeSession(with: mock)
+            session: makeSession()
         )
 
         await #expect(throws: HoriClientError.self) {
@@ -183,31 +182,28 @@ struct HoriClientTests {
 
     @Test("BaseURL + path constructs the correct endpoint URL")
     func urlConstruction() async throws {
-        let mock = MockURLProtocol()
-        mock.responseData = """
+        MockURLProtocol.reset()
+        MockURLProtocol.responseData = """
         {"text": "ok", "audio": null, "audio_format": null, "conversation_id": null}
         """.data(using: .utf8)!
-        mock.statusCode = 200
+        MockURLProtocol.statusCode = 200
 
         let client = HoriClient(
             baseURL: URL(string: "https://my-tailnet.ts.net:5680")!,
-            session: makeSession(with: mock)
+            session: makeSession()
         )
 
         _ = try await client.sendMessage("test", history: [])
-        let url = try #require(mock.lastRequest?.url)
+        let url = try #require(MockURLProtocol.lastRequest?.url)
         #expect(url.absoluteString == "https://my-tailnet.ts.net:5680/v1/voice/chat")
     }
 
     // MARK: - Helpers
 
-    /// Creates a URLSession that routes all requests through the mock URLProtocol.
-    private func makeSession(with mock: MockURLProtocol) -> URLSession {
+    /// Creates a URLSession that routes all requests through MockURLProtocol.
+    private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
-        // Store the mock instance on the shared singleton so the protocol
-        // handler can find it. This is a test-only pattern.
-        MockURLProtocol.shared = mock
         return URLSession(configuration: config)
     }
 }
@@ -216,18 +212,28 @@ struct HoriClientTests {
 
 /// A mock URLProtocol that intercepts requests and returns canned responses.
 /// Used for testing HoriClient without real network calls.
+///
+/// Uses static vars for response config because URLProtocol instantiates
+/// a new instance per request — instance properties on the mock can't be
+/// shared with the test. The test sets the static vars before calling
+/// the client, and the protocol reads them during startLoading().
 final class MockURLProtocol: URLProtocol {
 
-    /// The shared mock instance that the protocol handler uses.
-    static var shared: MockURLProtocol?
+    // Static response configuration — set by the test before the request.
+    static var responseData: Data = Data()
+    static var statusCode: Int = 200
+    static var error: Error? = nil
 
-    // Configuration for the next response.
-    var responseData: Data = Data()
-    var statusCode: Int = 200
-    var error: Error? = nil
+    // Captured request for verification — set by startLoading().
+    static var lastRequest: URLRequest?
 
-    // Captured request for verification.
-    var lastRequest: URLRequest?
+    /// Reset all static state between tests.
+    static func reset() {
+        responseData = Data()
+        statusCode = 200
+        error = nil
+        lastRequest = nil
+    }
 
     override class func canInit(with request: URLRequest) -> Bool {
         true
@@ -238,27 +244,23 @@ final class MockURLProtocol: URLProtocol {
     }
 
     override func startLoading() {
-        guard let mock = MockURLProtocol.shared else {
-            client?.urlProtocol(self, didFailWithError: URLError(.unknown))
-            return
-        }
+        // Capture the request for test verification.
+        MockURLProtocol.lastRequest = request
 
-        mock.lastRequest = request
-
-        if let error = mock.error {
+        if let error = MockURLProtocol.error {
             client?.urlProtocol(self, didFailWithError: error)
             return
         }
 
         let response = HTTPURLResponse(
             url: request.url!,
-            statusCode: mock.statusCode,
+            statusCode: MockURLProtocol.statusCode,
             httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": "application/json"]
         )!
 
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: mock.responseData)
+        client?.urlProtocol(self, didLoad: MockURLProtocol.responseData)
         client?.urlProtocolDidFinishLoading(self)
     }
 
