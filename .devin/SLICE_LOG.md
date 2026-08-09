@@ -5,10 +5,23 @@
 
 ## Current Slice
 
-None. SLICE-MACOS-02 demoed and merged. Ready to start SLICE-MACOS-03.
+SLICE-MACOS-03: Voice Conversation (in progress, branch `slice/macos-03-voice`)
 
-**What's next:**
-- SLICE-MACOS-03: Voice Conversation (branch `slice/macos-03-voice`)
+**Plan:**
+- Push-to-talk mic button (press and hold to record, release to send)
+- Streaming endpoint (/v1/voice/chat/stream) — text chunks + audio chunks via SSE
+- SFSpeechRecognizer for on-device STT
+- AudioPlayer for WAV playback (queued, plays sentences as they arrive)
+- Voice picker in settings (fetches /v1/audio/voices)
+- Voice state machine: idle → listening → processing → speaking → idle
+
+**Demo criterion:** Press and hold mic button → speak → release → HORI
+replies in text bubble AND speaks the reply aloud through speakers.
+
+**Decisions (product owner):**
+- PTT (foolproof). Windows-first keyboard on Mac — use UI button, not Cmd key.
+- Streaming first (lower perceived latency)
+- Voice picker in settings from day one
 
 ## Slice Queue
 
