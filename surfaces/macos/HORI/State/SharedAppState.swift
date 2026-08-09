@@ -98,10 +98,13 @@ final class SharedAppState {
 /// HORI's presence state. Shared across all windows — HORI has one
 /// presence, not per-window. Drives the presence indicator and koi
 /// mascot reactivity.
+///
+/// The raw value matches the server's wire format (snake_case):
+/// "idle", "thinking", "has_nudge", "offline".
 enum PresenceState: String, Equatable, CaseIterable {
     case idle       // Available, waiting for input
     case thinking   // Processing a request
-    case hasNudge   // Has something to say (proactive)
+    case hasNudge = "has_nudge"   // Has something to say (proactive)
     case offline    // Not connected to aios-core
 
     /// The semantic color for this presence state.
