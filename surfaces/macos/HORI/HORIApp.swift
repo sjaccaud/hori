@@ -7,7 +7,6 @@ import AppKit
 ///
 /// This is a "2027 product" from the first window:
 /// - Transparent titlebar (`.windowStyle(.plain)`)
-/// - No default toolbar (`.toolbarVisibility(.hidden)`)
 /// - Multi-window support (`WindowGroup`, not `Window`)
 /// - Per-window state (`WindowState`) + shared state (`SharedAppState`)
 /// - Per-window `UndoManager` injected via environment
@@ -31,7 +30,6 @@ struct HORIApp: App {
                 .environment(sharedState)
         }
         .windowStyle(.plain)
-        .toolbarVisibility(.hidden, .windowToolbar)
         .commands {
             // Edit menu — Undo/Redo wired to the responder chain.
             // The UndoManager is injected via environment; SwiftUI
