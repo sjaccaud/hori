@@ -247,13 +247,6 @@ final class MockURLProtocol: URLProtocol {
         request
     }
 
-    /// Store the body in the request's property bag so it survives
-    /// URLProtocol's body stripping. This is the standard workaround
-    /// for testing POST requests with mock URLProtocols.
-    override class func requestIsCacheEquivalent(to a: URLRequest, to b: URLRequest) -> Bool {
-        false
-    }
-
     override func startLoading() {
         // Capture the request for test verification.
         // URLProtocol strips httpBody from POST requests, so read it
