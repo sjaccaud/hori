@@ -6,7 +6,7 @@ import AppKit
 /// The HORI macOS app entry point.
 ///
 /// This is a "2027 product" from the first window:
-/// - Transparent titlebar (`.windowStyle(.plain)`)
+/// - Standard window chrome (traffic lights, draggable titlebar)
 /// - Multi-window support (`WindowGroup`, not `Window`)
 /// - Per-window state (`WindowState`) + shared state (`SharedAppState`)
 /// - Per-window `UndoManager` injected via environment
@@ -29,7 +29,6 @@ struct HORIApp: App {
             ContentView()
                 .environment(sharedState)
         }
-        .windowStyle(.plain)
         .commands {
             // Edit menu — Undo/Redo wired to the responder chain.
             // The UndoManager is injected via environment; SwiftUI
