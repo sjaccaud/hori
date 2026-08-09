@@ -26,7 +26,7 @@ struct EmptyStateViewTests {
         // The prompt text should use HoriTypography.display.
         // Verified by the fact that HoriTypography.display exists
         // and is the correct size (24pt).
-        #expect(HoriTypography.display == Font.custom("DM Sans", size: 24, weight: .semibold, relativeTo: .largeTitle))
+        #expect(HoriTypography.display == Font.custom("DM Sans", size: 24, relativeTo: .largeTitle).weight(.semibold))
     }
 
     @Test("Tagline text is correct")
