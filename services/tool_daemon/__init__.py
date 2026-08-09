@@ -6,8 +6,8 @@ This package implements the tool safety architecture for AIOS. It is the
 
 Traces to:
   - docs/roadmap.md Tier 2 (AIOS 1.5 — The Safety Spine)
-  - docs/tool_safety.md (full architecture)
-  - docs/tool_safety_redteam.md (adversarial analysis)
+  - docs/safety.md (full architecture)
+  - docs/safety.md (adversarial analysis)
 
 Design principle (from docs/manifesto.md Pillar VII):
   The LLM is untrusted. The architecture is trusted.

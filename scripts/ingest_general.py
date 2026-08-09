@@ -25,12 +25,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Foundational documents to ingest
 DOCS_TO_INGEST = [
     PROJECT_ROOT / "docs" / "manifesto.md",
-    PROJECT_ROOT / "docs" / "governance_safety.md",
-    PROJECT_ROOT / "docs" / "architecture_analysis.md",
+    PROJECT_ROOT / "docs" / "safety.md",
     PROJECT_ROOT / "docs" / "roadmap.md",
-    PROJECT_ROOT / "core" / "intent" / "manifesto.json",
-    PROJECT_ROOT / "core" / "intent" / "charter.json",
-    PROJECT_ROOT / "core" / "intent" / "schema.json",
+    PROJECT_ROOT / "docs" / "operations.md",
     PROJECT_ROOT / "core" / "state" / "user_model.json",
     PROJECT_ROOT / "core" / "state" / "project_state.json",
 ]

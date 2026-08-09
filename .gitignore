@@ -82,3 +82,20 @@ services/n8n/n8n_data/
 
 # Security audit is local-only (contains network topology specifics)
 docs/system_security_audit.md
+
+# --- Sensitive Documents (never commit to public repo) ---
+# Patent-related documents — public disclosure can destroy novelty
+docs/patent*.md
+docs/patent*.txt
+docs/*patent*.md
+docs/*patent_exploration*
+
+# Personal planning files
+*.devin/plans/
+
+# macOS app build artifacts
+surfaces/macos/build/
+surfaces/macos/DerivedData/
+surfaces/macos/*.xcodeproj/
+surfaces/macos/xcuserdata/
+surfaces/macos/.build/

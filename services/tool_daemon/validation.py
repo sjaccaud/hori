@@ -7,7 +7,7 @@ with an error message back to the LLM. The LLM can retry with a corrected
 call (max 3 retries, enforced by the caller).
 
 Traces to: docs/roadmap.md Tier 2B, PoC 15.4.
-Traces to: docs/tool_safety.md "Layer 1: Structured Output".
+Traces to: docs/safety.md "Layer 1: Structured Output".
 
 Design:
   - validate_tool_call() is the single entry point. It checks:

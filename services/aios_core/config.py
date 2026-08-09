@@ -27,12 +27,9 @@ from hori.config import (  # noqa: F401
     SERVICE_PORT,
     # Paths (project-derived, not user-configurable)
     PROJECT_ROOT,
-    CORE_INTENT_DIR,
     CORE_STATE_DIR,
     DOCS_DIR,
-    INTENT_SCHEMA_PATH,
     MANIFESTO_PATH,
-    CHARTER_PATH,
     USER_MODEL_PATH,
     PROJECT_STATE_PATH,
     GOVERNANCE_PATH,

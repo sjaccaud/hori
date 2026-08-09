@@ -165,11 +165,10 @@ make test-stress       # smoke stress tests (~120s)
 ## Documentation
 
 - **[docs/manifesto.md](docs/manifesto.md)** — mission, 7 pillars, core values
-- **[docs/stack.md](docs/stack.md)** — hardware, software, model config
-- **[docs/operations.md](docs/operations.md)** — runtime details, build commands
-- **[docs/roadmap.md](docs/roadmap.md)** — 6 tiers, 156 PoCs, status tracker
-- **[docs/tool_safety.md](docs/tool_safety.md)** — safety architecture
-- **[docs/SLICE_LOG.md](docs/SLICE_LOG.md)** — current work status
+- **[docs/operations.md](docs/operations.md)** — hardware, build/test, inference, endpoints
+- **[docs/roadmap.md](docs/roadmap.md)** — development roadmap (Tiers 1-7)
+- **[docs/safety.md](docs/safety.md)** — safety principles, architecture, adversarial analysis
+- **[docs/apple_shortcut_setup.md](docs/apple_shortcut_setup.md)** — iOS voice shortcut setup
 
 See [docs/README.md](docs/README.md) for the full documentation index.
 

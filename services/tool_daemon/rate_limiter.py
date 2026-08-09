@@ -5,7 +5,7 @@ Max 10 tool calls per conversation turn. Max 50 per session. Prevents the
 agent from reading the entire filesystem even if each individual call is valid.
 
 Traces to: docs/roadmap.md Tier 2D, PoC 15.12.
-Traces to: docs/tool_safety.md "Layer 4: The Leash".
+Traces to: docs/safety.md "Layer 4: The Leash".
 
 Design:
   - The RateLimiter tracks calls per (conversation_id, turn_id) and per

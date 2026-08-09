@@ -24,7 +24,7 @@ WHAT IT DEFENDS AGAINST:
 
 TRACES TO:
   docs/roadmap.md Tier 3, PoC 16.1.
-  docs/tool_safety.md "Layer 2: The Cage".
+  docs/safety.md "Layer 2: The Cage".
 """
 from __future__ import annotations
 

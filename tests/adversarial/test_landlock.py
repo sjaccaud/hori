@@ -19,7 +19,7 @@ Defends: PoC 15.0b (Landlock file restrictions), PoC 15.0c (Landlock
 network restrictions), red-team fix #7 (default-deny model).
 
 Traces to: docs/roadmap.md Tier 2A, PoC 15.0b + 15.0c.
-Traces to: docs/tool_safety.md "Layer 1: The Cage (Kernel)".
+Traces to: docs/safety.md "Layer 1: The Cage (Kernel)".
 """
 import json
 import os

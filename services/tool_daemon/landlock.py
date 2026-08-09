@@ -32,8 +32,8 @@ WHY DEFAULT-DENY (red-team fix #7):
 
 TRACES TO:
   docs/roadmap.md Tier 2A, PoC 15.0b + 15.0c.
-  docs/tool_safety.md "Layer 1: The Cage (Kernel)".
-  docs/tool_safety_redteam.md red-team fix #7.
+  docs/safety.md "Layer 1: The Cage (Kernel)".
+  docs/safety.md red-team fix #7.
 
 Implementation notes:
   Uses ctypes to call the Landlock syscalls directly — no external
@@ -471,7 +471,7 @@ def apply_landlock_restrictions(
 
 # The default allowed paths for the tool daemon.
 # These come from config (hori.yaml) and match the design in
-# docs/tool_safety.md "Layer 1: The Cage".
+# docs/safety.md "Layer 1: The Cage".
 from hori.config import WORKSPACE_PATH, ALLOWED_READ_PATHS
 
 DEFAULT_ALLOWED_PATHS = [

@@ -6,7 +6,7 @@ level, allowed paths, and rate limits. Tools not in the registry cannot be
 called — no exceptions.
 
 Traces to: docs/roadmap.md Tier 2B, PoC 15.2.
-Traces to: docs/tool_safety.md "Layer 1: Structured Output".
+Traces to: docs/safety.md "Layer 1: Structured Output".
 
 Design:
   - The registry is a singleton populated at import time with the approved

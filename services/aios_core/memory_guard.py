@@ -5,7 +5,7 @@ Tool result data cannot flow into store_memory without explicit
 user-originated confirmation. This prevents a compromised LLM from
 injecting false memories via tool results.
 
-Traces to: docs/tool_safety_redteam.md Red-team fix #5.
+Traces to: docs/safety.md Red-team fix #5.
 Traces to: tests/adversarial/test_memory_poisoning.py
 
 Design:

@@ -7,7 +7,7 @@ Parses LLM responses to extract structured tool calls. The LLM must output
 to the validator (PoC 15.4). If not, the response is treated as normal text.
 
 Traces to: docs/roadmap.md Tier 2B, PoC 15.3.
-Traces to: docs/tool_safety.md "Layer 1: Structured Output".
+Traces to: docs/safety.md "Layer 1: Structured Output".
 
 Design:
   - parse_tool_call() scans an LLM response for a JSON tool_call object.

@@ -7,7 +7,7 @@
 //
 // Not a cop — a sherpa that keeps AIOS from hurting itself.
 //
-// Design principles (see docs/tool_safety.md "The Sherpa"):
+// Design principles (see docs/safety.md "The Sherpa"):
 //  1. AIOS cannot influence the Sherpa (separate user, separate process)
 //  2. Go binary — single static binary, no runtime deps
 //  3. Never deletes, kills, or destroys — only dials back autonomy
@@ -15,7 +15,7 @@
 //  5. Audit log is permission-separated (reads as root)
 //
 // Traces to: docs/roadmap.md Tier 2E, PoC 15.50.
-// Traces to: docs/tool_safety.md "The Sherpa — Behavioral Guardian".
+// Traces to: docs/safety.md "The Sherpa — Behavioral Guardian".
 package main
 
 import (

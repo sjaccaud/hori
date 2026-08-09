@@ -1,48 +1,8 @@
 # Contributing to HORI
 
 HORI is built by a solo creator and an AI co-architect. This document
-describes the workflow so any contributor (human or AI) can be productive
-on the first commit.
-
-## Slice-based development
-
-Work is organized in **slices** — vertical pieces of working functionality
-that can be demoed. A slice is defined by what you'll be able to *do*
-after it's done, not what code changes.
-
-### One branch per slice
-
-```
-rebrand/hori              ← integration branch (always working, always demoable)
-├── slice/05-hori-detect  ← feature branch for a slice
-├── slice/06-sqlite-memory
-└── slice/07-readme-license
-```
-
-Each slice gets its own branch off `rebrand/hori`. When the slice is
-complete and demoed, it merges back with `--no-ff`.
-
-### Three-phase rhythm
-
-```
-PLAN → BUILD → DEMO
-        ↑           │
-        └── RETRO ──┘
-```
-
-1. **PLAN** — agree on what the slice does and the demo criterion
-2. **BUILD** — TDD where safety is involved, tests where useful
-3. **DEMO** — show working software, get feedback
-4. **RETRO** — what did we learn? Adjust the next slice?
-
-### Commit messages
-
-```
-[SLICE-NN] Short description of what changed
-```
-
-Commit at every natural stopping point (after a failing test, after
-making it pass, after a refactor).
+is the public developer guide — how to build, test, and contribute code
+that matches the project's conventions.
 
 ## Build & test
 
@@ -55,14 +15,30 @@ pip install -r requirements-dev.txt
 pip install -e .
 
 # Run tests
-make test              # all tests
+make test              # all tests (unit + integration + regression + adversarial)
 make test-unit         # unit tests only (~30s)
 make test-adversarial  # safety property tests
 make test-integration  # cross-service contract tests
+make test-regression   # regression tests
 make test-stress       # smoke stress tests (~120s)
 
 # Lint
 make lint              # ruff check
+```
+
+Stress tests live in `tests/stress/`:
+- `test_ten_thousand_turns.py` — entropy & context drift (chained turns,
+  planning prompts, recall quality metrics). Supports 100/1K/10K turns.
+- `test_safety_stress.py` — safety (stateless turns, both endpoints,
+  hallucination bait + injection + Sherpa triggers).
+
+Integration tests include the Sherpa wire contract test (runs the actual
+Go binary against real Python AuditLogger entries) and the reboot survival
+test (verifies the tool daemon workspace-recreation fix). Run the full
+reboot suite with:
+```bash
+sudo env PYTHONPATH=. ./venv/bin/python3 -m pytest \
+    services/integration_tests/test_reboot_survival.py -v
 ```
 
 ## Code style
@@ -83,39 +59,89 @@ make lint              # ruff check
 
 Safety properties use **adversarial TDD**: the test is written FIRST,
 must FAIL, then the safety is built until it passes. See
-`tests/adversarial/` for the existing suite.
+`tests/adversarial/` for the existing suite (92 tests).
 
 The fundamental principle: **The LLM is untrusted. The architecture is
 trusted.** Any change to the safety architecture — even slightly — gets
-a dedicated conversation before implementation.
+a dedicated conversation before implementation. See `docs/safety.md` for
+the full architecture and adversarial analysis.
 
 ## Documentation
 
 When code and docs diverge, that is a bug. If you change behavior, update
 the relevant doc:
 
-- Hardware/model config → `docs/stack.md`
-- Runtime operations → `docs/operations.md`
+- Hardware/model/inference config → `docs/operations.md`
 - Project status → `docs/roadmap.md`
-- Safety architecture → `docs/tool_safety.md`
-- Current work status → `docs/SLICE_LOG.md`
+- Safety architecture → `docs/safety.md`
+- Mission and philosophy → `docs/manifesto.md`
 
-## Crash recovery
+See `docs/README.md` for the full documentation index and conflict
+resolution hierarchy.
 
-The repo IS the state. No external tracking, no databases. To resume
-after a crash or in a new session:
+## macOS App (surfaces/macos/)
 
-1. Read `docs/SLICE_LOG.md` → "where are we?"
-2. `git branch` → "what branch are we on?"
-3. `git log --oneline -5` → "what was the last commit?"
-4. `git status` → "are there uncommitted changes?"
-5. Run the tests → "does the code currently work?"
+The macOS app is built with Xcode on a Mac (not on the GPU server).
+Source files live in the repo and are pulled to the Mac for building.
 
-Never leave the code broken. Commit in a state where tests pass (or the
-failing test is the next step, clearly marked `[RED]`).
+```bash
+# On the Mac, from surfaces/macos/:
+brew install xcodegen          # one-time setup
+xcodegen generate              # generates HORI.xcodeproj from project.yml
+open HORI.xcodeproj            # open in Xcode
+# Cmd+R to build and run, Cmd+U to test
+
+# Command-line build and test:
+xcodebuild test -project HORI.xcodeproj -scheme HORI -destination 'platform=macOS'
+```
+
+The macOS app uses Swift Testing framework (built into Xcode 16+).
+Tests live in `surfaces/macos/Tests/`.
+
+## Public Repo Hygiene
+
+This is a **public** repository. Before committing, ask: "Would I be
+comfortable with this on the front page of Hacker News?"
+
+### Never commit
+
+- **Patent applications or patentability analyses** — public disclosure
+  can destroy patent novelty. Keep these locally or in a private repo.
+- **Secrets** — API keys, tokens, passwords, private keys, .env files.
+  Use `/etc/hori/secrets.env` (root-owned, not in the repo).
+- **Personal information** — real names (outside attribution), home
+  paths, personal email addresses, real IP addresses, real hostnames,
+  Tailscale machine names.
+- **Internal infrastructure details** — network topology, real device
+  IPs, internal service URLs with real hostnames.
+
+### Use placeholders, not real values
+
+- Tailscale URLs: `<your-tailnet>.ts.net` (not your real tailnet name)
+- IPs: `100.64.0.0/10` (the Tailscale CGNAT range, not your real IP)
+- Paths: `~/HORI/` or `~/.config/hori/` (not `/home/yourname/`)
+
+### Pre-push hook
+
+A pre-push hook (`.git/hooks/pre-push`) scans commits for PII patterns
+and sensitive files. It will block pushes that contain:
+
+- Known personal identifiers (names, emails, real IPs, tailnet name)
+- Sensitive file patterns (`docs/patent*`, `.env`, `*.key`, `*.pem`)
+- Internal-only docs in public paths (`docs/SLICE_LOG`, `docs/uncertainty`,
+  `docs/ubiquitous_language`, `docs/prd/`, `core/intent/`)
+- Blocked branches (`archive/*`, `dev`, `pre-rebrand`)
+
+To bypass (DANGEROUS, not recommended): `git push --no-verify`
+
+### When in doubt
+
+Don't commit it. Keep it local. Ask later. The cost of accidentally
+publishing sensitive information is much higher than the cost of
+delaying a commit.
 
 ## Questions?
 
-- Read [AGENTS.md](AGENTS.md) for the full developer guide
-- Read [docs/manifesto.md](docs/manifesto.md) for the project philosophy
 - Read [docs/README.md](docs/README.md) for the documentation index
+- Read [docs/manifesto.md](docs/manifesto.md) for the project philosophy
+- Read [docs/safety.md](docs/safety.md) for the safety architecture

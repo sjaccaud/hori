@@ -226,7 +226,7 @@ steadiness and clarity.
 
 The manifesto establishes the philosophy. For current technical configuration
 (model names, quantization types, runtime flags, VRAM usage), see
-**docs/stack.md** - it is the canonical source of truth and is kept current.
+**docs/operations.md** - it is the canonical source of truth and is kept current.
 
 1. The Engine: Standardize on llama.cpp (ROCm/HIP)
 - We want to use advanced quantization techniques and have deep control over
@@ -253,7 +253,7 @@ The manifesto establishes the philosophy. For current technical configuration
 
 4. The Frictionless Serving Strategy: Caching Flags & TurboQuant
 - The llama-server binary runs as a systemd service with advanced execution
-  flags locked in. See docs/stack.md and docs/operations.md for current flags.
+  flags locked in. See docs/operations.md and docs/operations.md for current flags.
 - Aggressive Prompt Caching: NOTE: --cache-reuse 256 was removed Aug 2026
   (incompatible with turbo4 KV cache, silently disabled). Prompt caching is
   now handled by aios-core's context trimming + slot KV checkpoints.

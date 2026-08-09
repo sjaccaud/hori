@@ -207,7 +207,7 @@ def retrieve_conversation_turns(
     """Semantic search for past turns within a single conversation.
 
     This is the retrieval primitive behind the elastic context window
-    (docs/elastic_context_window.md). It does a filtered vector query:
+    (docs/operations.md). It does a filtered vector query:
     only points whose `conversation_id` matches, ranked by similarity
     to `query`. Returns an empty list if the backend or embedding server
     is unreachable — callers must treat that as "no history available"

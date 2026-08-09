@@ -3,7 +3,7 @@
 Tests that the ?autolisten=1 URL parameter (UX-1.1) correctly auto-starts
 listening on page load when present, and does nothing when absent.
 
-Traces to: UX-1.1 PRD (docs/prd/ux-1-1-ios-streaming-deep-link.md),
+Traces to: UX-1.1 (iOS streaming deep-link),
 Manifesto Pillar IV (Seamless Voice & Remote Interaction).
 """
 import re

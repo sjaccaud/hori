@@ -7,7 +7,7 @@ Restricted to Landlock-allowed path prefixes. Path canonicalization
 (os.path.realpath) eliminates traversal attacks and symlink escape.
 
 Traces to: docs/roadmap.md Tier 2C, PoC 15.6.
-Traces to: docs/tool_safety.md "Layer 2: The Cage".
+Traces to: docs/safety.md "Layer 2: The Cage".
 
 Design:
   - Each tool is a pure function that takes validated args (from PoC 15.4)

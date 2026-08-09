@@ -6,7 +6,7 @@ and locks the tool layer. Voice command "stop" or "abort" triggers it.
 Requires manual unlock via CLI. Physical kill switch documented.
 
 Traces to: docs/roadmap.md Tier 2D, PoC 15.13.
-Traces to: docs/tool_safety.md "Layer 4: The Leash".
+Traces to: docs/safety.md "Layer 4: The Leash".
 
 Design:
   - EmergencyStop is a simple flag. When aborted, can_execute_tools()

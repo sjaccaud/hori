@@ -10,7 +10,7 @@ This is the defense against the "I already did it" hallucination attack —
 the exact MIDI file hallucination that motivated this project.
 
 Traces to: docs/roadmap.md Tier 2D, PoC 15.14.
-Traces to: docs/tool_safety.md "Layer 4: The Leash".
+Traces to: docs/safety.md "Layer 4: The Leash".
 
 Design:
   - contains_action_claim() scans an LLM response for phrases that claim

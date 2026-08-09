@@ -534,7 +534,7 @@ def test_chat_strips_bare_json_artifacts(client):
         assert "Here is your answer." in data["response"]
 
 
-# --- Elastic Context Window (docs/elastic_context_window.md) ---
+# --- Elastic Context Window (docs/operations.md) ---
 
 
 def _msgs(*pairs):
@@ -548,7 +548,7 @@ def test_elastic_context_retrieves_relevant_turns():
 
     This is the core of the elastic window: a context_reference prompt
     at turn 440 retrieves turn 105 where the topic was actually
-    discussed. Defends: docs/elastic_context_window.md, PoC 13.1.
+    discussed. Defends: docs/operations.md, PoC 13.1.
     """
     messages = _msgs(
         ("user", "What is AIOS about?"),
@@ -593,7 +593,7 @@ def test_elastic_context_falls_back_when_no_history():
     _elastic_context falls back to _trim_conversation (recent turns only).
 
     Graceful degradation: the system never breaks — it just falls back
-    to the dumb window. Defends: docs/elastic_context_window.md edge cases.
+    to the dumb window. Defends: docs/operations.md edge cases.
     """
     messages = _msgs(
         ("user", "Hello"),
@@ -619,7 +619,7 @@ def test_elastic_context_falls_back_when_no_history():
 def test_elastic_context_falls_back_on_retrieval_error():
     """If the embedding server / Qdrant is unreachable, retrieval raises
     and _elastic_context falls back to _trim_conversation. The system
-    never breaks. Defends: docs/elastic_context_window.md graceful
+    never breaks. Defends: docs/operations.md graceful
     degradation."""
     messages = _msgs(
         ("user", "What is AIOS about?"),
@@ -641,7 +641,7 @@ def test_elastic_context_deduplicates_against_recent_turns():
     """Retrieved turns whose content is already in the recent window are
     dropped, so the LLM doesn't see the same turn twice.
 
-    Defends: docs/elastic_context_window.md "Duplicate turns: deduplicate
+    Defends: docs/operations.md "Duplicate turns: deduplicate
     by content hash."
     """
     recent_user = "Tell me about the architecture."
@@ -679,7 +679,7 @@ def test_elastic_context_deduplicates_against_recent_turns():
 def test_elastic_context_trivial_prompt_skips_retrieval():
     """Trivial prompts (greetings, 'yes', 'ok') skip the embedding +
     Qdrant query entirely — just use recent turns. Saves ~50ms on the
-    easy cases. Defends: docs/elastic_context_window.md trivial prompt
+    easy cases. Defends: docs/operations.md trivial prompt
     shortcut."""
     messages = _msgs(
         ("user", "What is AIOS about?"),
@@ -705,7 +705,7 @@ def test_elastic_context_trivial_prompt_skips_retrieval():
 def test_elastic_context_respects_char_budget():
     """The assembled context is capped to ~6000 chars. When retrieved
     turns would overflow, oldest retrieved turns are dropped first
-    (keeping the note + recent window). Defends: docs/elastic_context_window.md
+    (keeping the note + recent window). Defends: docs/operations.md
     token budget."""
     # Build a recent window + a long current prompt.
     long_a = "A" * 2000
@@ -745,7 +745,7 @@ def test_elastic_context_enriches_vague_queries():
 
     The enriched text is used ONLY for the Qdrant query; the LLM still
     sees the raw user prompt as the final message. Defends:
-    docs/elastic_context_window.md "Remaining Issues" #3 and the
+    docs/operations.md "Remaining Issues" #3 and the
     deflection collapse at turns 443-478 ("I don't know what 'that' is").
     """
     prev_assistant = "AIOS uses a three-tier Qdrant memory: working, project, longterm."
@@ -780,7 +780,7 @@ def test_elastic_context_does_not_enrich_specific_queries():
     earlier?") carry their own semantics (the content word "architecture")
     and must NOT be enriched — enrichment would only add noise to a query
     that already retrieves well. Guards against over-triggering the
-    vague-query heuristic. Defends: docs/elastic_context_window.md."""
+    vague-query heuristic. Defends: docs/operations.md."""
     messages = _msgs(
         ("user", "What is AIOS about?"),
         ("assistant", "A local-first AI operating system."),
@@ -826,7 +826,7 @@ def test_elastic_context_fallback_uses_full_recent_window():
     a shrunk window. Previously the fallback passed recent_turns=3, so
     the prompts that most need context (vague prompts that retrieve
     nothing) got LESS context than the dumb window. Defends:
-    docs/elastic_context_window.md graceful degradation — the fallback is
+    docs/operations.md graceful degradation — the fallback is
     a safety net, not a shrink ray."""
     # 8 messages: with recent_turns=6 the fallback keeps the last 6; with
     # the old bug (3) it would keep only the last 3.
@@ -1039,7 +1039,7 @@ def test_elastic_context_retrieves_more_hits_for_filtering_pool():
 def test_oai_request_elastic_context_defaults_off():
     """elastic_context defaults to False — existing clients that don't
     send the flag get _trim_conversation and behave identically.
-    Backwards compat. Defends: docs/elastic_context_window.md opt-in."""
+    Backwards compat. Defends: docs/operations.md opt-in."""
     req = OAIChatRequest(messages=[OAIMessage(role="user", content="hi")])
     assert req.elastic_context is False
     # And it can be opted in.
@@ -1054,7 +1054,7 @@ def test_oai_request_elastic_context_defaults_off():
 def test_oai_chat_completions_backwards_compat_no_elastic_flag(client):
     """Without elastic_context set, /v1/chat/completions uses
     _trim_conversation (NOT _elastic_context). Existing clients are
-    unaffected. Defends: docs/elastic_context_window.md opt-in / backwards
+    unaffected. Defends: docs/operations.md opt-in / backwards
     compat."""
     with patch("services.aios_core.main._retrieve_memory_batch",
                return_value=[]), \
@@ -1085,7 +1085,7 @@ def test_oai_chat_completions_backwards_compat_no_elastic_flag(client):
 
 def test_oai_chat_completions_uses_elastic_when_flagged(client):
     """With elastic_context=True AND a conversation_id, the endpoint
-    routes through _elastic_context. Defends: docs/elastic_context_window.md
+    routes through _elastic_context. Defends: docs/operations.md
     wiring."""
     with patch("services.aios_core.main._retrieve_memory_batch",
                return_value=[]), \

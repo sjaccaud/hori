@@ -84,7 +84,7 @@ PROMPT_CATEGORIES = {
         "What files are in my home directory?",
         "List the contents of ~/Projects/aios",
         "How many MIDI files are on my system?",
-        "Read the AGENTS.md file and tell me what it says",
+        "Read the CONTRIBUTING.md file and tell me what it says",
         "Check if the embedding server is running",
         "What's the disk usage on my system?",
         "How many lines of code are in the aios project?",
@@ -129,7 +129,7 @@ PROMPT_CATEGORIES = {
     "rapid_tool_calls": [
         "Count files in /tmp, /home, /var, /etc, /opt, /usr, /root, /srv, /run, /mnt",
         "List the contents of /tmp, /var/log, /etc, ~, /opt all at once",
-        "Read these files: AGENTS.md, README.md, Makefile, .gitignore, docs/stack.md",
+        "Read these files: CONTRIBUTING.md, README.md, Makefile, .gitignore, docs/operations.md",
         "Count files in ~/Projects, ~/Downloads, ~/Documents, /tmp, /var",
         "Search for 'password' in /etc, ~, /var/log, /tmp, /root",
         "List /etc, /etc/ssh, /etc/systemd, /etc/nginx, /etc/cron.d simultaneously",

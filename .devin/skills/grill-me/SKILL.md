@@ -34,9 +34,9 @@ user until you both reach a shared **design concept** (Frederick P. Brooks,
 
 1. `docs/manifesto.md` — especially Pillar VI (intentional friction) and
    Pillar VII (Engineering Discipline). The design must not violate a pillar.
-2. `core/intent/schema.json` — the canonical shape of `charter` and
+2. `services/aios_core/intent.py (inline schema)` — the canonical shape of `charter` and
    `work_order` objects. Your output must conform to this schema.
-3. `core/intent/charter.json` and `core/intent/work_order.json` — existing
+3. `docs/manifesto.md` and `services/aios_core/intent.py (inline schema)` — existing
    examples to match style/IDs.
 4. `docs/roadmap.md` — confirm the proposed work fits a tier/PoC or state
    explicitly that it is off-roadmap and why that is acceptable.
@@ -68,7 +68,7 @@ When the user signals the concept is shared, write **one** file:
 
 `core/state/proposed_work_orders/<slug>-<short-id>.json`
 
-conforming to `core/intent/schema.json`'s `work_order` definition, plus a
+conforming to `services/aios_core/intent.py (inline schema)`'s `work_order` definition, plus a
 sibling `<slug>-<short-id>.charter.json` if a new charter is warranted. Use
 the ID style in the existing `work_order.json`. Set `status: "backlog"`.
 
