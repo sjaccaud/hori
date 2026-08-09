@@ -240,7 +240,8 @@ PLAN → BUILD → DEMO
 - If something unexpected happens — test won't pass, approach doesn't
   work, dependency is broken — STOP and bring it to the product owner
   rather than pushing through silently
-- Write a `.devin/SLICE_LOG.md` entry: what was built, what surprised,
+- Write `.devin/SLICE_LOG.md` Current Slice at START (before any code),
+  and a full entry at completion: what was built, what surprised,
   what's unsure, what was skipped
 
 **DEMO (product owner + Devin, 15-30 min):**
@@ -337,13 +338,26 @@ Commit messages start with the slice ID:
 The single source of truth for "where are we right now." Lives in the
 repo, committed, survives crashes. Any new session reads this first.
 
+**Current Slice must be written at session START, not just completion.**
+A crash mid-slice leaves the file accurate — a returning session reads
+the real state, not a stale "None." Update Current Slice as soon as you
+know what you're working on, before writing any code. Update it again
+when the slice completes or the plan changes.
+
 ### Resume protocol (run at the start of every new session)
+
+Run `scripts/devin_resume.sh` — it automates the checks below and
+verifies that the git safety hooks are installed. Or run them manually:
 
 1. Read `.devin/SLICE_LOG.md` → "where are we?"
 2. `git branch` → "what branch are we on?"
 3. `git log --oneline -5` → "what was the last commit?"
 4. `git status` → "are there uncommitted changes?"
 5. Run the tests → "does the code currently work?"
+6. Verify hooks: `.git/hooks/pre-commit` and `.git/hooks/pre-push`
+   exist and are executable. If missing, run
+   `scripts/install_hooks.sh` to rebuild them from the committed
+   generator (see "Git Safety Hooks" above).
 
 This takes 30 seconds. No chat history needed. No memory of the previous
 session needed. The repo IS the state.

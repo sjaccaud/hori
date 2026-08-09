@@ -7,15 +7,28 @@
 
 SLICE-MACOS-02: HORI Feels Alive — Presence (in progress, branch `slice/macos-02-presence`)
 
-Bug fixed mid-slice: the presence indicator showed "Offline" even when
-chat worked. Root cause — the SSE presence stream was started/stopped
-per-window via `WindowGroup`'s `onAppear`/`onDisappear`; closing any
-window tore the stream down globally (`isPresenceConnected = false` for
-all windows) while the chat endpoint (a separate one-shot HTTP POST)
-kept working. Fix: moved the stream lifecycle to an
-`NSApplicationDelegateAdaptor` (`HoriAppDelegate`) — starts at app
-launch, stops at app termination. Added `HoriAppDelegateTests`. 75 tests
-pass on the Mac.
+**Status:** Presence feature built (SSE client, indicator, koi
+reactivity). Two bugs fixed mid-slice (hasNudge raw value, presence
+stream lifecycle). Now hardening crash recovery infrastructure before
+continuing the slice.
+
+**What's done:**
+- PresenceClient (SSE parser), PresenceIndicator, koi reactivity
+- Fixed `hasNudge` raw value to match server wire format (`has_nudge`)
+- Fixed presence indicator showing "Offline" when chat works — moved
+  SSE stream lifecycle from per-window `onAppear`/`onDisappear` to
+  `NSApplicationDelegateAdaptor` (`HoriAppDelegate`). 75 tests pass.
+- Pre-commit PII hook (stops PII entering local git history)
+- `archive/pre-squash` push protected (pushRemote=no-push + hook blocklist)
+
+**What's in progress (this session):**
+- Crash recovery hardening: accurate SLICE_LOG state at session start,
+  reconstructible git hooks (survive re-clone), `scripts/devin_resume.sh`
+  to automate the resume protocol.
+
+**What's next after this session:**
+- Demo SLICE-MACOS-02 to product owner (presence indicator + koi)
+- Then SLICE-MACOS-03: Voice Conversation
 
 ## Slice Queue
 

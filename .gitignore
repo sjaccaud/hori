@@ -93,6 +93,10 @@ docs/*patent_exploration*
 # Personal planning files
 *.devin/plans/
 
+# Git hook patterns (contains PII/secrets — never committed)
+# Rebuilt from this file by scripts/install_hooks.sh
+.devin/hook-patterns.conf
+
 # macOS app build artifacts
 surfaces/macos/build/
 surfaces/macos/DerivedData/
