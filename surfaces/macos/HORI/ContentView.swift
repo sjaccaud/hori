@@ -69,6 +69,12 @@ struct ContentView: View {
                     )
                 }
             }
+            // Fill the entire ZStack/window so the conversation area has a
+            // finite amount of space to flex into and the input field stays
+            // anchored at the bottom. Without this, a ZStack child with an
+            // unspecified size proposal can grow indefinitely and push the
+            // input off-screen.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Presence indicator — top-right corner, overlay.
             if sharedState.isConnectionConfigured {
