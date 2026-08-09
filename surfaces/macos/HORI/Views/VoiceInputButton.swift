@@ -8,6 +8,13 @@ import SwiftUI
 /// - processing: spinner, "Thinking..."
 /// - speaking: animated sound waves, "Speaking..."
 ///
+/// The press gesture is attached to the outer container, NOT to the
+/// state-dependent content. This is critical: if the gesture were on
+/// the inner view, SwiftUI would replace it when the state changes
+/// (idle → listening), and the original gesture's onEnded (release)
+/// would never fire — the user would be stuck "holding" with no way
+/// to release.
+///
 /// Accessibility:
 /// - VoiceOver label changes with state
 /// - Keyboard accessible (Space to hold, Enter to toggle)
@@ -27,24 +34,37 @@ struct VoiceInputButton: View {
     @State private var isPressed = false
 
     var body: some View {
+        // The gesture is on the OUTER container — it stays active
+        // even when the inner content changes with voice state.
+        // This prevents the "stuck holding" bug where the original
+        // gesture's onEnded never fires after a state change.
         buttonContent
-            .onHover { hovering in
-                // Mouse hover state (no action needed, just visual)
-            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        if !isPressed {
+                            isPressed = true
+                            onPress()
+                        }
+                    }
+                    .onEnded { _ in
+                        isPressed = false
+                        onRelease()
+                    }
+            )
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
             .accessibilityHint("Hold to talk, release to send")
             .accessibilityAddTraits(.isButton)
     }
 
-    // MARK: - Button Content
+    // MARK: - Button Content (visual only, no gestures)
 
     @ViewBuilder
     private var buttonContent: some View {
         switch voiceState.phase {
         case .idle:
             micButton(icon: "mic.fill", color: HoriTheme.textSecondary(for: colorScheme))
-                .onPressGesture(onPress: onPress, onRelease: onRelease)
 
         case .listening:
             micButton(icon: "mic.fill", color: HoriTheme.semanticError)
@@ -55,7 +75,6 @@ struct VoiceInputButton: View {
                         .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
                         .offset(y: 32)
                 )
-                .onPressGesture(pressed: true, onPress: {}, onRelease: onRelease)
 
         case .processing:
             micButton(icon: "mic.fill", color: HoriTheme.semanticThinking)
@@ -89,6 +108,7 @@ struct VoiceInputButton: View {
             .font(.system(size: 20, weight: .medium))
             .foregroundStyle(color)
             .frame(width: 44, height: 44)
+            .contentShape(Circle())  // ensures the whole circle is tappable
             .background(
                 Circle()
                     .fill(HoriTheme.surface(for: colorScheme))
@@ -125,23 +145,5 @@ struct VoiceInputButton: View {
         case .processing: return "HORI is thinking"
         case .speaking:   return "HORI is speaking"
         }
-    }
-}
-
-// MARK: - Press Gesture Modifier
-
-extension View {
-    /// A press-and-hold gesture for push-to-talk.
-    /// Calls `onPress` when the button is pressed, `onRelease` when released.
-    func onPressGesture(
-        pressed: Bool = false,
-        onPress: @escaping () -> Void,
-        onRelease: @escaping () -> Void
-    ) -> some View {
-        self.simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in onPress() }
-                .onEnded { _ in onRelease() }
-        )
     }
 }

@@ -11,6 +11,7 @@ struct VoiceSettingsView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(SharedAppState.self) private var sharedState
+    @Environment(\.dismiss) private var dismiss
 
     /// Available voices from the server.
     @State private var voices: [VoicesClient.Voice] = []
@@ -23,9 +24,18 @@ struct VoiceSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Voice")
-                .font(HoriTypography.header)
-                .foregroundStyle(HoriTheme.text(for: colorScheme))
+            // Header with Done button
+            HStack {
+                Text("Voice")
+                    .font(HoriTypography.header)
+                    .foregroundStyle(HoriTheme.text(for: colorScheme))
+                Spacer()
+                Button("Done") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.return)
+            }
 
             if isLoading {
                 HStack(spacing: 8) {
