@@ -94,6 +94,31 @@ The Mac may have uncommitted local changes (e.g. `Info.plist`,
 `Localizable.xcstrings` from prior builds). Leave them alone unless
 they conflict with the work in progress.
 
+## Git Safety Hooks (PII Defense in Depth)
+
+Two local git hooks form a defense-in-depth gate against PII and
+secrets entering the public repo:
+
+1. **`pre-commit`** — scans *staged added lines* for PII patterns and
+   blocks sensitive file paths. Stops PII from entering local history
+   at all. This is the first gate. Added after a session accidentally
+   committed a Tailscale IP + username into `.devin/AGENTS.md` (caught
+   by the product owner before push, but the PII was in a local commit).
+2. **`pre-push`** — blocks `archive/*` and other pre-squash branches,
+   re-scans pushed commits for PII, and blocks sensitive files. This is
+   the second gate, in case the pre-commit hook is bypassed or a
+   re-clone lacks it.
+
+Both hooks are in `.git/hooks/` and are **local-only** — they are NOT
+committed to the repo (they contain the PII patterns and a real secret
+they scan for, so they can't be). If the repo is re-cloned, the hooks
+must be reinstalled manually. The `archive/pre-squash` branch also has
+`branch.<name>.pushRemote` set to `no-push` as a config-level barrier.
+
+Bypass with `--no-verify` is deliberate friction, not a fat-finger
+risk. The hooks are the trusted architecture; the LLM (Devin) is the
+untrusted proposer — same principle as HORI's own safety spine.
+
 ## Current Model
 
 Qwen3.6-27B IQ4_NL on llama.cpp (Spiritbuun fork) with TurboQuant turbo4 KV
