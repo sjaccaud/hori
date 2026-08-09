@@ -7,7 +7,7 @@ import Foundation
 /// Uses a mock URLProtocol to intercept requests without making real
 /// network calls. Verifies request encoding, response decoding, and
 /// error handling for the /v1/voice/chat endpoint.
-@Suite("HoriClient")
+@Suite("HoriClient", .serialized)
 struct HoriClientTests {
 
     // MARK: - Request Encoding
@@ -39,7 +39,7 @@ struct HoriClientTests {
         #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
 
         // Verify the body.
-        let body = try #require(request.httpBody)
+        let body = try #require(MockURLProtocol.lastRequestBody)
         let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         let dict = try #require(json)
         #expect(dict["text"] as? String == "What's up?")
@@ -74,7 +74,7 @@ struct HoriClientTests {
 
         _ = try await client.sendMessage("next", history: history)
 
-        let body = try #require(MockURLProtocol.lastRequest?.httpBody)
+        let body = try #require(MockURLProtocol.lastRequestBody)
         let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         let historyArray = try #require(json?["history"] as? [[String: String]])
         #expect(historyArray[0]["role"] == "user")
@@ -226,6 +226,9 @@ final class MockURLProtocol: URLProtocol {
 
     // Captured request for verification — set by startLoading().
     static var lastRequest: URLRequest?
+    // Captured request body — URLProtocol strips httpBody from POST
+    // requests, so we read it from the body stream and store it here.
+    static var lastRequestBody: Data?
 
     /// Reset all static state between tests.
     static func reset() {
@@ -233,6 +236,7 @@ final class MockURLProtocol: URLProtocol {
         statusCode = 200
         error = nil
         lastRequest = nil
+        lastRequestBody = nil
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
@@ -243,9 +247,23 @@ final class MockURLProtocol: URLProtocol {
         request
     }
 
+    /// Store the body in the request's property bag so it survives
+    /// URLProtocol's body stripping. This is the standard workaround
+    /// for testing POST requests with mock URLProtocols.
+    override class func requestIsCacheEquivalent(to a: URLRequest, to b: URLRequest) -> Bool {
+        false
+    }
+
     override func startLoading() {
         // Capture the request for test verification.
-        MockURLProtocol.lastRequest = request
+        // URLProtocol strips httpBody from POST requests, so read it
+        // from the body stream if present.
+        var capturedRequest = request
+        if capturedRequest.httpBody == nil, let stream = capturedRequest.httpBodyStream {
+            capturedRequest.httpBody = readStream(stream)
+        }
+        MockURLProtocol.lastRequest = capturedRequest
+        MockURLProtocol.lastRequestBody = capturedRequest.httpBody
 
         if let error = MockURLProtocol.error {
             client?.urlProtocol(self, didFailWithError: error)
@@ -265,4 +283,22 @@ final class MockURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    /// Reads all data from an InputStream.
+    private func readStream(_ stream: InputStream) -> Data {
+        var data = Data()
+        stream.open()
+        defer { stream.close() }
+        let bufferSize = 1024
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: bufferSize)
+            if read > 0 {
+                data.append(buffer, count: read)
+            } else {
+                break
+            }
+        }
+        return data
+    }
 }
