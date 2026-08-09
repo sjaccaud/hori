@@ -64,6 +64,36 @@ systemctl status llamacpp
 llama-server --model ~/ai-models/nomic-embed-text-v1.5.Q8_0.gguf --host 127.0.0.1 --port 8081 --ctx-size 2048 --embedding --n-gpu-layers 0 -ctk f16 -ctv f16
 ```
 
+## Building & Testing the macOS App Remotely
+
+The macOS app must be built on the Mac (no macOS toolchain on the GPU
+server). Devin SSHes into the Mac over Tailscale to build and test.
+
+**Connection details (Tailscale IP, username, SSH key, repo path on the
+Mac, xcodegen full path) live in `~/.config/devin/mac-build.md` — a
+user-level file on the GPU server, NOT committed to this repo.** Read
+that file at the start of a session to get the SSH target. It is kept
+out of git because it contains PII (Tailscale IP, username, device
+name) that must not go to GitHub.
+
+General workflow (substitute the `<MAC_SSH_TARGET>` from
+`~/.config/devin/mac-build.md`):
+
+```bash
+# Push changed Swift files to the Mac (when not committing+pushing to origin):
+scp surfaces/macos/HORI/<file>.swift <MAC_SSH_TARGET>:<MAC_REPO_PATH>/surfaces/macos/HORI/<file>.swift
+scp surfaces/macos/Tests/<file>.swift   <MAC_SSH_TARGET>:<MAC_REPO_PATH>/surfaces/macos/Tests/<file>.swift
+
+# Regenerate (picks up new test files) + build + test:
+ssh <MAC_SSH_TARGET> 'cd <MAC_REPO_PATH>/surfaces/macos && \
+  <XCODEGEN_PATH> generate && \
+  xcodebuild test -project HORI.xcodeproj -scheme HORI -destination "platform=macOS"'
+```
+
+The Mac may have uncommitted local changes (e.g. `Info.plist`,
+`Localizable.xcstrings` from prior builds). Leave them alone unless
+they conflict with the work in progress.
+
 ## Current Model
 
 Qwen3.6-27B IQ4_NL on llama.cpp (Spiritbuun fork) with TurboQuant turbo4 KV

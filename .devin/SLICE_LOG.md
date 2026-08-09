@@ -5,7 +5,17 @@
 
 ## Current Slice
 
-(None — ready to plan SLICE-MACOS-02)
+SLICE-MACOS-02: HORI Feels Alive — Presence (in progress, branch `slice/macos-02-presence`)
+
+Bug fixed mid-slice: the presence indicator showed "Offline" even when
+chat worked. Root cause — the SSE presence stream was started/stopped
+per-window via `WindowGroup`'s `onAppear`/`onDisappear`; closing any
+window tore the stream down globally (`isPresenceConnected = false` for
+all windows) while the chat endpoint (a separate one-shot HTTP POST)
+kept working. Fix: moved the stream lifecycle to an
+`NSApplicationDelegateAdaptor` (`HoriAppDelegate`) — starts at app
+launch, stops at app termination. Added `HoriAppDelegateTests`. 75 tests
+pass on the Mac.
 
 ## Slice Queue
 
