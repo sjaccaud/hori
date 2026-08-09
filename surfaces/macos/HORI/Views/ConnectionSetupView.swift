@@ -27,7 +27,7 @@ struct ConnectionSetupView: View {
     /// The result of the connection test (nil = not tested yet).
     @State private var testResult: TestResult?
 
-    enum TestResult {
+    enum TestResult: Equatable {
         case success
         case failure(String)
     }
