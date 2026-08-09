@@ -29,7 +29,16 @@ final class PresenceClient: NSObject {
     let onConnectionChange: (Bool) -> Void
 
     /// The URLSession used for the SSE connection.
-    private let session: URLSession
+    ///
+    /// Created lazily on `start()` with this client as its delegate —
+    /// `URLSessionDataDelegate` methods are how the client receives
+    /// streamed data. The shared `URLSession` cannot have a custom
+    /// delegate, so this client owns its own session.
+    ///
+    /// `nil` until `start()` is called, and set back to `nil` after
+    /// `stop()` invalidates the session. This prevents the retain cycle
+    /// where the session holds this client as its delegate.
+    private var session: URLSession?
 
     /// The current data task (nil when not connected).
     private var task: URLSessionDataTask?
@@ -46,7 +55,7 @@ final class PresenceClient: NSObject {
     private var currentReconnectDelay: TimeInterval = 1.0
 
     init(baseURL: URL,
-         session: URLSession = .shared,
+         session: URLSession? = nil,
          onStateChange: @escaping (PresenceState) -> Void,
          onConnectionChange: @escaping (Bool) -> Void) {
         self.baseURL = baseURL
@@ -59,15 +68,29 @@ final class PresenceClient: NSObject {
     // MARK: - Connection
 
     /// Starts listening to the presence stream. Safe to call multiple times.
+    ///
+    /// Creates a delegate-backed URLSession if one doesn't exist, then
+    /// opens the SSE data task. The shared `URLSession` cannot be used
+    /// as a delegate (its delegate methods would never fire), which is
+    /// why this client creates its own session on demand.
     func start() {
         stopped = false
+        if session == nil {
+            session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
+        }
         connect()
     }
 
     /// Stops listening and prevents reconnection.
+    ///
+    /// Cancels the current data task and invalidates the URLSession,
+    /// breaking the retain cycle where the session holds this client
+    /// as its delegate.
     func stop() {
         stopped = true
         task?.cancel()
+        session?.invalidateAndCancel()
+        session = nil
         task = nil
         buffer = Data()
         DispatchQueue.main.async { self.onConnectionChange(false) }
@@ -75,6 +98,8 @@ final class PresenceClient: NSObject {
 
     /// Opens the SSE connection.
     private func connect() {
+        guard let session = session else { return }
+
         let url = baseURL.appendingPathComponent("v1/presence")
         var request = URLRequest(url: url)
         request.timeoutInterval = .infinity  // SSE is a long-lived stream
