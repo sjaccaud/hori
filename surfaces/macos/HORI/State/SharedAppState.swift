@@ -16,9 +16,16 @@ final class SharedAppState {
 
     /// The aios-core URL (Tailscale IP + port 5680).
     /// Stored in UserDefaults, shared across all windows.
-    var aiosCoreURL: String {
-        get { UserDefaults.standard.string(forKey: "aiosCoreURL") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "aiosCoreURL") }
+    /// Backed by a stored property so @Observable can track changes
+    /// and trigger view re-renders when the URL is set (e.g. from
+    /// ConnectionSetupView). A computed property reading UserDefaults
+    /// directly would be invisible to @Observable, causing views that
+    /// depend on isConnectionConfigured to never update.
+    var aiosCoreURL: String = UserDefaults.standard.string(forKey: "aiosCoreURL") ?? "" {
+        didSet {
+            guard oldValue != aiosCoreURL else { return }
+            UserDefaults.standard.set(aiosCoreURL, forKey: "aiosCoreURL")
+        }
     }
 
     /// Whether the connection has been configured.
@@ -29,9 +36,14 @@ final class SharedAppState {
     // MARK: - Settings
 
     /// Whether feedback sounds are enabled (off by default).
-    var feedbackSoundsEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: "feedbackSoundsEnabled") }
-        set { UserDefaults.standard.set(newValue, forKey: "feedbackSoundsEnabled") }
+    /// Stored property + didSet for @Observable tracking (same pattern
+    /// as aiosCoreURL — a computed property reading UserDefaults would
+    /// be invisible to @Observable).
+    var feedbackSoundsEnabled: Bool = UserDefaults.standard.bool(forKey: "feedbackSoundsEnabled") {
+        didSet {
+            guard oldValue != feedbackSoundsEnabled else { return }
+            UserDefaults.standard.set(feedbackSoundsEnabled, forKey: "feedbackSoundsEnabled")
+        }
     }
 
     // MARK: - Project List (Phase 5)

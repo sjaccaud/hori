@@ -58,6 +58,31 @@ struct WindowStateTests {
         UserDefaults.standard.removeObject(forKey: "aiosCoreURL")
     }
 
+    @Test("isConnectionConfigured changes are observable (@Observable tracking)")
+    @MainActor
+    func isConnectionConfiguredIsObservable() {
+        // @Observable only tracks stored properties. If aiosCoreURL is a
+        // computed property backed by UserDefaults, @Observable can't
+        // detect changes, and views won't re-render when the URL is set.
+        // This test verifies that changing aiosCoreURL fires the
+        // observation tracking for isConnectionConfigured.
+        let state = SharedAppState()
+        UserDefaults.standard.removeObject(forKey: "aiosCoreURL")
+
+        var changeFired = false
+        withObservationTracking {
+            _ = state.isConnectionConfigured
+        } onChange: {
+            changeFired = true
+        }
+
+        state.aiosCoreURL = "https://100.64.0.1:5680"
+
+        #expect(changeFired, "isConnectionConfigured must be observable — changing aiosCoreURL must notify observers")
+
+        UserDefaults.standard.removeObject(forKey: "aiosCoreURL")
+    }
+
     @Test("SharedAppState presence defaults to offline")
     func sharedStatePresenceDefaults() {
         let state = SharedAppState()
