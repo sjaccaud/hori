@@ -36,6 +36,8 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Conversation area — empty state or message list.
+            // This expands to fill available space; the input field
+            // below takes only its natural height.
             if windowState.messages.isEmpty {
                 EmptyStateView()
             } else {
@@ -55,6 +57,7 @@ struct ContentView: View {
             }
 
             // Input field — always visible once configured.
+            // Fixed at bottom; the conversation area above flexes.
             if sharedState.isConnectionConfigured {
                 MessageInputView(
                     text: $inputText,

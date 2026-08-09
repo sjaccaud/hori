@@ -52,7 +52,7 @@ struct EmptyStateView: View {
                 .padding(.bottom, 24)
                 .opacity(appeared ? 1.0 : 0.0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 48)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("HORI. What do you want to make today?")
