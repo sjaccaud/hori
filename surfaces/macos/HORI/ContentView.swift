@@ -53,50 +53,72 @@ struct ContentView: View {
     /// Whether the HTML preview pane is visible.
     @State private var previewVisible: Bool = false
 
+    /// Whether the project sidebar is visible.
+    @State private var sidebarVisible: Bool = false
+
+    /// The project store (shared across windows).
+    @State private var projectStore = ProjectStore()
+
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // Main content: split view (conversation | preview) or just conversation
-            if previewVisible && windowState.previewHTML != nil {
-                SplitConversationView(
-                    conversation: conversationPane,
-                    preview: HTMLPreviewView(html: windowState.previewHTML ?? ""),
-                    previewVisible: $previewVisible,
-                    hasPreviewContent: windowState.previewHTML != nil
+        HStack(spacing: 0) {
+            // Project sidebar (collapsible)
+            if sidebarVisible {
+                ProjectSidebar(
+                    store: projectStore,
+                    selectedProject: $windowState.currentProject
                 )
-            } else {
-                conversationPane
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(width: 240)
+                .background(HoriTheme.surface(for: colorScheme))
+                .transition(.move(edge: .leading))
             }
 
-            // Presence indicator + controls — top-right corner, overlay.
-            if sharedState.isConnectionConfigured {
-                VStack(alignment: .trailing, spacing: 8) {
-                    HStack(spacing: 12) {
-                        PresenceIndicator(
-                            presence: sharedState.presence,
-                            isConnected: sharedState.isPresenceConnected
-                        )
-                        // Preview toggle (only if HTML is available)
-                        if windowState.previewHTML != nil {
-                            previewToggleButton
-                        }
-                        modeToggleButton
-                    }
-                    if isVoiceMode {
-                        Button {
-                            showVoiceSettings = true
-                        } label: {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Voice settings")
-                    }
+            // Main content area
+            ZStack(alignment: .topTrailing) {
+                // Main content: split view (conversation | preview) or just conversation
+                if previewVisible && windowState.previewHTML != nil {
+                    SplitConversationView(
+                        conversation: conversationPane,
+                        preview: HTMLPreviewView(html: windowState.previewHTML ?? ""),
+                        previewVisible: $previewVisible,
+                        hasPreviewContent: windowState.previewHTML != nil
+                    )
+                } else {
+                    conversationPane
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .padding(.top, 12)
-                .padding(.trailing, 16)
+
+                // Presence indicator + controls — top-right corner, overlay.
+                if sharedState.isConnectionConfigured {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        HStack(spacing: 12) {
+                            PresenceIndicator(
+                                presence: sharedState.presence,
+                                isConnected: sharedState.isPresenceConnected
+                            )
+                            // Preview toggle (only if HTML is available)
+                            if windowState.previewHTML != nil {
+                                previewToggleButton
+                            }
+                            modeToggleButton
+                            sidebarToggleButton
+                        }
+                        if isVoiceMode {
+                            Button {
+                                showVoiceSettings = true
+                            } label: {
+                                Image(systemName: "gearshape")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Voice settings")
+                        }
+                    }
+                    .padding(.top, 12)
+                    .padding(.trailing, 16)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 600, minHeight: 400)
         .background(HoriTheme.background(for: colorScheme))
@@ -193,6 +215,22 @@ struct ContentView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    // MARK: - Sidebar Toggle
+
+    private var sidebarToggleButton: some View {
+        Button {
+            withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
+                sidebarVisible.toggle()
+            }
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(sidebarVisible ? "Hide projects" : "Show projects")
     }
 
     // MARK: - Preview Toggle
