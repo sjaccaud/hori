@@ -35,6 +35,8 @@ struct VoiceSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .keyboardShortcut(.return)
+                .accessibilityLabel("Done")
+                .accessibilityHint("Closes voice settings")
             }
 
             if isLoading {
@@ -44,14 +46,19 @@ struct VoiceSettingsView: View {
                         .font(HoriTypography.caption)
                         .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Loading voices")
             } else if let error = errorMessage {
                 Text(error)
                     .font(HoriTypography.caption)
                     .foregroundStyle(HoriTheme.semanticError)
+                    .accessibilityLabel("Error: \(error)")
             } else if voices.isEmpty {
                 Text("No voices available. Check your connection to HORI.")
                     .font(HoriTypography.caption)
                     .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
+                    .accessibilityLabel("No voices available")
+                    .accessibilityHint("Check your connection to HORI")
             } else {
                 voicePicker
             }
@@ -64,6 +71,8 @@ struct VoiceSettingsView: View {
         .frame(width: 360, height: 320)
         .background(HoriTheme.background(for: colorScheme))
         .onAppear { loadVoices() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Voice settings")
     }
 
     // MARK: - Voice Picker
@@ -91,6 +100,8 @@ struct VoiceSettingsView: View {
                 RoundedRectangle(cornerRadius: HoriShapes.small)
                     .stroke(HoriTheme.border(for: colorScheme), lineWidth: 1)
             )
+            .accessibilityLabel("TTS voice")
+            .accessibilityHint("Select the voice HORI uses to speak")
         }
     }
 
@@ -106,6 +117,9 @@ struct VoiceSettingsView: View {
                 get: { sharedState.ttsSpeed },
                 set: { sharedState.ttsSpeed = $0 }
             ), in: 0.5...2.0, step: 0.1)
+            .accessibilityLabel("TTS speed")
+            .accessibilityValue("\(String(format: "%.1f", sharedState.ttsSpeed)) times normal speed")
+            .accessibilityHint("Adjust how fast HORI speaks")
         }
     }
 
