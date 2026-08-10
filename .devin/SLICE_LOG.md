@@ -5,20 +5,63 @@
 
 ## Current Slice
 
-SLICE-MACOS-05: The Workshop — Projects, Files, "Make It Yours"
-(in progress, branch `slice/macos-05-workshop`)
+None — SLICE-MACOS-05 complete, ready for demo/retro.
 
-**Plan:**
-- ProjectStore — manages projects on disk at ~/HORI/projects/
-  (create, list, delete, file I/O)
-- ProjectSidebar — list of projects, create new, select
-- ProjectStructureView — shows file tree of the current project
-- Integration into ContentView (sidebar toggle, project context)
-- When a project is open, HORI's generated files save to the project dir
+## Completed Slices
+
+### SLICE-MACOS-05: The Workshop — Projects, Files, "Make It Yours" (completed 2026-08-10)
+
+**Branch:** `slice/macos-05-workshop`
+
+**What was built:**
+- ProjectStore — manages projects on disk at ~/HORI/projects/.
+  Creates project directories with README.md + hori.log. Handles
+  unique slug generation (my-app, my-app-2, etc.), file I/O with
+  subdirectory creation, recursive file listing, deletion. 11 tests.
+- ProjectSidebar — list of projects, "New Project" sheet (name input
+  → create → select), empty state, project rows with folder icon +
+  name + description, selection highlights.
+- ProjectStructureView — file tree of the current project, sorted by
+  path. File icons by extension (html→globe, css→paintbrush,
+  js→curlybraces, swift→swift, etc.). Refresh button. Empty state.
+- ContentView integration — sidebar toggle button (sidebar.left icon),
+  sidebar + structure view in a 280pt panel, HTML auto-saves to
+  project directory as index.html on stream completion.
+- WKWebView entitlements — added HORI.entitlements with JIT, network
+  client, unsigned executable memory, library validation disabled.
+  Fixed GPU process crash that was half-rendering HTML pages.
+- LLM max_tokens increase — bumped from 500 to 4096 in _llm_payload().
+  500 tokens was cutting off HTML generation mid-CSS.
 
 **Demo criterion:** Click "New Project" → name it → sidebar shows it →
 ask HORI to build something → files appear in the project's file tree →
-project persists across app restarts.
+project persists across app restarts. ✅ Confirmed working — created
+a project, asked HORI for a Scruffy photo album, full HTML rendered
+in preview pane and saved to project directory.
+
+**What surprised us:**
+1. WKWebView GPU process crash — the WebContent process was being
+   killed by sandbox restrictions ("GPUProcess became unresponsive,
+   terminating it"). Required adding entitlements for JIT, unsigned
+   executable memory, and library validation. The macOS console logs
+   are noisy with non-fatal sandbox errors (clipboard, LaunchServices,
+   audio) that don't affect rendering.
+2. LLM max_tokens was 500 — way too short for HTML generation. HORI's
+   responses were getting cut off mid-CSS (`background: #` and then
+   nothing). Bumped to 4096.
+3. HORI refuses to write files ("I can only read files on your
+   machine — I can't create or save new ones for you"). This is the
+   safety spine working as designed — she has read-only filesystem
+   tools. The Mac app handles saving client-side. Workaround: tell
+   her "just write the full HTML in your reply, the app will save it."
+
+**What's unsure:**
+- The "I can't write files" refusal is a UX friction point. Long-term,
+  HORI should know the app handles file saving. This is a system
+  prompt / context issue, not a safety change.
+- DM Sans font weight warnings in console — cosmetic, not functional.
+
+**Tests:** 142 tests pass (131 + 11 ProjectStore).
 
 ## Completed Slices
 
