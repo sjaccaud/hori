@@ -1393,7 +1393,7 @@ async def voice_chat(req: VoiceChatRequest):
     tools_available = get_tool_client().is_available()
 
     system_prompt = _build_system_prompt(
-        state_context, memory_context, voice_mode=True, tools_enabled=tools_available,
+        state_context, memory_context, voice_mode=True, tools_enabled=tools_available, mac_app=True,
     )
 
     # 4. System status injection (if asking about system health)
@@ -1500,7 +1500,7 @@ async def voice_chat_stream(req: VoiceChatRequest):
     tools_available = get_tool_client().is_available()
 
     system_prompt = _build_system_prompt(
-        state_context, memory_context, voice_mode=True, tools_enabled=tools_available,
+        state_context, memory_context, voice_mode=True, tools_enabled=tools_available, mac_app=True,
     )
     system_status_context = _maybe_inject_system_status(req.text)
     if system_status_context:
@@ -1820,7 +1820,7 @@ async def voice_chat_audio(req: VoiceChatRequest):
     if graph_context:
         memory_context = (memory_context + "\n" + graph_context) if memory_context else graph_context
 
-    system_prompt = _build_system_prompt(state_context, memory_context, voice_mode=True)
+    system_prompt = _build_system_prompt(state_context, memory_context, voice_mode=True, mac_app=True)
 
     # 4. System status
     system_status_context = _maybe_inject_system_status(req.text)
@@ -2268,15 +2268,15 @@ def _maybe_inject_system_status(user_text: str) -> str:
     return "\n".join(parts)
 
 
-def _build_system_prompt(state_context: str, memory_context: str, voice_mode: bool = False, tools_enabled: bool = False) -> str:
+def _build_system_prompt(state_context: str, memory_context: str, voice_mode: bool = False, tools_enabled: bool = False, mac_app: bool = False) -> str:
     from hori.persona import build_system_prompt
     return build_system_prompt(
         state_context=state_context,
         memory_context=memory_context,
         voice_mode=voice_mode,
         tools_enabled=tools_enabled,
+        mac_app=mac_app,
     )
-    return prompt
 
 
 def _split_sentences(text: str) -> list[str]:

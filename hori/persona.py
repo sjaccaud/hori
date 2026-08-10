@@ -29,6 +29,7 @@ def build_system_prompt(
     memory_context: str = "",
     voice_mode: bool = False,
     tools_enabled: bool = False,
+    mac_app: bool = False,
 ) -> str:
     """Build the HORI system prompt.
 
@@ -37,6 +38,7 @@ def build_system_prompt(
         memory_context: Retrieved memories relevant to the conversation
         voice_mode: True if response will be spoken via TTS
         tools_enabled: True if filesystem tools are available
+        mac_app: True if the client is the native Mac app
 
     Returns:
         The complete system prompt string.
@@ -48,6 +50,9 @@ def build_system_prompt(
         prompt += _tools_capabilities()
     else:
         prompt += _no_tools_constraints()
+
+    if mac_app:
+        prompt += _mac_app_capabilities()
 
     if voice_mode:
         prompt += _voice_guidelines()
@@ -169,7 +174,8 @@ def _voice_guidelines() -> str:
         "IMPORTANT: Your response will be spoken aloud by a text-to-speech "
         "engine. Write for the ear, not the eye. "
         "Do not use markdown (no asterisks, no hashes, no backticks, no "
-        "brackets). "
+        "brackets) — EXCEPT for ```html code blocks, which the Mac app "
+        "extracts and renders visually (the TTS engine skips them). "
         "Do not spell out filenames, file extensions, or version numbers "
         "unless asked. "
         "NEVER suggest terminal commands, code snippets, or shell commands. "
@@ -185,6 +191,35 @@ def _voice_guidelines() -> str:
         "tonight', give a 1-2 sentence summary. Do not list bullet points, "
         "recap every project, or enumerate tasks. Just the headline. If they "
         "want detail, they'll ask.\n\n"
+    )
+
+
+def _mac_app_capabilities() -> str:
+    """Capabilities block when the client is the native Mac app.
+
+    The Mac app renders HTML from ```html blocks in a live preview pane,
+    and can save generated files to a project directory on disk. HORI
+    doesn't need filesystem tools to 'create files' — the app handles
+    that client-side.
+    """
+    return (
+        "\nMAC APP CAPABILITIES:\n"
+        "You are talking to the user through the native HORI Mac app. "
+        "This app can render HTML you write in ```html code blocks — it "
+        "shows a live preview of whatever you build. When you write HTML "
+        "in a ```html block, the app automatically:\n"
+        "- Renders it live in a preview pane (the user sees it immediately)\n"
+        "- Saves it to a project directory on the user's Mac\n"
+        "You DO NOT need filesystem tools or write access to 'create files' "
+        "— the app handles saving. Just write the full HTML in a ```html "
+        "block and the app does the rest.\n\n"
+        "When the user asks you to 'make' something (a webpage, a landing "
+        "page, a tool, a UI), write complete, self-contained HTML in a "
+        "```html block. Include CSS and JavaScript inline. Make it look "
+        "good — this is the user's first impression of what you can build.\n\n"
+        "Do NOT say 'I can't create files' or 'I don't have access to HTML "
+        "tools' — you CAN build HTML by writing it in your reply. The app "
+        "handles the rest.\n\n"
     )
 
 
