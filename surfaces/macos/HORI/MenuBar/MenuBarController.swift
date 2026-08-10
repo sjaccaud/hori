@@ -14,8 +14,11 @@ import SwiftUI
 /// to any window. This means HORI is always accessible from the menu
 /// bar even when no windows are open.
 ///
+/// The menu is rebuilt every time it opens (via NSMenuDelegate) so the
+/// presence status and sound toggle always reflect the current state.
+///
 /// Traces to: docs/roadmap.md MAC-7 (The Koi, Menu Bar, Sound).
-final class MenuBarController: NSObject {
+final class MenuBarController: NSObject, NSMenuDelegate {
 
     /// The shared app state (for presence and settings).
     private let sharedState: SharedAppState
@@ -46,8 +49,10 @@ final class MenuBarController: NSObject {
             button.image?.isTemplate = true
         }
 
-        // Build and set the menu directly — no delegate complexity
-        let menu = buildMenu()
+        // Create the menu and set ourselves as delegate so it rebuilds
+        // on every open (presence status + sound toggle stay current)
+        let menu = NSMenu()
+        menu.delegate = self
         statusItem?.menu = menu
     }
 
@@ -56,6 +61,16 @@ final class MenuBarController: NSObject {
             NSStatusBar.system.removeStatusItem(statusItem)
         }
         statusItem = nil
+    }
+
+    // MARK: - NSMenuDelegate
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let fresh = buildMenu()
+        for item in fresh.items {
+            menu.addItem(item)
+        }
     }
 
     // MARK: - Menu
@@ -117,14 +132,6 @@ final class MenuBarController: NSObject {
 
     @objc private func toggleSoundFeedback() {
         sharedState.feedbackSoundsEnabled.toggle()
-        // Rebuild menu to update the checkmark
-        if let oldMenu = statusItem?.menu {
-            oldMenu.removeAllItems()
-            let newMenu = buildMenu()
-            for item in newMenu.items {
-                oldMenu.addItem(item)
-            }
-        }
     }
 
     @objc private func quitApp() {
