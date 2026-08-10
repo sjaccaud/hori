@@ -61,13 +61,26 @@ struct ContentView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Project sidebar (collapsible)
+            // Project sidebar + structure (collapsible)
             if sidebarVisible {
-                ProjectSidebar(
-                    store: projectStore,
-                    selectedProject: $windowState.currentProject
-                )
-                .frame(width: 240)
+                VStack(spacing: 0) {
+                    ProjectSidebar(
+                        store: projectStore,
+                        selectedProject: $windowState.currentProject
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // File structure view (when a project is selected)
+                    if let project = windowState.currentProject {
+                        Divider()
+                        ProjectStructureView(
+                            store: projectStore,
+                            project: project
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(width: 280)
                 .background(HoriTheme.surface(for: colorScheme))
                 .transition(.move(edge: .leading))
             }
@@ -252,7 +265,8 @@ struct ContentView: View {
     // MARK: - HTML Preview Detection
 
     /// Checks the latest HORI message for HTML code blocks and updates
-    /// the preview state accordingly.
+    /// the preview state accordingly. Also saves HTML to the current
+    /// project directory if a project is open.
     private func checkForHTMLPreview(messages: [WindowState.Message]) {
         guard let lastMessage = messages.last, lastMessage.role == .hori else {
             // No HORI message to check
@@ -268,6 +282,16 @@ struct ContentView: View {
             // Auto-show preview when HTML is detected
             if !previewVisible {
                 previewVisible = true
+            }
+
+            // Save to project directory if a project is open
+            // (only when not streaming — final save on completion)
+            if let project = windowState.currentProject, !windowState.isSending {
+                try? projectStore.writeFile(
+                    project: project,
+                    filename: "index.html",
+                    content: html
+                )
             }
         }
     }
