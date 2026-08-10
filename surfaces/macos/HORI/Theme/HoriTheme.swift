@@ -65,6 +65,9 @@ enum HoriTheme {
     /// Error / destructive — connection errors, WON'T flyouts.
     static let semanticError = Color(red: 1.0, green: 0.231, blue: 0.188) // #FF3B30
 
+    /// Warning — COULDN'T flyouts, capability limitations.
+    static let semanticWarning = Color(red: 1.0, green: 0.757, blue: 0.027) // #FFC107
+
     // MARK: - Fallback Resolver
 
     /// Returns the appropriate fallback color for the current color scheme.

@@ -59,6 +59,15 @@ struct ContentView: View {
     /// The project store (shared across windows).
     @State private var projectStore = ProjectStore()
 
+    /// Whether a guidance flyout is currently visible.
+    @State private var guidanceVisible: Bool = false
+
+    /// The current guidance flyout type (if any).
+    @State private var guidanceType: GuidanceFlyout.GuidanceType = .couldnt
+
+    /// The current guidance flyout message (if any).
+    @State private var guidanceMessage: String = ""
+
     var body: some View {
         HStack(spacing: 0) {
             // Project sidebar + structure (collapsible)
@@ -85,17 +94,13 @@ struct ContentView: View {
                 .transition(.move(edge: .leading))
             }
 
-            // Main content area
+            // Main content area — canvas model (Phase 6)
             ZStack(alignment: .topTrailing) {
-                // Main content: split view (conversation | preview) or just conversation
-                if previewVisible && windowState.previewHTML != nil {
-                    SplitConversationView(
-                        conversation: conversationPane,
-                        preview: HTMLPreviewView(html: windowState.previewHTML ?? ""),
-                        previewVisible: $previewVisible,
-                        hasPreviewContent: windowState.previewHTML != nil
-                    )
+                if windowState.previewHTML != nil && previewVisible {
+                    // Canvas model: full-screen preview with conversation overlay
+                    canvasModel
                 } else {
+                    // No preview — just conversation
                     conversationPane
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -130,6 +135,19 @@ struct ContentView: View {
                     .padding(.top, 12)
                     .padding(.trailing, 16)
                 }
+
+                // Guidance flyout — top-center, below the controls
+                if guidanceVisible {
+                    GuidanceFlyout(
+                        type: guidanceType,
+                        message: guidanceMessage,
+                        isVisible: $guidanceVisible
+                    )
+                    .frame(maxWidth: 400)
+                    .padding(.top, 60)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -155,6 +173,37 @@ struct ContentView: View {
         }
         .onChange(of: windowState.messages) { _, messages in
             checkForHTMLPreview(messages: messages)
+        }
+    }
+
+    // MARK: - Canvas Model
+
+    /// The canvas model: full-screen HTML preview with conversation
+    /// floating over it. Click the canvas to interact, click the
+    /// conversation to refine.
+    private var canvasModel: some View {
+        ZStack {
+            // Full-screen canvas (HTML preview)
+            CanvasView(
+                html: windowState.previewHTML ?? "",
+                isFocused: windowState.canvasFocus == .canvas,
+                onFocus: {
+                    withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
+                        windowState.canvasFocus = .canvas
+                    }
+                }
+            )
+
+            // Conversation floating over the canvas
+            CanvasConversationOverlay(
+                conversation: conversationPane,
+                focus: $windowState.canvasFocus,
+                onRefocus: {
+                    withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
+                        windowState.canvasFocus = .conversation
+                    }
+                }
+            )
         }
     }
 
@@ -266,7 +315,8 @@ struct ContentView: View {
 
     /// Checks the latest HORI message for HTML code blocks and updates
     /// the preview state accordingly. Also saves HTML to the current
-    /// project directory if a project is open.
+    /// project directory if a project is open, and checks for
+    /// COULDN'T/SHOULDN'T guidance flyout triggers.
     private func checkForHTMLPreview(messages: [WindowState.Message]) {
         guard let lastMessage = messages.last, lastMessage.role == .hori else {
             // No HORI message to check
@@ -276,6 +326,19 @@ struct ContentView: View {
             return
         }
 
+        // Check for guidance flyout triggers (COULDN'T/SHOULDN'T)
+        // Only when not streaming — we don't want to show flyouts
+        // for partial responses
+        if !windowState.isSending {
+            if let guidance = GuidanceFlyout.detect(in: lastMessage.content) {
+                guidanceType = guidance.0
+                guidanceMessage = guidance.1
+                withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
+                    guidanceVisible = true
+                }
+            }
+        }
+
         // Extract HTML from the latest HORI message
         if let html = HTMLExtractor.extractLastHTMLBlock(from: lastMessage.content) {
             windowState.previewHTML = html
@@ -283,6 +346,8 @@ struct ContentView: View {
             if !previewVisible {
                 previewVisible = true
             }
+            // Reset canvas focus to conversation when new HTML arrives
+            windowState.canvasFocus = .conversation
 
             // Save to project directory if a project is open
             // (only when not streaming — final save on completion)
