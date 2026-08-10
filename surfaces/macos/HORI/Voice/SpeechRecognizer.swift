@@ -39,13 +39,8 @@ final class SpeechRecognizer: NSObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var finalTranscript = ""
 
-    /// The target audio format for SFSpeechRecognizer (mono 16kHz Float32).
-    private let targetFormat = AVAudioFormat(
-        commonFormat: .pcmFormatFloat32,
-        sampleRate: 16000,
-        channels: 1,
-        interleaved: false
-    )!
+    /// Tap callback counter (for diagnostics — reset on each start).
+    private var tapCount: Int = 0
 
     override init() {
         self.speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -123,6 +118,7 @@ final class SpeechRecognizer: NSObject {
         stopListening()
 
         finalTranscript = ""
+        tapCount = 0
         isListening = true
 
         // Create recognition request
@@ -159,52 +155,31 @@ final class SpeechRecognizer: NSObject {
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
         print("🎤 Input format: \(inputFormat)")
-        print("🎤 Target format: \(targetFormat)")
 
-        // macOS gives us 4ch 96kHz deinterleaved from the hardware.
-        // We can't install a tap with a different format (crash).
-        // We must install with the hardware format and convert manually.
-        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-            print("🎤 ERROR: Cannot create audio converter")
-            onError?("Audio format conversion failed.")
-            isListening = false
-            return
-        }
-        print("🎤 Converter created successfully")
-
+        // SFSpeechAudioBufferRecognitionRequest.append() accepts any PCM
+        // format — the recognizer handles sample rate and channel conversion
+        // internally. No manual AVAudioConverter needed.
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
 
-            // Calculate output frame count based on sample rate ratio
-            let ratio = self.targetFormat.sampleRate / buffer.format.sampleRate
-            let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
-
-            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: self.targetFormat, frameCapacity: outputFrameCount) else {
-                print("🎤 ERROR: Cannot create output PCM buffer")
-                return
-            }
-            outputBuffer.frameLength = outputFrameCount
-
-            // Use the block-based conversion API.
-            // The closure is called repeatedly until enough input is consumed.
-            var consumedAllInput = false
-            var error: NSError?
-            converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-                if consumedAllInput {
-                    outStatus.pointee = .endOfStream
-                    return nil
-                } else {
-                    outStatus.pointee = .haveData
-                    consumedAllInput = true
-                    return buffer
+            // Log first few taps to verify audio is flowing
+            self.tapCount += 1
+            if self.tapCount <= 3 {
+                let channelData = buffer.floatChannelData
+                let frameLength = Int(buffer.frameLength)
+                var maxSample: Float = 0
+                if let channelData {
+                    for ch in 0..<buffer.format.channelCount {
+                        for i in 0..<min(frameLength, 100) {
+                            let sample = abs(channelData[Int(ch)][i])
+                            if sample > maxSample { maxSample = sample }
+                        }
+                    }
                 }
+                print("🎤 Tap #\(self.tapCount): frames=\(frameLength), maxSample=\(maxSample)")
             }
 
-            if let error {
-                print("🎤 Conversion error: \(error.localizedDescription)")
-            } else {
-                self.recognitionRequest?.append(outputBuffer)
-            }
+            self.recognitionRequest?.append(buffer)
         }
 
         do {
