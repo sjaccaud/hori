@@ -8,6 +8,8 @@ import SwiftUI
 ///
 /// The conversation is positioned as a floating panel — not a sidebar,
 /// not a split view, but a panel that floats over the emerging software.
+/// It has rounded corners, a semi-transparent background, and a gap
+/// from the window edge so it visually "floats."
 ///
 /// Traces to: docs/roadmap.md MAC-6 (The Emerging Canvas).
 struct CanvasConversationOverlay<Content: View>: View {
@@ -26,16 +28,24 @@ struct CanvasConversationOverlay<Content: View>: View {
 
     var body: some View {
         GeometryReader { geo in
-            let panelWidth: CGFloat = min(420, geo.size.width * 0.4)
+            let panelWidth: CGFloat = min(440, geo.size.width * 0.42)
             let isConvoFocused = focus == .conversation
 
             HStack(spacing: 0) {
-                // Floating conversation panel on the left
+                // Floating conversation panel — inset from edges, rounded
                 conversationPanel
                     .frame(width: panelWidth)
-                    .background(HoriTheme.background(for: colorScheme))
-                    .opacity(isConvoFocused ? 1.0 : 0.5)
-                    .scaleEffect(isConvoFocused ? 1.0 : 0.97, anchor: .leading)
+                    .background(
+                        HoriTheme.background(for: colorScheme)
+                            .opacity(isConvoFocused ? 0.95 : 0.7)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .shadow(color: .black.opacity(0.4), radius: 12, x: 4, y: 0)
+                    .padding(.leading, 12)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .opacity(isConvoFocused ? 1.0 : 0.4)
+                    .scaleEffect(isConvoFocused ? 1.0 : 0.96, anchor: .leading)
                     .onTapGesture {
                         if !isConvoFocused {
                             onRefocus()
@@ -52,8 +62,6 @@ struct CanvasConversationOverlay<Content: View>: View {
 
     private var conversationPanel: some View {
         conversation
-            .clipShape(RoundedRectangle(cornerRadius: isConvoFocused ? 0 : 12))
-            .shadow(color: .black.opacity(isConvoFocused ? 0 : 0.3), radius: 8, x: 2, y: 0)
             .animation(HoriAnimations.snappy(reduceMotion: reduceMotion), value: focus == .conversation)
     }
 

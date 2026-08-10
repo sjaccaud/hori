@@ -23,6 +23,7 @@ struct CanvasView: View {
     let onFocus: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -30,21 +31,19 @@ struct CanvasView: View {
             HTMLPreviewView(html: html)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Dimming overlay when conversation is focused
-            if !isFocused {
-                Color.black.opacity(0.0)
-                    .ignoresSafeArea()
-            } else {
-                // Subtle dim — the canvas is "behind" the conversation
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-                    .onTapGesture {
+            // Dimming overlay when conversation is focused.
+            // The canvas is "behind" the conversation — dimmed but visible.
+            // Click to shift focus to the canvas (interact with what HORI built).
+            Color.black
+                .opacity(isFocused ? 0 : 0.45)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    if !isFocused {
                         onFocus()
                     }
-                    .accessibilityLabel("Click to interact with the canvas")
-            }
+                }
+                .accessibilityLabel(isFocused ? "Canvas (interactive)" : "Canvas (click to interact)")
+                .animation(HoriAnimations.snappy(reduceMotion: reduceMotion), value: isFocused)
         }
-        .animation(HoriAnimations.snappy(reduceMotion: false), value: isFocused)
     }
 }
