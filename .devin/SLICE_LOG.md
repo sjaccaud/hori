@@ -5,23 +5,57 @@
 
 ## Current Slice
 
-SLICE-MACOS-03: Voice Conversation (in progress, branch `slice/macos-03-voice`)
+None — SLICE-MACOS-03 complete, ready for demo/retro.
 
-**Plan:**
-- Push-to-talk mic button (press and hold to record, release to send)
-- Streaming endpoint (/v1/voice/chat/stream) — text chunks + audio chunks via SSE
-- SFSpeechRecognizer for on-device STT
-- AudioPlayer for WAV playback (queued, plays sentences as they arrive)
-- Voice picker in settings (fetches /v1/audio/voices)
-- Voice state machine: idle → listening → processing → speaking → idle
+## Completed Slices
 
-**Demo criterion:** Press and hold mic button → speak → release → HORI
+### SLICE-MACOS-03: Voice Conversation (completed 2026-08-09)
+
+**Branch:** `slice/macos-03-voice`
+
+**What was built:**
+- VoiceState state machine (idle/listening/processing/speaking) with TDD
+- VoiceChatStreamClient — SSE parser for /v1/voice/chat/stream (text,
+  audio, searching, correction, done, error events)
+- VoicesClient — GET /v1/audio/voices, sorted by name
+- AudioPlayer — queue-based WAV playback, chunks sorted by index
+- SpeechRecognizer — SFSpeechRecognizer + AVAudioEngine, on-device STT
+  with mono downmix for macOS multi-channel audio
+- VoiceInputButton — toggle mic button (click to start, click to stop)
+- VoiceSettingsView — voice picker + speed slider, Done button
+- VoiceViewModel — coordinates the full voice round-trip
+- ContentView integration — voice mode toggle, live partial transcript,
+  streaming text into conversation bubbles, voice settings sheet
+
+**Demo criterion:** Click mic button → speak → click again → HORI
 replies in text bubble AND speaks the reply aloud through speakers.
+✅ Confirmed working — two-way voice conversation, audible, fast.
 
-**Decisions (product owner):**
-- PTT (foolproof). Windows-first keyboard on Mac — use UI button, not Cmd key.
-- Streaming first (lower perceived latency)
-- Voice picker in settings from day one
+**What surprised us:**
+- PTT (press-and-hold) doesn't work on macOS — DragGesture fires
+  press+release almost instantly. Switched to toggle (click to start,
+  click to stop).
+- SFSpeechRecognizer requires explicit permission request — auth=0
+  (notDetermined) silently fails with "No speech detected."
+- macOS input node gives 4-channel 44100/96000Hz audio. SFSpeechRecognizer
+  doesn't handle multi-channel well. Solution: downmix to mono by copying
+  channel 0 (no sample rate conversion needed).
+- "Recognition request was canceled" warning when stopping — fixed by
+  calling endAudio() instead of cancel() in stopListening().
+
+**What's unsure:**
+- SFSpeechRecognizer quality is on-device, not as good as cloud STT.
+  May need to revisit for production quality.
+- Stale memories in SQLite (Qdrant, Qwen 3.8, VRAM) are being retrieved
+  alongside current state. Will resolve once HORI can read docs directly.
+
+**What was skipped:**
+- Push-to-talk (replaced with toggle — more reliable on macOS)
+- Manual AVAudioConverter (replaced with simple channel 0 copy —
+  AVAudioConverter failed with -10877 on deinterleaved 4-channel input)
+
+**Tests:** 118 tests pass (13 VoiceChatStreamClient, 6 VoicesClient,
+8 AudioPlayer, plus existing 91).
 
 ## Slice Queue
 
