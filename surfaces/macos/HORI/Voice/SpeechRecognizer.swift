@@ -156,9 +156,17 @@ final class SpeechRecognizer: NSObject {
         let inputFormat = inputNode.outputFormat(forBus: 0)
         print("🎤 Input format: \(inputFormat)")
 
-        // SFSpeechAudioBufferRecognitionRequest.append() accepts any PCM
-        // format — the recognizer handles sample rate and channel conversion
-        // internally. No manual AVAudioConverter needed.
+        // Create a mono format at the same sample rate as the input.
+        // SFSpeechRecognizer may not handle 4-channel audio well on macOS.
+        // We downmix to mono by taking channel 0 (no sample rate conversion).
+        let monoFormat = AVAudioFormat(
+            commonFormat: inputFormat.commonFormat,
+            sampleRate: inputFormat.sampleRate,
+            channels: 1,
+            interleaved: false
+        )!
+        print("🎤 Mono format: \(monoFormat)")
+
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
 
@@ -169,17 +177,28 @@ final class SpeechRecognizer: NSObject {
                 let frameLength = Int(buffer.frameLength)
                 var maxSample: Float = 0
                 if let channelData {
-                    for ch in 0..<buffer.format.channelCount {
-                        for i in 0..<min(frameLength, 100) {
-                            let sample = abs(channelData[Int(ch)][i])
-                            if sample > maxSample { maxSample = sample }
-                        }
+                    for i in 0..<min(frameLength, 100) {
+                        let sample = abs(channelData[0][i])
+                        if sample > maxSample { maxSample = sample }
                     }
                 }
                 print("🎤 Tap #\(self.tapCount): frames=\(frameLength), maxSample=\(maxSample)")
             }
 
-            self.recognitionRequest?.append(buffer)
+            // Downmix to mono: create a mono buffer and copy channel 0
+            let frameLength = buffer.frameLength
+            guard let monoBuffer = AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: frameLength) else { return }
+            monoBuffer.frameLength = frameLength
+
+            if let inputData = buffer.floatChannelData,
+               let outputData = monoBuffer.floatChannelData {
+                // Copy channel 0 to the mono buffer
+                for i in 0..<Int(frameLength) {
+                    outputData[0][i] = inputData[0][i]
+                }
+            }
+
+            self.recognitionRequest?.append(monoBuffer)
         }
 
         do {
