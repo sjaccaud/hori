@@ -5,26 +5,62 @@
 
 ## Current Slice
 
-SLICE-MACOS-06: The Emerging Canvas — Sims Builder Mode
-(in progress, branch `slice/macos-06-canvas`)
+None — SLICE-MACOS-06 complete, ready for demo/retro.
 
-**Plan:**
-- Replace split view with canvas model — conversation floats over
-  full-screen preview (the "software" emerges behind the conversation)
-- Canvas is greyed-out/dimmed when conversation is focused
-- Click outside the conversation to interact with the canvas (focus shifts)
-- Click back on conversation to refine (focus returns)
-- Guidance flyouts for COULDN'T/SHOULDN'T operations (client-side only,
-  detected from HORI's response text — no safety architecture changes)
-- Smooth focus transitions with animation
+## Completed Slices
+
+### SLICE-MACOS-06: The Emerging Canvas — Sims Builder Mode (completed 2026-08-10)
+
+**Branch:** `slice/macos-06-canvas`
+
+**What was built:**
+- CanvasView — full-screen HTML preview with dim/focus states. When
+  conversation is focused, canvas is dimmed (45% black overlay).
+  Click the dim overlay to shift focus to the canvas.
+- CanvasConversationOverlay — conversation floats over the canvas as
+  a 440pt panel on the left. Semi-transparent background (95% when
+  focused, 70% when dimmed), rounded corners (14pt), shadow, 12pt
+  inset from edges. When canvas is focused, conversation dims to 40%
+  opacity and scales to 96%. Click dimmed conversation to refocus.
+- GuidanceFlyout — COULDN'T/SHOULDN'T flyout that appears when HORI
+  indicates a limitation. Client-side detection from response text
+  (no safety architecture changes). 12 tests.
+- HoriTheme.semanticWarning added (amber #FFC107).
+- System prompt updated — _mac_app_capabilities() tells HORI she can
+  write HTML in ```html blocks and the Mac app handles rendering/saving.
+  Voice guidelines updated to allow ```html blocks (TTS skips them).
+  mac_app=True passed from /v1/voice/chat and /v1/voice/chat/stream.
+- HoriClient timeout bumped 60s→300s (4096 max_tokens takes longer
+  than 60s for full HTML pages).
 
 **Demo criterion:** Ask HORI to build something → HTML renders
 full-screen behind the conversation → conversation dims → click on
 the canvas to interact with what she built → click back to continue
-refining in conversation.
+refining in conversation. ✅ Confirmed working — Scruffy's landing
+page rendered full-screen behind floating conversation panel.
 
-**Safety scope:** Deferred. No CapabilityChecker, no topology, no
-server-side safety changes. Flyouts are purely client-side UI.
+**What surprised us:**
+1. HORI refused to generate HTML — her system prompt said she
+   "cannot create files" and "never use backticks" (voice mode).
+   Fixed by adding _mac_app_capabilities() that tells her the Mac app
+   renders and saves HTML automatically.
+2. HoriClient 60s timeout — with max_tokens at 4096, generating a
+   full HTML page takes longer than 60s. Caused "Could not reach HORI"
+   errors. Bumped to 300s. Long-term: switch text mode to streaming.
+3. The overlay initially looked like a split pane, not a floating
+   panel. Fixed with semi-transparent background, rounded corners,
+   shadow, and edge insets so it visually "floats" over the canvas.
+
+**What's unsure:**
+- Text mode still uses non-streaming HoriClient. Should switch to
+  VoiceChatStreamClient for consistency and to avoid timeout issues.
+- Guidance flyout detection is client-side heuristic. The full vision
+  uses a CapabilityChecker on the server side (deferred).
+- The canvas focus model works but needs refinement — the dim/bright
+  transitions could be smoother, and the conversation panel could
+  be draggable/resizable in a future iteration.
+
+**Tests:** 154 tests pass (142 + 12 GuidanceFlyout).
 
 ## Completed Slices
 
