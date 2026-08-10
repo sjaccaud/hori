@@ -207,7 +207,11 @@ final class SpeechRecognizer: NSObject {
         } catch {
             print("🎤 Audio engine start failed: \(error)")
             onError?("Failed to start audio engine: \(error.localizedDescription)")
-            cleanup()
+            audioEngine.inputNode.removeTap(onBus: 0)
+            recognitionRequest.endAudio()
+            self.recognitionRequest = nil
+            recognitionTask?.cancel()
+            self.recognitionTask = nil
             isListening = false
         }
     }
@@ -217,11 +221,30 @@ final class SpeechRecognizer: NSObject {
     func stopListening() {
         guard isListening else { return }
         isListening = false
-        cleanup()
 
+        // Stop the audio engine and tap — no more audio will be captured.
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+
+        // Signal that no more audio is coming. This lets the recognition
+        // task deliver its final result. Do NOT cancel the task — that
+        // would discard the final transcript.
+        recognitionRequest?.endAudio()
+
+        // Deliver the transcript we have so far. The recognition task
+        // may still deliver a final result via its callback, which will
+        // update finalTranscript — but we deliver what we have now so
+        // the UI can proceed immediately.
         let transcript = finalTranscript
         DispatchQueue.main.async {
             self.onFinalTranscript?(transcript)
+        }
+
+        // Clean up the request and task after a brief delay to allow
+        // the recognizer to finish processing.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.recognitionRequest = nil
+            self?.recognitionTask = nil
         }
     }
 
@@ -229,12 +252,6 @@ final class SpeechRecognizer: NSObject {
     func cancel() {
         isListening = false
         finalTranscript = ""
-        cleanup()
-    }
-
-    // MARK: - Cleanup
-
-    private func cleanup() {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
