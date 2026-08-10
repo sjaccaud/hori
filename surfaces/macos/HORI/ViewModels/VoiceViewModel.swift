@@ -42,6 +42,9 @@ final class VoiceViewModel {
     /// Callback when an error occurs.
     var onError: ((String) -> Void)?
 
+    /// Callback when the user's voice message is sent (transcribed text).
+    var onSent: ((String) -> Void)?
+
     init(baseURL: URL, voice: String = "af_heart", speed: Float = 1.0) {
         self.baseURL = baseURL
         self.voice = voice
@@ -109,6 +112,7 @@ final class VoiceViewModel {
     // MARK: - Send to HORI
 
     private func sendToHori(text: String) {
+        onSent?(text)
         streamClient = VoiceChatStreamClient(
             baseURL: baseURL,
             onText: { [weak self] chunk in

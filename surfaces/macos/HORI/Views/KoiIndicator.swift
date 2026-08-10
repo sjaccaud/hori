@@ -31,8 +31,15 @@ struct KoiIndicator: View {
             .shadow(color: koiShadow, radius: koiShadowRadius)
             .accessibilityLabel("HORI koi")
             .accessibilityValue(effectivePresence.accessibilityDescription)
-            .onAppear { startAnimation() }
-            .onChange(of: sharedState.presence) { _, _ in startAnimation() }
+            .onAppear {
+                startAnimation()
+            }
+            .onChange(of: sharedState.presence) { _, _ in
+                startAnimation()
+            }
+            .onChange(of: sharedState.isPresenceConnected) { _, _ in
+                startAnimation()
+            }
     }
 
     // MARK: - Presence
@@ -121,7 +128,11 @@ struct KoiIndicator: View {
                 glowing = true
             }
         case .offline:
-            break
+            // Even when offline, do a very subtle float so the koi
+            // doesn't look completely dead
+            withAnimation(.easeInOut(duration: 4.0).repeatForever(autoreverses: true)) {
+                floating = true
+            }
         }
     }
 }

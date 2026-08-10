@@ -24,7 +24,6 @@ final class MenuBarController: NSObject {
     private var statusItem: NSStatusItem?
 
     /// Whether the connection settings sheet should be shown.
-    /// Bound to ContentView's showConnectionSetup.
     var onShowConnectionSettings: (() -> Void)?
 
     /// Whether to start a new conversation.
@@ -41,27 +40,15 @@ final class MenuBarController: NSObject {
         guard statusItem == nil else { return }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+
         if let button = statusItem?.button {
             button.image = NSImage(systemSymbolName: "fish.fill", accessibilityDescription: "HORI")
             button.image?.isTemplate = true
         }
 
-        // Set up the menu
+        // Build and set the menu directly — no delegate complexity
         let menu = buildMenu()
         statusItem?.menu = menu
-        statusItem?.menu?.delegate = self
-
-        updateIcon()
-
-        // Observe presence changes
-        withObservationTracking {
-            _ = sharedState.presence
-            _ = sharedState.isPresenceConnected
-        } onChange: { [weak self] in
-            DispatchQueue.main.async {
-                self?.updateIcon()
-            }
-        }
     }
 
     func stop() {
@@ -71,37 +58,11 @@ final class MenuBarController: NSObject {
         statusItem = nil
     }
 
-    // MARK: - Icon
-
-    private func updateIcon() {
-        let presence = sharedState.isPresenceConnected ? sharedState.presence : .offline
-        let symbolName: String
-        switch presence {
-        case .idle:      symbolName = "fish.fill"
-        case .thinking:  symbolName = "fish.fill"
-        case .hasNudge:  symbolName = "fish.fill.circle"
-        case .offline:   symbolName = "fish"
-        }
-
-        statusItem?.button?.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "HORI — \(presence.rawValue)")
-        statusItem?.button?.image?.isTemplate = true
-
-        // Re-observe for next change
-        withObservationTracking {
-            _ = sharedState.presence
-            _ = sharedState.isPresenceConnected
-        } onChange: { [weak self] in
-            DispatchQueue.main.async {
-                self?.updateIcon()
-            }
-        }
-    }
-
     // MARK: - Menu
 
     func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.autoenablesItems = false
+        menu.showsStateColumn = true
 
         // Presence status (disabled — just shows current state)
         let presence = sharedState.isPresenceConnected ? sharedState.presence : .offline
@@ -156,23 +117,18 @@ final class MenuBarController: NSObject {
 
     @objc private func toggleSoundFeedback() {
         sharedState.feedbackSoundsEnabled.toggle()
+        // Rebuild menu to update the checkmark
+        if let oldMenu = statusItem?.menu {
+            oldMenu.removeAllItems()
+            let newMenu = buildMenu()
+            for item in newMenu.items {
+                oldMenu.addItem(item)
+            }
+        }
     }
 
     @objc private func quitApp() {
         NSApp.terminate(nil)
-    }
-}
-
-// MARK: - NSMenuDelegate
-
-extension MenuBarController: NSMenuDelegate {
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        // Rebuild the menu each time it opens to reflect current state
-        menu.removeAllItems()
-        let newMenu = buildMenu()
-        for item in newMenu.items {
-            menu.addItem(item)
-        }
     }
 }
 

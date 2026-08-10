@@ -399,6 +399,12 @@ struct ContentView: View {
             speed: Float(sharedState.ttsSpeed)
         )
 
+        // Wire sent callback — add user message and play sound
+        vm.onSent = { text in
+            windowState.messages.append(WindowState.Message(role: .user, content: text))
+            SoundFeedback.play(.messageSent, enabled: sharedState.feedbackSoundsEnabled)
+        }
+
         // Wire text chunks to update the conversation
         vm.onTextChunk = { chunk in
             // Accumulate streaming text into the last HORI message
