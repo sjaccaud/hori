@@ -5,7 +5,25 @@
 
 ## Current Slice
 
-None — SLICE-MACOS-06 complete, ready for demo/retro.
+SLICE-MACOS-07: The Koi, Menu Bar, Sound, Accessibility Audit
+(in progress, branch `slice/macos-07-personality`)
+
+**Plan:**
+- Menu bar presence — NSStatusItem with HORI icon, shows presence,
+  quick actions (new conversation, open window, quit)
+- Connection settings menu item (accessible after first-run, was deferred)
+- Sound feedback — subtle sounds for message sent, message received,
+  presence changes. Opt-in via feedbackSoundsEnabled.
+- Koi refinement — keep SF Symbol for now (Rive/Lottie is a separate
+  effort), but make it persistent during conversation (currently
+  disappears when chat starts)
+- Accessibility audit — verify all Phase 1-6 views have labels, hints,
+  reduce-motion support, keyboard navigation
+
+**Demo criterion:** HORI icon in the menu bar showing presence state.
+Click it → menu with quick actions. Send a message → subtle sound
+feedback (if enabled). Koi visible during conversation. All views
+pass accessibility audit.
 
 ## Completed Slices
 
