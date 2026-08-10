@@ -5,18 +5,37 @@
 
 ## Current Slice
 
-SLICE-MACOS-04: Live Preview — First Taste of Emerging Software
-(in progress, branch `slice/macos-04-live-preview`)
+None — SLICE-MACOS-04 complete, ready for demo/retro.
 
-**Plan:**
-- Detect ```html code blocks in HORI's messages
-- Add a split view: conversation | WKWebView preview
-- Render the HTML live as it streams in
-- Toggle between full conversation and split view
+## Completed Slices
 
-**Demo criterion:** Ask HORI "make me a simple landing page" →
-she replies with HTML → it renders live in a preview pane next
-to the conversation.
+### SLICE-MACOS-04: Live Preview — First Taste of Emerging Software (completed 2026-08-09)
+
+**Branch:** `slice/macos-04-live-preview`
+
+**What was built:**
+- HTMLExtractor — extracts ```html code blocks from message text.
+  Handles streaming (unclosed fences), multiple blocks, case-insensitive
+  fence tags. 13 tests.
+- HTMLPreviewView — WKWebView wrapper (NSViewRepresentable). Renders
+  HTML live, blocks external navigation (security), updates as content
+  changes.
+- SplitConversationView — HSplitView with conversation | preview pane.
+  Preview header with close button.
+- ContentView integration — auto-detects HTML in HORI's messages,
+  auto-shows preview pane, toggle button in top-right, works with both
+  text and voice mode.
+
+**Demo criterion:** Ask HORI "make me a simple landing page" → she
+replies with HTML → it renders live in a preview pane next to the
+conversation. ✅ Confirmed working — "welcome to your project" with
+a Get Started button rendered live.
+
+**What's the vision:** This is the "first taste" — a functional split
+view. The elegant version is MAC-6 (Emerging Canvas) where the
+conversation floats over the thing being built, not beside it.
+
+**Tests:** 131 tests pass (118 + 13 HTMLExtractor).
 
 ## Completed Slices
 
