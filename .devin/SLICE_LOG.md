@@ -5,7 +5,20 @@
 
 ## Current Slice
 
-None — SLICE-MACOS-04 complete, ready for demo/retro.
+SLICE-MACOS-05: The Workshop — Projects, Files, "Make It Yours"
+(in progress, branch `slice/macos-05-workshop`)
+
+**Plan:**
+- ProjectStore — manages projects on disk at ~/HORI/projects/
+  (create, list, delete, file I/O)
+- ProjectSidebar — list of projects, create new, select
+- ProjectStructureView — shows file tree of the current project
+- Integration into ContentView (sidebar toggle, project context)
+- When a project is open, HORI's generated files save to the project dir
+
+**Demo criterion:** Click "New Project" → name it → sidebar shows it →
+ask HORI to build something → files appear in the project's file tree →
+project persists across app restarts.
 
 ## Completed Slices
 
