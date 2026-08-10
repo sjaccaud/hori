@@ -83,17 +83,29 @@ struct HORIApp: App {
 /// `startPresenceStream()` is a no-op when the connection isn't
 /// configured yet (first run); `ConnectionSetupView.save()` starts it
 /// once the URL is set. Safe to call multiple times.
+///
+/// In Phase 7, the delegate also owns the MenuBarController (menu bar
+/// presence with quick actions).
 final class HoriAppDelegate: NSObject, NSApplicationDelegate {
 
     /// Shared state — one instance for the entire app.
     /// Connection config, project list, presence, settings.
     let sharedState = SharedAppState()
 
+    /// Menu bar controller — HORI icon in the system menu bar.
+    private var menuBarController: MenuBarController?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         sharedState.startPresenceStream()
+
+        // Start menu bar presence
+        let mbc = MenuBarController(sharedState: sharedState)
+        mbc.start()
+        menuBarController = mbc
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         sharedState.stopPresenceStream()
+        menuBarController?.stop()
     }
 }

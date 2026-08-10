@@ -400,6 +400,8 @@ struct ContentView: View {
             } else {
                 // Start a new HORI message
                 windowState.messages.append(WindowState.Message(role: .hori, content: chunk))
+                // Sound feedback: message received (first chunk)
+                SoundFeedback.play(.messageReceived, enabled: sharedState.feedbackSoundsEnabled)
             }
         }
 
@@ -430,6 +432,9 @@ struct ContentView: View {
         // Add the user message immediately.
         let userMessage = WindowState.Message(role: .user, content: text)
         windowState.messages.append(userMessage)
+
+        // Sound feedback: message sent
+        SoundFeedback.play(.messageSent, enabled: sharedState.feedbackSoundsEnabled)
 
         // Clear the input field.
         inputText = ""
@@ -464,6 +469,8 @@ struct ContentView: View {
                     windowState.messages.append(WindowState.Message(role: .hori, content: reply))
                     windowState.isSending = false
                     windowState.connectionState = .connected
+                    // Sound feedback: message received
+                    SoundFeedback.play(.messageReceived, enabled: sharedState.feedbackSoundsEnabled)
                 }
             } catch {
                 await MainActor.run {
