@@ -70,7 +70,7 @@ struct HoriClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 60
+        request.timeoutInterval = 300
 
         let body = VoiceChatRequest(
             text: text,
