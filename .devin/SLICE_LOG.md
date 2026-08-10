@@ -5,7 +5,18 @@
 
 ## Current Slice
 
-None — SLICE-MACOS-03 complete, ready for demo/retro.
+SLICE-MACOS-04: Live Preview — First Taste of Emerging Software
+(in progress, branch `slice/macos-04-live-preview`)
+
+**Plan:**
+- Detect ```html code blocks in HORI's messages
+- Add a split view: conversation | WKWebView preview
+- Render the HTML live as it streams in
+- Toggle between full conversation and split view
+
+**Demo criterion:** Ask HORI "make me a simple landing page" →
+she replies with HTML → it renders live in a preview pane next
+to the conversation.
 
 ## Completed Slices
 
