@@ -14,6 +14,8 @@ import SwiftUI
 /// - Voice mode toggle (text ↔ voice)
 /// - `VoiceInputButton` for push-to-talk
 /// - Streaming text + audio playback
+/// In Phase 4, it adds:
+/// - Live HTML preview pane (split view when HORI generates HTML)
 ///
 /// Receives `WindowState` (per-window) and `SharedAppState` (shared)
 /// via `@Environment`. The background is always `HoriTheme.background`
@@ -48,44 +50,25 @@ struct ContentView: View {
     /// Whether voice settings sheet is showing.
     @State private var showVoiceSettings: Bool = false
 
+    /// Whether the HTML preview pane is visible.
+    @State private var previewVisible: Bool = false
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            VStack(spacing: 0) {
-                // Conversation area — empty state or message list.
-                if windowState.messages.isEmpty {
-                    EmptyStateView()
-                } else {
-                    ConversationView(
-                        messages: windowState.messages,
-                        isSending: windowState.isSending
-                    )
-                }
-
-                // Error banner (if any).
-                if let error = errorMessage {
-                    ErrorBanner(text: error) {
-                        withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
-                            errorMessage = nil
-                        }
-                    }
-                }
-
-                // Input area — text or voice, depending on mode.
-                if sharedState.isConnectionConfigured {
-                    if isVoiceMode {
-                        voiceInputArea
-                    } else {
-                        MessageInputView(
-                            text: $inputText,
-                            isSending: windowState.isSending,
-                            onSend: sendMessage
-                        )
-                    }
-                }
+            // Main content: split view (conversation | preview) or just conversation
+            if previewVisible && windowState.previewHTML != nil {
+                SplitConversationView(
+                    conversation: conversationPane,
+                    preview: HTMLPreviewView(html: windowState.previewHTML ?? ""),
+                    previewVisible: $previewVisible,
+                    hasPreviewContent: windowState.previewHTML != nil
+                )
+            } else {
+                conversationPane
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Presence indicator + mode toggle — top-right corner, overlay.
+            // Presence indicator + controls — top-right corner, overlay.
             if sharedState.isConnectionConfigured {
                 VStack(alignment: .trailing, spacing: 8) {
                     HStack(spacing: 12) {
@@ -93,6 +76,10 @@ struct ContentView: View {
                             presence: sharedState.presence,
                             isConnected: sharedState.isPresenceConnected
                         )
+                        // Preview toggle (only if HTML is available)
+                        if windowState.previewHTML != nil {
+                            previewToggleButton
+                        }
                         modeToggleButton
                     }
                     if isVoiceMode {
@@ -131,6 +118,46 @@ struct ContentView: View {
                 createVoiceViewModel()
             }
         }
+        .onChange(of: windowState.messages) { _, messages in
+            checkForHTMLPreview(messages: messages)
+        }
+    }
+
+    // MARK: - Conversation Pane
+
+    /// The conversation area (messages + error banner + input).
+    /// Used both standalone and inside SplitConversationView.
+    private var conversationPane: some View {
+        VStack(spacing: 0) {
+            if windowState.messages.isEmpty {
+                EmptyStateView()
+            } else {
+                ConversationView(
+                    messages: windowState.messages,
+                    isSending: windowState.isSending
+                )
+            }
+
+            if let error = errorMessage {
+                ErrorBanner(text: error) {
+                    withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
+                        errorMessage = nil
+                    }
+                }
+            }
+
+            if sharedState.isConnectionConfigured {
+                if isVoiceMode {
+                    voiceInputArea
+                } else {
+                    MessageInputView(
+                        text: $inputText,
+                        isSending: windowState.isSending,
+                        onSend: sendMessage
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Voice Input Area
@@ -166,6 +193,45 @@ struct ContentView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    // MARK: - Preview Toggle
+
+    private var previewToggleButton: some View {
+        Button {
+            withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
+                previewVisible.toggle()
+            }
+        } label: {
+            Image(systemName: previewVisible ? "rectangle.split.2x1.slash" : "rectangle.split.2x1")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(previewVisible ? "Hide preview" : "Show preview")
+    }
+
+    // MARK: - HTML Preview Detection
+
+    /// Checks the latest HORI message for HTML code blocks and updates
+    /// the preview state accordingly.
+    private func checkForHTMLPreview(messages: [WindowState.Message]) {
+        guard let lastMessage = messages.last, lastMessage.role == .hori else {
+            // No HORI message to check
+            if !windowState.isSending {
+                windowState.previewHTML = nil
+            }
+            return
+        }
+
+        // Extract HTML from the latest HORI message
+        if let html = HTMLExtractor.extractLastHTMLBlock(from: lastMessage.content) {
+            windowState.previewHTML = html
+            // Auto-show preview when HTML is detected
+            if !previewVisible {
+                previewVisible = true
+            }
+        }
     }
 
     // MARK: - Mode Toggle
