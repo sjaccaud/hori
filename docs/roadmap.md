@@ -529,22 +529,32 @@ established in Phase 0.*
   for /v1/presence. Presence states: idle, thinking, has_nudge, offline.)
 
 ### Phase 3: Voice
-- [ ] **MAC-3: Voice Conversation** `[A]` (Replace voice.html with
+- [x] **MAC-3: Voice Conversation** `[A]` (Replace voice.html with
   native voice. SFSpeechRecognizer for STT, audio playback for TTS.
   Voice state machine: idle → listening → processing → speaking.)
+  **COMPLETE** — Two-way voice conversation working. Toggle mic button
+  (click to start/stop), SFSpeechRecognizer with mono downmix for macOS
+  multi-channel audio, streaming TTS playback via AudioPlayer. 118 tests.
 
 ### Phase 4: Live Preview
-- [ ] **MAC-4: Live Preview — First Taste of Emerging Software** `[A]`
+- [x] **MAC-4: Live Preview — First Taste of Emerging Software** `[A]`
   (When HORI generates HTML in conversation, render it live in a preview
   pane. Split view: conversation | preview. HTML extraction from
   ```html blocks. WKWebView.)
+  **COMPLETE** — HTMLExtractor detects ```html blocks (including
+  streaming/unclosed), HTMLPreviewView renders in WKWebView,
+  SplitConversationView auto-shows when HTML detected. 131 tests.
 
 ### Phase 5: Projects + Baked-In Rigor
-- [ ] **MAC-5: The Workshop — Projects, Files, "Make It Yours"** `[A]`
+- [x] **MAC-5: The Workshop — Projects, Files, "Make It Yours"** `[A]`
   (Projects persist. Files live on the Mac at ~/HORI/projects/. Generated
   projects include tests, README, hori.log. The "make it yours" feeling
   begins. Capability topology created. Structure view shows the shape of
   the project.)
+  **COMPLETE** — ProjectStore manages disk I/O at ~/HORI/projects/,
+  ProjectSidebar for create/list/select, ProjectStructureView shows file
+  tree, HTML auto-saves to project directory. WKWebView entitlements
+  added (fix GPU process crash). LLM max_tokens bumped 500→4096. 142 tests.
 
 ### Phase 6: Emerging Canvas
 - [ ] **MAC-6: The Emerging Canvas — Sims Builder Mode** `[A]`
