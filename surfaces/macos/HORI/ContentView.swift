@@ -216,6 +216,18 @@ struct ContentView: View {
             if windowState.messages.isEmpty {
                 EmptyStateView()
             } else {
+                // Koi indicator header — persistent presence during conversation
+                HStack(spacing: 8) {
+                    KoiIndicator()
+                    Text("HORI")
+                        .font(HoriTypography.caption)
+                        .foregroundStyle(HoriTheme.textSecondary(for: colorScheme))
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+
                 ConversationView(
                     messages: windowState.messages,
                     isSending: windowState.isSending
