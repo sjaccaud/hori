@@ -5,7 +5,26 @@
 
 ## Current Slice
 
-None — SLICE-MACOS-05 complete, ready for demo/retro.
+SLICE-MACOS-06: The Emerging Canvas — Sims Builder Mode
+(in progress, branch `slice/macos-06-canvas`)
+
+**Plan:**
+- Replace split view with canvas model — conversation floats over
+  full-screen preview (the "software" emerges behind the conversation)
+- Canvas is greyed-out/dimmed when conversation is focused
+- Click outside the conversation to interact with the canvas (focus shifts)
+- Click back on conversation to refine (focus returns)
+- Guidance flyouts for COULDN'T/SHOULDN'T operations (client-side only,
+  detected from HORI's response text — no safety architecture changes)
+- Smooth focus transitions with animation
+
+**Demo criterion:** Ask HORI to build something → HTML renders
+full-screen behind the conversation → conversation dims → click on
+the canvas to interact with what she built → click back to continue
+refining in conversation.
+
+**Safety scope:** Deferred. No CapabilityChecker, no topology, no
+server-side safety changes. Flyouts are purely client-side UI.
 
 ## Completed Slices
 
