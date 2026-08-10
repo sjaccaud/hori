@@ -557,12 +557,18 @@ established in Phase 0.*
   added (fix GPU process crash). LLM max_tokens bumped 500→4096. 142 tests.
 
 ### Phase 6: Emerging Canvas
-- [ ] **MAC-6: The Emerging Canvas — Sims Builder Mode** `[A]`
+- [x] **MAC-6: The Emerging Canvas — Sims Builder Mode** `[A]`
   (Conversation becomes modal over a greyed-out canvas. Software emerges
   behind the conversation. Click outside to interact, click back to
   refine. Guidance flyouts for COULDN'T/SHOULDN'T operations — the "No
   Wrong Notes" principle, made visible. CapabilityChecker consults the
   topology before any operation.)
+  **COMPLETE** — CanvasView (full-screen HTML preview with dim/focus),
+  CanvasConversationOverlay (floating panel with rounded corners, shadow,
+  semi-transparent background), GuidanceFlyout (client-side COULDN'T/
+  SHOULDN'T detection, 12 tests). System prompt updated to tell HORI she
+  can write HTML for the Mac app. HoriClient timeout bumped 60s→300s.
+  154 tests.
 
 ### Phase 7: Personality
 - [ ] **MAC-7: The Koi, Menu Bar, Sound, Accessibility Audit** `[A]`
