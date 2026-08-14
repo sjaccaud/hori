@@ -5,7 +5,35 @@
 
 ## Current Slice
 
-None — SLICE-MACOS-07 complete, ready for merge.
+SLICE: Project Context — iterative building without context bloat
+(in progress, branch `slice/macos-project-context`)
+
+**Problem:** When HORI generates HTML, the full HTML block (often
+2000-4000 tokens) is stored in `windowState.messages` and sent back
+as conversation history on every subsequent turn. By turn 2-3, the
+previous HTML is eating most of the 16K context window, leaving
+little room for new output. Complex iterative tasks (adding features
+to an existing page) get truncated.
+
+**Plan:**
+- Strip HTML blocks from conversation history before sending to backend.
+  Replace with a compact reference: "[HTML generated and saved to
+  canvas — ask me to show it if you need to see it again]"
+- The Mac app still shows the full HORI reply (with HTML) in the UI.
+  Only the history sent to the backend is compacted.
+- This keeps the context window clean for iterative work: HORI knows
+  she made something, but doesn't need the full HTML in every turn.
+- If HORI needs to see the current HTML (e.g., "add a button to the
+  page I made"), she can ask for it — or we pass the current canvas
+  HTML as a separate context field (not in the conversation history).
+
+**Demo criterion:** Ask HORI to make a color picker → then ask her
+to add a feature → she generates the full updated page without
+truncation. Multiple iterations work without the HTML getting cut off.
+
+**Deferred:** MAC-08 (hardware sensing / setup wizard) is paused —
+needs dedicated iterative time. Branch `slice/macos-08-hardware-sensing`
+preserved with work done so far.
 
 ## Completed Slices
 
