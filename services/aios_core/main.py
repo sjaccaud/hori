@@ -1924,7 +1924,7 @@ def _llm_payload(system_prompt: str, messages: List[OAIMessage], stream: bool = 
             {"role": m.role, "content": m.content} for m in messages
         ],
         "stream": stream,
-        "max_tokens": 8192,
+        "max_tokens": 16384,
     }
     if not LLM_ENABLE_THINKING:
         payload["chat_template_kwargs"] = {"enable_thinking": False}
