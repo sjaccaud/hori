@@ -1365,13 +1365,17 @@ async def voice_chat(req: VoiceChatRequest):
     # Web search decision is made speculatively from query text alone,
     # then refined with memory hits when they arrive.
     is_trivial = len(req.text) < 15 and not any(c in req.text for c in "?@/\\")
+    # Skip web search when canvas HTML is present — it's a building task,
+    # not a research question. Web search results waste context window
+    # space that's needed for HTML generation.
+    is_building = req.canvas_html is not None
 
     memory_task = asyncio.create_task(
         _retrieve_memory_batch(req.text) if len(req.text) > 15 else _async_empty()
     )
     # Start web search speculatively based on query + history
     search_task = asyncio.create_task(
-        _maybe_web_search(req.text, None, req.history) if not is_trivial else _async_empty_str()
+        _maybe_web_search(req.text, None, req.history) if not is_trivial and not is_building else _async_empty_str()
     )
 
     memory_hits = await memory_task
@@ -1423,10 +1427,13 @@ async def voice_chat(req: VoiceChatRequest):
             f"\n\n=== CURRENT CANVAS HTML (what the user sees right now) ===\n"
             f"```html\n{req.canvas_html}\n```\n"
             f"=== END CANVAS HTML ===\n"
-            f"NOTE: This is the current state of what you built. When the user "
-            f"asks to modify or add features, generate the COMPLETE updated HTML "
-            f"(not just the changes). The Mac app replaces the canvas with your "
-            f"new output."
+            f"IMPORTANT: The user is looking at the HTML above right now. "
+            f"When they ask you to change, add, or modify anything, you MUST "
+            f"write the COMPLETE updated HTML in a new ```html block — not "
+            f"just the changes, not a description, but the FULL HTML file with "
+            f"their requested changes incorporated. The Mac app will replace "
+            f"the canvas with your new output. If you don't write a ```html "
+            f"block, the canvas won't update."
         )
 
     # 4. Build messages from history + current text
