@@ -2749,7 +2749,7 @@ def _truncate_msg(m: OAIMessage, max_chars: int) -> OAIMessage:
 def _call_llm(system_prompt: str, user_text: str) -> str:
     payload = _llm_payload(system_prompt, [OAIMessage(role="user", content=user_text)])
     try:
-        with httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+        with httpx.Client(timeout=httpx.Timeout(300.0, connect=10.0)) as client:
             response = client.post(LLM_API_URL, json=payload)
             response.raise_for_status()
             return response.json()["choices"][0]["message"]["content"]
@@ -2762,7 +2762,7 @@ async def _call_llm_with_messages(system_prompt: str, messages: List[OAIMessage]
     """Call LLM with full conversation history using async httpx."""
     payload = _llm_payload(system_prompt, messages)
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0)) as client:
             response = await client.post(LLM_API_URL, json=payload)
             response.raise_for_status()
             return response.json()["choices"][0]["message"]["content"]
