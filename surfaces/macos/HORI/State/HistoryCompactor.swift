@@ -20,7 +20,9 @@ import Foundation
 enum HistoryCompactor {
 
     /// The compact reference that replaces HTML blocks in history.
-    static let compactReference = "[HTML generated and rendered in canvas]"
+    /// This tells HORI she generated HTML without including the full
+    /// HTML block (which would bloat the context window).
+    static let compactReference = "[HTML page generated and shown in canvas]"
 
     /// Compacts a single message by stripping HTML code blocks.
     /// - Parameter message: The original message (may contain ```html blocks).
