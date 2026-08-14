@@ -32,7 +32,7 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 EMBED_URL = os.getenv("EMBED_URL", "http://localhost:8081/v1/embeddings")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text-v1.5.Q8_0")
 LLM_API_URL = os.getenv("LLM_API_URL", "http://localhost:8080/v1/chat/completions")
-LLM_MODEL = os.getenv("LLM_MODEL", "Qwen3.6-27B")
+LLM_MODEL = os.getenv("LLM_MODEL", "Qwen3.8-27B")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 USER_MODEL_PATH = PROJECT_ROOT / "core" / "state" / "user_model.json"

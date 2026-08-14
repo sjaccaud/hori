@@ -544,7 +544,7 @@ async def admin_trigger_consolidation(max_clusters: int = 10, _admin_auth: None 
             **_os.environ,
             "PYTHONPATH": ".",
             "LLM_API_URL": "http://localhost:8080/v1/chat/completions",
-            "LLM_MODEL": "Qwen3.6-27B",
+            "LLM_MODEL": "Qwen3.8-27B",
             "EMBED_URL": "http://localhost:8081/v1/embeddings",
             "QDRANT_URL": "http://localhost:6333",
         },

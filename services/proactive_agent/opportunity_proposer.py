@@ -30,7 +30,7 @@ USER_MODEL_PATH = PROJECT_ROOT / "core" / "state" / "user_model.json"
 PROJECT_STATE_PATH = PROJECT_ROOT / "core" / "state" / "project_state.json"
 
 LLM_API_URL = os.getenv("LLM_API_URL", "http://localhost:8080/v1/chat/completions")
-LLM_MODEL = os.getenv("LLM_MODEL", "Qwen3.6-27B")
+LLM_MODEL = os.getenv("LLM_MODEL", "Qwen3.8-27B")
 
 
 def load_context() -> dict:

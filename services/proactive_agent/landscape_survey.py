@@ -39,7 +39,7 @@ OPPORTUNITIES_PATH = PROJECT_ROOT / "core" / "state" / "opportunities.json"
 
 # LLM endpoint for scoring relevance
 LLM_API_URL = os.getenv("LLM_API_URL", "http://localhost:8080/v1/chat/completions")
-LLM_MODEL = os.getenv("LLM_MODEL", "Qwen3.6-27B")
+LLM_MODEL = os.getenv("LLM_MODEL", "Qwen3.8-27B")
 
 
 @dataclass
