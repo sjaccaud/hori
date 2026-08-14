@@ -1348,6 +1348,7 @@ class VoiceChatRequest(BaseModel):
     voice: str = "af_heart"
     speed: float = 1.0  # <1.0 = faster, >1.0 = slower
     history: list = []  # list of {"role": "user"/"assistant", "content": "..."}
+    canvas_html: Optional[str] = None  # current HTML in the Mac canvas (for iterative building)
 
 
 @app.post("/v1/voice/chat")
@@ -1410,6 +1411,21 @@ async def voice_chat(req: VoiceChatRequest):
             f"NOTE: The web search results above are current as of today. "
             f"Use them to answer the question. Do not rely on older memory "
             f"if it conflicts with these results."
+        )
+
+    # 5b. Add current canvas HTML (for iterative building — the Mac app
+    # passes the current HTML so HORI can modify it without the full
+    # HTML being in conversation history, which would bloat the context
+    # window and cause truncation on subsequent turns).
+    if req.canvas_html:
+        system_prompt += (
+            f"\n\n=== CURRENT CANVAS HTML (what the user sees right now) ===\n"
+            f"```html\n{req.canvas_html}\n```\n"
+            f"=== END CANVAS HTML ===\n"
+            f"NOTE: This is the current state of what you built. When the user "
+            f"asks to modify or add features, generate the COMPLETE updated HTML "
+            f"(not just the changes). The Mac app replaces the canvas with your "
+            f"new output."
         )
 
     # 4. Build messages from history + current text

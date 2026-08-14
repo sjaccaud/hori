@@ -28,10 +28,16 @@ struct HoriClient {
         let voice: String
         let speed: Double
         let history: [HistoryEntry]
+        let canvasHtml: String?
 
         struct HistoryEntry: Encodable {
             let role: String
             let content: String
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case text, voice, speed, history
+            case canvasHtml = "canvas_html"
         }
     }
 
@@ -64,7 +70,8 @@ struct HoriClient {
     func sendMessage(
         _ text: String,
         history: [WindowState.Message],
-        voice: String = "af_heart"
+        voice: String = "af_heart",
+        canvasHTML: String? = nil
     ) async throws -> String {
         let url = baseURL.appendingPathComponent("v1/voice/chat")
         var request = URLRequest(url: url)
@@ -77,9 +84,13 @@ struct HoriClient {
             voice: voice,
             speed: 1.0,
             history: history.map { msg in
-                .init(role: msg.role == .user ? "user" : "assistant",
-                      content: msg.content)
-            }
+                let content = msg.role == .hori
+                    ? HistoryCompactor.stripHTMLBlocks(from: msg.content)
+                    : msg.content
+                return .init(role: msg.role == .user ? "user" : "assistant",
+                             content: content)
+            },
+            canvasHtml: canvasHTML
         )
 
         do {

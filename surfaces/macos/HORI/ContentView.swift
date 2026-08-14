@@ -479,10 +479,11 @@ struct ContentView: View {
 
         let client = HoriClient(baseURL: url)
         let history = windowState.messages.dropLast()
+        let canvasHTML = HistoryCompactor.currentCanvasHTML(from: Array(history))
 
         Task {
             do {
-                let reply = try await client.sendMessage(text, history: Array(history))
+                let reply = try await client.sendMessage(text, history: Array(history), canvasHTML: canvasHTML)
                 await MainActor.run {
                     windowState.messages.append(WindowState.Message(role: .hori, content: reply))
                     windowState.isSending = false

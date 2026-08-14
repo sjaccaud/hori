@@ -135,7 +135,7 @@ struct ConnectionSetupView: View {
         Task {
             let client = HoriClient(baseURL: url)
             do {
-                _ = try await client.sendMessage("ping", history: [])
+                _ = try await client.sendMessage("ping", history: [], canvasHTML: nil)
                 await MainActor.run {
                     isTesting = false
                     withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
