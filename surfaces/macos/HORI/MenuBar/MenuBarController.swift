@@ -14,17 +14,20 @@ import SwiftUI
 /// to any window. This means HORI is always accessible from the menu
 /// bar even when no windows are open.
 ///
-/// The menu is rebuilt every time it opens (via NSMenuDelegate) so the
-/// presence status and sound toggle always reflect the current state.
+/// The menu is rebuilt every time it's about to show so the presence
+/// status and sound toggle always reflect the current state.
 ///
 /// Traces to: docs/roadmap.md MAC-7 (The Koi, Menu Bar, Sound).
-final class MenuBarController: NSObject, NSMenuDelegate {
+final class MenuBarController: NSObject {
 
     /// The shared app state (for presence and settings).
     private let sharedState: SharedAppState
 
     /// The status item in the menu bar.
     private var statusItem: NSStatusItem?
+
+    /// The menu shown when the status item is clicked.
+    private let menu = NSMenu()
 
     /// Whether the connection settings sheet should be shown.
     var onShowConnectionSettings: (() -> Void)?
@@ -49,10 +52,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             button.image?.isTemplate = true
         }
 
-        // Create the menu and set ourselves as delegate so it rebuilds
-        // on every open (presence status + sound toggle stay current)
-        let menu = NSMenu()
-        menu.delegate = self
+        menu.showsStateColumn = true
+        rebuildMenu()
         statusItem?.menu = menu
     }
 
@@ -63,21 +64,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         statusItem = nil
     }
 
-    // MARK: - NSMenuDelegate
+    // MARK: - Menu Building
 
-    func menuNeedsUpdate(_ menu: NSMenu) {
+    /// Rebuilds the menu in place, keeping the same NSMenu object
+    /// so the status item's reference stays valid.
+    private func rebuildMenu() {
         menu.removeAllItems()
-        let fresh = buildMenu()
-        for item in fresh.items {
-            menu.addItem(item)
-        }
-    }
-
-    // MARK: - Menu
-
-    func buildMenu() -> NSMenu {
-        let menu = NSMenu()
-        menu.showsStateColumn = true
 
         // Presence status (disabled — just shows current state)
         let presence = sharedState.isPresenceConnected ? sharedState.presence : .offline
@@ -116,22 +108,23 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         quit.target = self
         quit.isEnabled = true
         menu.addItem(quit)
-
-        return menu
     }
 
     // MARK: - Actions
 
     @objc private func newConversation() {
+        rebuildMenu()
         onNewConversation?()
     }
 
     @objc private func showConnectionSettings() {
+        rebuildMenu()
         onShowConnectionSettings?()
     }
 
     @objc private func toggleSoundFeedback() {
         sharedState.feedbackSoundsEnabled.toggle()
+        rebuildMenu()
     }
 
     @objc private func quitApp() {
