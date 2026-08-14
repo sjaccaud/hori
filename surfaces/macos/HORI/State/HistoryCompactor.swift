@@ -63,15 +63,39 @@ enum HistoryCompactor {
 
     /// Extracts the current canvas HTML for passing as separate context.
     /// This is the most recent HTML block from the most recent HORI message.
+    /// The HTML is compacted and capped to ~4000 chars so the 27B model
+    /// can hold it in context and faithfully reproduce it with modifications.
+    /// Larger pages will be truncated — the model sees the structure but
+    /// may lose detail at the end.
     /// - Parameter messages: The full conversation history.
-    /// - Returns: The most recent HTML block, or nil if none exists.
+    /// - Returns: The most recent HTML block (compacted, capped), or nil.
     static func currentCanvasHTML(from messages: [WindowState.Message]) -> String? {
         // Find the most recent HORI message with HTML
         for message in messages.reversed() where message.role == .hori {
             if let html = HTMLExtractor.extractLastHTMLBlock(from: message.content) {
-                return html
+                return compactHTML(html)
             }
         }
         return nil
+    }
+
+    /// Compacts HTML by removing excess whitespace and capping size.
+    /// Preserves all functional content up to the cap — the model sees
+    /// the full structure of smaller pages, and the beginning of larger ones.
+    static func compactHTML(_ html: String) -> String {
+        // Remove leading/trailing whitespace on each line, drop empty lines
+        let lines = html.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let compacted = lines.joined(separator: "\n")
+
+        // Cap at ~4000 chars (~1000 tokens) so the model can hold it
+        // and reproduce it faithfully. Larger pages get truncated with
+        // a note so HORI knows there's more.
+        let cap = 4000
+        if compacted.count <= cap {
+            return compacted
+        }
+        return String(compacted.prefix(cap)) + "\n<!-- ... truncated (page is \(compacted.count) chars total) ... -->"
     }
 }
