@@ -1418,6 +1418,7 @@ async def voice_chat(req: VoiceChatRequest):
     # HTML being in conversation history, which would bloat the context
     # window and cause truncation on subsequent turns).
     if req.canvas_html:
+        logger.info(f"CANVAS HTML received: {len(req.canvas_html)} chars")
         system_prompt += (
             f"\n\n=== CURRENT CANVAS HTML (what the user sees right now) ===\n"
             f"```html\n{req.canvas_html}\n```\n"
