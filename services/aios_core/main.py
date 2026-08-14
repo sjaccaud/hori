@@ -1429,13 +1429,12 @@ async def voice_chat(req: VoiceChatRequest):
             f"=== END CANVAS HTML ===\n"
             f"CRITICAL INSTRUCTION: The user is looking at the HTML above. "
             f"They want you to MODIFY it. You MUST respond with a COMPLETE, "
-            f"updated ```html block containing the full HTML page with their "
-            f"requested changes. Do NOT just describe what you would change. "
-            f"Do NOT say the HTML is already there. Do NOT reference the "
-            f"canvas. WRITE THE ACTUAL HTML in a ```html block in your reply. "
-            f"The Mac app will replace the canvas with whatever HTML you write. "
-            f"If your reply does not contain a ```html block, nothing will "
-            f"change and the user will be stuck."
+            f"updated ```html block. Start from the HTML above and ADD the "
+            f"requested feature — do NOT rewrite the page from scratch. "
+            f"Preserve all existing HTML, CSS, and JavaScript. Only add or "
+            f"change what the user asked for. The Mac app will replace the "
+            f"canvas with whatever HTML you write. If your reply does not "
+            f"contain a ```html block, nothing will change."
         )
 
     # 4. Build messages from history + current text
