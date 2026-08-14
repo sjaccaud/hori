@@ -571,10 +571,15 @@ established in Phase 0.*
   154 tests.
 
 ### Phase 7: Personality
-- [ ] **MAC-7: The Koi, Menu Bar, Sound, Accessibility Audit** `[A]`
+- [x] **MAC-7: The Koi, Menu Bar, Sound, Accessibility Audit** `[A]`
   (Animated koi mascot (Rive/Lottie). Menu bar presence with global
   hotkey. Sound design (opt-in). Full accessibility audit across all
   views built in Phases 1-6. Animation refinement.)
+  **COMPLETE** — MenuBarController (NSStatusItem with presence + quick
+  actions), SoundFeedback (opt-in system sounds for send/receive),
+  KoiIndicator (persistent during conversation, presence-reactive),
+  VoiceSettingsView accessibility audit, LLM timeouts bumped to 300s.
+  64 tests.
 
 ### Phase 8: Hardware Sensing
 - [ ] **MAC-8: Install-Time Hardware Sensing** `[A]` (On first launch,
