@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 /// The root content view for each HORI window.
 ///
@@ -34,6 +35,9 @@ struct ContentView: View {
 
     /// The text currently in the input field.
     @State private var inputText: String = ""
+
+    /// Reference to the canvas WKWebView for component injection.
+    @State private var canvasWebView: WKWebView?
 
     /// Whether the connection setup sheet is showing.
     @State private var showConnectionSetup: Bool = false
@@ -191,6 +195,9 @@ struct ContentView: View {
                     withAnimation(HoriAnimations.snappy(reduceMotion: reduceMotion)) {
                         windowState.canvasFocus = .canvas
                     }
+                },
+                onWebViewCreated: { webView in
+                    canvasWebView = webView
                 }
             )
 
@@ -351,7 +358,21 @@ struct ContentView: View {
             }
         }
 
-        // Extract HTML from the latest HORI message
+        // Check for component injection first (iterative building).
+        // If HORI sent a ```component block, inject it into the live DOM
+        // instead of replacing the full page.
+        if !windowState.isSending,
+           let component = ComponentInjector.extractComponent(from: lastMessage.content),
+           let webView = canvasWebView {
+            ComponentInjector.inject(component, into: webView) { success in
+                print("Component injection: \(success ? "success" : "failed")")
+            }
+            // Don't replace previewHTML — the page stays as-is with the
+            // new component injected into the live DOM.
+            return
+        }
+
+        // Extract HTML from the latest HORI message (full page — first build)
         if let html = HTMLExtractor.extractLastHTMLBlock(from: lastMessage.content) {
             windowState.previewHTML = html
             // Auto-show preview when HTML is detected

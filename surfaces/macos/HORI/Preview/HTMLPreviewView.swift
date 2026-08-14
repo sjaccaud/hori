@@ -13,6 +13,10 @@ struct HTMLPreviewView: NSViewRepresentable {
     /// The HTML content to render.
     let html: String
 
+    /// Called when the WKWebView is created, so the parent can hold
+    /// a reference for component injection.
+    var onWebViewCreated: ((WKWebView) -> Void)?
+
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.preferences.javaScriptEnabled = true
@@ -25,6 +29,7 @@ struct HTMLPreviewView: NSViewRepresentable {
         webView.allowsBackForwardNavigationGestures = false
 
         loadHTML(webView)
+        onWebViewCreated?(webView)
         return webView
     }
 

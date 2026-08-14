@@ -201,6 +201,11 @@ def _mac_app_capabilities() -> str:
     and can save generated files to a project directory on disk. HORI
     doesn't need filesystem tools to 'create files' — the app handles
     that client-side.
+
+    For iterative building (modifying an existing page), the Mac app
+    supports component injection: HORI generates just the new piece
+    (a button, a panel, a section) and the app inserts it into the
+    live DOM without regenerating the full page.
     """
     return (
         "\nMAC APP CAPABILITIES:\n"
@@ -220,6 +225,30 @@ def _mac_app_capabilities() -> str:
         "Do NOT say 'I can't create files' or 'I don't have access to HTML "
         "tools' — you CAN build HTML by writing it in your reply. The app "
         "handles the rest.\n\n"
+        "ITERATIVE BUILDING — COMPONENT INJECTION:\n"
+        "When the user asks you to ADD, MODIFY, or CHANGE something on an "
+        "existing page (one you already made), do NOT regenerate the full "
+        "page. Instead, generate just the new component in a ```component "
+        "block. The Mac app will inject it into the live page.\n\n"
+        "Component format:\n"
+        "```\n"
+        "```component\n"
+        "target: #picker-container\n"
+        "position: after\n"
+        "<button id=\"save\">Save Color</button>\n"
+        "<script>\n"
+        "document.getElementById(\"save\").addEventListener(\"click\", () => {\n"
+        "  localStorage.setItem(\"color\", document.getElementById(\"picker\").value);\n"
+        "});\n"
+        "</script>\n"
+        "```\n"
+        "```\n\n"
+        "Fields:\n"
+        "- target: CSS selector for where to insert (default: body)\n"
+        "- position: appendChild | prependChild | before | after | replace\n"
+        "Then the HTML fragment, optionally followed by <script> for JS.\n\n"
+        "Use ```html for the FIRST page (full HTML document).\n"
+        "Use ```component for ADDITIONS to an existing page (just the new piece).\n"
     )
 
 

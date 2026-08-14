@@ -1417,24 +1417,24 @@ async def voice_chat(req: VoiceChatRequest):
             f"if it conflicts with these results."
         )
 
-    # 5b. Add current canvas HTML (for iterative building — the Mac app
-    # passes the current HTML so HORI can modify it without the full
-    # HTML being in conversation history, which would bloat the context
-    # window and cause truncation on subsequent turns).
+    # 5b. Add current canvas context (for iterative building).
+    # When a page already exists, we pass the canvas_html so HORI knows
+    # what's there. But instead of asking her to regenerate the full page,
+    # we tell her to use component injection — generate just the new piece
+    # in a ```component block. The Mac app injects it into the live DOM.
     if req.canvas_html:
         logger.info(f"CANVAS HTML received: {len(req.canvas_html)} chars")
         system_prompt += (
-            f"\n\n=== CURRENT CANVAS HTML (what the user sees right now) ===\n"
+            f"\n\n=== CURRENT CANVAS (what the user sees right now) ===\n"
+            f"The user has a page loaded in the canvas. Here is the current HTML:\n"
             f"```html\n{req.canvas_html}\n```\n"
-            f"=== END CANVAS HTML ===\n"
-            f"CRITICAL INSTRUCTION: The user is looking at the HTML above. "
-            f"They want you to MODIFY it. You MUST respond with a COMPLETE, "
-            f"updated ```html block. Start from the HTML above and ADD the "
-            f"requested feature — do NOT rewrite the page from scratch. "
-            f"Preserve all existing HTML, CSS, and JavaScript. Only add or "
-            f"change what the user asked for. The Mac app will replace the "
-            f"canvas with whatever HTML you write. If your reply does not "
-            f"contain a ```html block, nothing will change."
+            f"=== END CANVAS ===\n"
+            f"The user wants to MODIFY this page. Do NOT regenerate the full "
+            f"page. Instead, generate just the new component in a ```component "
+            f"block. The Mac app will inject it into the live DOM. This "
+            f"preserves all existing functionality and is much faster.\n"
+            f"Use the target and position fields to specify where the "
+            f"component goes. Include any needed <script> for event handlers."
         )
 
     # 4. Build messages from history + current text

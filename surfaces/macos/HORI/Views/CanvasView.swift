@@ -22,13 +22,16 @@ struct CanvasView: View {
     /// Called when the user clicks on the canvas to focus it.
     let onFocus: () -> Void
 
+    /// Called when the WKWebView is created, for component injection.
+    var onWebViewCreated: ((WKWebView) -> Void)?
+
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             // Full-screen HTML preview
-            HTMLPreviewView(html: html)
+            HTMLPreviewView(html: html, onWebViewCreated: onWebViewCreated)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Dimming overlay when conversation is focused.
