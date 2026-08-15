@@ -1,6 +1,14 @@
 import SwiftUI
 import WebKit
 
+/// Holds a weak reference to the canvas WKWebView.
+/// Wraps it in a class so @State preserves the reference across
+/// SwiftUI re-renders (plain Optional<WKWebView> in @State can
+/// get lost when the view tree rebuilds).
+final class WebViewRef {
+    weak var webView: WKWebView?
+}
+
 /// The root content view for each HORI window.
 ///
 /// In Phase 0, this showed only `EmptyStateView`.
@@ -37,7 +45,8 @@ struct ContentView: View {
     @State private var inputText: String = ""
 
     /// Reference to the canvas WKWebView for component injection.
-    @State private var canvasWebView: WKWebView?
+    /// Uses a class wrapper so the reference survives SwiftUI re-renders.
+    @State private var canvasWebViewRef = WebViewRef()
 
     /// Whether the connection setup sheet is showing.
     @State private var showConnectionSetup: Bool = false
@@ -197,7 +206,7 @@ struct ContentView: View {
                     }
                 },
                 onWebViewCreated: { webView in
-                    canvasWebView = webView
+                    canvasWebViewRef.webView = webView
                 }
             )
 
@@ -361,15 +370,13 @@ struct ContentView: View {
         // Check for component injection first (iterative building).
         // If HORI sent a ```component block, inject it into the live DOM
         // instead of replacing the full page.
-        if !windowState.isSending,
-           let component = ComponentInjector.extractComponent(from: lastMessage.content),
-           let webView = canvasWebView {
-            ComponentInjector.inject(component, into: webView) { success in
-                print("Component injection: \(success ? "success" : "failed")")
+        if !windowState.isSending {
+            if let component = ComponentInjector.extractComponent(from: lastMessage.content) {
+                if let webView = canvasWebViewRef.webView {
+                    ComponentInjector.inject(component, into: webView) { _ in }
+                    return
+                }
             }
-            // Don't replace previewHTML — the page stays as-is with the
-            // new component injected into the live DOM.
-            return
         }
 
         // Extract HTML from the latest HORI message (full page — first build)
