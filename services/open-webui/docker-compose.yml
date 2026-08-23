@@ -1,14 +1,75 @@
 services:
+  searchrouter:
+    build:
+      context: ../searchrouter
+    container_name: searchrouter_aios
+    restart: always
+    network_mode: host
+    environment:
+      - PORT=8081
+      - HOST=0.0.0.0
+      - SEARCH_RESULT_COUNT=3
+      - SEARCH_MODE=priority
+      - REQUEST_TIMEOUT=10.0
+      - SEARXNG_FALLBACK_URL=${SEARXNG_FALLBACK_URL:-}
+    env_file:
+      - ${HOME}/.config/aios/open-webui.env
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
+
   open-webui:
+    depends_on:
+      - searchrouter
     image: ghcr.io/open-webui/open-webui:main
-    container_name: open_webui_hori
+    container_name: open_webui_aios
     restart: always
     network_mode: host
     environment:
       - PORT=3000
-      - OLLAMA_BASE_URL=http://127.0.0.1:8080
-      - OPENAI_API_BASE_URL=http://127.0.0.1:5680/v1
+      - HOST=127.0.0.1
+      - WEBUI_SECRET_KEY_FILE=/app/backend/data/.webui_secret_key
+      - OLLAMA_BASE_URL=
+      - OPENAI_API_BASE_URL=http://127.0.0.1:8080/v1
       - OPENAI_API_KEY=not-needed
+      - DEFAULT_MODELS=qwen-fast
+      - DEFAULT_MODEL_METADATA={"capabilities":{"web_search":true,"knowledge":true,"memory":true,"builtin_tools":true,"code_interpreter":true,"time":true},"default_feature_ids":["knowledge","time","code_interpreter","memory"],"builtinTools":{"knowledge":true,"time":true,"code_interpreter":true,"web_search":true}}
+      - DEFAULT_MODEL_PARAMS={"function_calling":"legacy","max_tokens":4096,"temperature":0.7}
+      - RAG_TOP_K=5
+      - RAG_CHUNK_SIZE=1000
+      - RAG_RELEVANCE_THRESHOLD=0.0
+      - ENABLE_CONTEXT_COMPACTION=true
+      - CONTEXT_COMPACTION_TOKEN_THRESHOLD=12000
+      - CONTEXT_COMPACTION_TOKEN_CAP=5000
+      - ENABLE_PERSISTENT_CONFIG=true
+      - ENABLE_KB_EXEC=false
+      - ENABLE_WEB_SEARCH=true
+      - WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://127.0.0.1:8081/search?<query>
+      - WEB_SEARCH_RESULT_COUNT=3
+      - WEB_SEARCH_CONCURRENT_REQUESTS=2
+      - BYPASS_WEB_SEARCH_WEB_LOADER=true
+      - ENABLE_MEMORIES=true
+      - ENABLE_MEMORY_SYSTEM_CONTEXT=true
+      - ENABLE_MEMORY_BACKGROUND_REVIEW=true
+      - MEMORIES_REVIEW_INTERVAL_TURNS=10
+      - VECTOR_DB=chroma
+      - RAG_EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
+      - RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE=true
+      - WEBUI_AUTH=false
+      - ENABLE_SIGNUP=false
+      - ENABLE_API_KEYS=false
+      - WEBUI_ADMIN_EMAIL=admin@localhost
+      - WEBUI_ADMIN_NAME=Admin
+    env_file:
+      - ${HOME}/.config/aios/open-webui.env
     volumes:
       - open-webui:/app/backend/data
     logging:
@@ -20,7 +81,7 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: 4g
+          memory: 8g
 
 volumes:
   open-webui:
