@@ -14,7 +14,8 @@ set -euo pipefail
 
 : "${USER:?USER must be set}"
 : "${HOME:?HOME must be set}"
-OPENWEBUI_USER_NAME="${OPENWEBUI_USER_NAME:-$USER}"
+# Capitalize the username by default (e.g. alice -> Alice). Override OPENWEBUI_USER_NAME if preferred.
+OPENWEBUI_USER_NAME="${OPENWEBUI_USER_NAME:-$(echo "$USER" | sed 's/^./\u&/')}"
 OPENWEBUI_CONTAINER="${OPENWEBUI_CONTAINER:-open_webui_aios}"
 DB_PATH="/app/backend/data/webui.db"
 

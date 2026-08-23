@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress
+.PHONY: test test-unit test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service
 
 # Default target
 test: test-all
@@ -53,3 +53,20 @@ coverage:
 test-regression:
 	@echo "🛡️ Running regression tests..."
 	PYTHONPATH=. ./venv/bin/python3 -m pytest tests/regression/
+
+# Re-apply Open-WebUI workspace/prompt/context configuration.
+# Run this after `docker compose up -d` or a volume/container recreate.
+# Set OPENWEBUI_USER_NAME if you want a display name other than the capitalized $USER.
+open-webui-apply:
+	@echo "🧰 Applying Open-WebUI model config..."
+	@OPENWEBUI_USER_NAME=$${OPENWEBUI_USER_NAME:-$$(echo "$$USER" | sed 's/^./\u&/')} \
+	 USER=$$USER HOME=$$HOME \
+	 ./services/open-webui/apply-model-config.sh
+
+# Install the systemd oneshot service for Open-WebUI re-apply.
+# After install, run `systemctl --user start open-webui-apply`.
+install-open-webui-service:
+	@echo "🔗 Installing open-webui-apply systemd user service..."
+	@mkdir -p "$${HOME}/.config/systemd/user"
+	@cp ./services/open-webui/open-webui-apply.service "$${HOME}/.config/systemd/user/open-webui-apply.service"
+	@systemctl --user daemon-reload

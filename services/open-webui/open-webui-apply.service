@@ -1,0 +1,10 @@
+[Unit]
+Description=Apply Open-WebUI workspace/prompt/context configuration
+After=docker.service
+
+[Service]
+Type=oneshot
+Environment=USER=%u
+Environment=HOME=%h
+WorkingDirectory=%h/Projects/aios
+ExecStart=%h/Projects/aios/services/open-webui/apply-model-config.sh
