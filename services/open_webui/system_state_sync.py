@@ -21,6 +21,29 @@ def _default_allow_list() -> list[Path]:
         home / "Projects/benchmarks/qwen3",
         home / "llama-builds/spiritbuun-714/router.ini",
         home / "AGENTS.md",
+        _default_project_decisions_path(),
+    ]
+
+
+def _default_project_decisions_path() -> Path:
+    return Path.home() / "Projects/aios/.devin/project-decisions.md"
+
+
+def _default_project_decisions_sources() -> list[Path]:
+    home = Path.home()
+    return [
+        home / "Projects/aios/docs/manifesto.md",
+        home / "Projects/aios/docs/safety.md",
+        home / "Projects/aios/docs/roadmap.md",
+        _default_project_decisions_path(),
+    ]
+
+
+def _default_project_decisions_allow_list() -> list[Path]:
+    home = Path.home()
+    return [
+        home / "Projects/aios/docs",
+        home / "Projects/aios/.devin",
     ]
 
 
@@ -45,6 +68,7 @@ def render_system_state_md(
     benchmark_dir: Optional[Path] = None,
     agents_path: Optional[Path] = None,
     router_path: Optional[Path] = None,
+    project_decisions_path: Optional[Path] = None,
     allow_list: Optional[Iterable[Path]] = None,
 ) -> str:
     """Return a markdown synthesis of the current model stack and benchmarks."""
@@ -58,7 +82,10 @@ def render_system_state_md(
     if allow_list is None:
         allow_list = _default_allow_list()
 
-    for p in (benchmark_dir, agents_path, router_path):
+    to_validate = [benchmark_dir, agents_path, router_path]
+    if project_decisions_path is not None:
+        to_validate.append(project_decisions_path)
+    for p in to_validate:
         _validate_path(p, allow_list)
 
     parts = ["# AIOS System State\n\n"]
@@ -95,6 +122,37 @@ def render_system_state_md(
             else:
                 parts.append(p.read_text(encoding="utf-8", errors="replace"))
             parts.append("\n\n")
+
+    if project_decisions_path is not None and project_decisions_path.exists():
+        parts.append("## Project Decisions\n\n")
+        parts.append(project_decisions_path.read_text(encoding="utf-8", errors="replace"))
+        parts.append("\n\n")
+
+    return "".join(parts)
+
+
+def render_project_decisions_md(
+    sources: list[Path],
+    allow_list: Optional[Iterable[Path]] = None,
+) -> str:
+    """Return a markdown synthesis of architecture/roadmap/decision sources.
+
+    Each source is included under a '## Source: <path>' heading. Raises
+    ValueError if any source is outside the configured allow-list.
+    """
+    if allow_list is None:
+        allow_list = _default_project_decisions_allow_list()
+
+    for source in sources:
+        _validate_path(source, allow_list)
+
+    parts = ["# Project Decisions\n\n"]
+    for source in sources:
+        if not source.exists():
+            raise FileNotFoundError(f"Project-decisions source not found: {source}")
+        parts.append(f"## Source: {source}\n\n")
+        parts.append(source.read_text(encoding="utf-8", errors="replace"))
+        parts.append("\n\n")
 
     return "".join(parts)
 
@@ -227,6 +285,21 @@ def upsert_knowledge_file(
 
 def sync() -> str:
     """Render and upsert the system state."""
-    markdown = render_system_state_md()
+    project_decisions_path = _default_project_decisions_path()
+    if not project_decisions_path.exists():
+        project_decisions_path = None
+    markdown = render_system_state_md(project_decisions_path=project_decisions_path)
     file_meta = upsert_knowledge_file(markdown)
+    return file_meta["id"]
+
+
+def sync_project_decisions() -> str:
+    """Render and upsert the curated project-decisions file."""
+    sources = _default_project_decisions_sources()
+    markdown = render_project_decisions_md(sources)
+    file_meta = upsert_knowledge_file(
+        markdown,
+        filename="project-decisions.md",
+        collection_name="Project Decisions & Architecture",
+    )
     return file_meta["id"]

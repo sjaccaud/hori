@@ -1,0 +1,9 @@
+{
+  "type": "work_order",
+  "id": "1a6ee2c5-5f9d-4a77-8f3e-8c6a9b0d7e4f",
+  "parent_charter_id": "aios-foundation-charter-001",
+  "version": "1.0.0",
+  "description": "Curate and sync project-decisions.md into Open-WebUI's Project Decisions & Architecture collection, and optionally include the same source in aios-system-state.md, so Open-WebUI can answer with both current state and the rationale behind it.",
+  "status": "backlog",
+  "priority": "medium"
+}

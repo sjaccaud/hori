@@ -125,6 +125,73 @@ def test_sync_renders_and_upserts():
     assert result == "file-42"
 
 
+def test_render_project_decisions_md_concatenates_sources(tmp_path):
+    """render_project_decisions_md combines source files under per-source headings."""
+    from services.open_webui.system_state_sync import render_project_decisions_md
+
+    source_a = tmp_path / "a.md"
+    source_a.write_text("# Alpha\n")
+    source_b = tmp_path / "b.md"
+    source_b.write_text("## Beta\n- item\n")
+
+    md = render_project_decisions_md(
+        sources=[source_a, source_b],
+        allow_list=[tmp_path],
+    )
+
+    assert "## Source:" in md
+    assert "# Alpha" in md
+    assert "## Beta" in md
+    assert "- item" in md
+
+
+def test_render_system_state_md_includes_project_decisions_path(tmp_path):
+    """render_system_state_md appends a project-decisions section when provided."""
+    from services.open_webui.system_state_sync import render_system_state_md
+
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("## Local LLM")
+    router = tmp_path / "router.ini"
+    router.write_text("[qwen-fast]")
+    benchmark_dir = tmp_path / "benchmarks"
+    benchmark_dir.mkdir()
+    decisions = tmp_path / "decisions.md"
+    decisions.write_text("## Decisions\n- use ROCm\n")
+
+    md = render_system_state_md(
+        benchmark_dir=benchmark_dir,
+        agents_path=agents,
+        router_path=router,
+        project_decisions_path=decisions,
+        allow_list=[tmp_path],
+    )
+
+    assert "## Local LLM" in md
+    assert "## Project Decisions" in md
+    assert "- use ROCm" in md
+
+
+def test_sync_project_decisions_renders_and_upserts():
+    """sync_project_decisions renders and returns the uploaded file id."""
+    from unittest.mock import patch
+
+    from services.open_webui.system_state_sync import sync_project_decisions
+
+    with patch(
+        "services.open_webui.system_state_sync.render_project_decisions_md",
+        return_value="# decisions",
+    ):
+        with patch(
+            "services.open_webui.system_state_sync.upsert_knowledge_file",
+            return_value={"id": "file-99", "filename": "project-decisions.md"},
+        ) as fake_upsert:
+            result = sync_project_decisions()
+
+    assert result == "file-99"
+    assert fake_upsert.call_args[1]["filename"] == "project-decisions.md"
+    assert fake_upsert.call_args[1]["collection_name"] == "Project Decisions & Architecture"
+
+
 def test_find_knowledge_parses_dict_response():
     """_find_knowledge must find a collection inside a dict {'items': [...]}."""
     from unittest.mock import MagicMock, patch
