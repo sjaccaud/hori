@@ -483,6 +483,21 @@ replies in text bubble AND speaks the reply aloud through speakers.
 - 2 integration failures are expected deployment drift (installed service files
   need reinstall after the path renames).
 
+### [SLICE-KB-03] Open-WebUI qwen-128k/qwen-long project-discovery fix (completed 2026-08-23)
+
+**Problem:** `qwen-128k` was missing from the Open-WebUI `model` table, so it fell back to generic defaults and denied local filesystem access. `qwen-long` had a workspace record but invoked `query_knowledge_files` across all attached knowledge collections for a broad project-survey question, producing a >100 KB tool result that triggered `LineTooLong` in the Open-WebUI tool-call continuation stream.
+
+**What was built:**
+- Created Open-WebUI workspace records for `qwen-128k` and `qwen-256k-batch`, cloned from `qwen-long` with the right `num_ctx`/`context_length`, `function_calling: native`, local tool injection, and knowledge attachments.
+- Updated `services/open-webui/fix_tooling.py`, `set_context_lengths.py`, and `make_models_workspace.py` to include the new aliases and the revised system prompts.
+- Added a shared `Tool-use rules` paragraph to all Qwen/Devstral prompts: `kb_exec` is disabled, prefer `run_safe_command`/`read_file` for project/directory surveys, and only use `query_knowledge_files` for conceptual/historical questions.
+- Reset `rag.top_k` and `rag.top_k_reranker` to 5 in the live DB to bound knowledge retrieval output.
+- Documented the alias rationale and the fix in `the global AGENTS.md (outside the repo)` (global project memory) and the slice log.
+
+**Demo:** `curl` to Open-WebUI `qwen-128k` and `qwen-long` with the project-survey question → both models now emit a `run_safe_command` call (e.g. `ls -la <user-home>/Projects/`) instead of a broad `query_knowledge_files` call.
+
+**Branch:** `slice/macos-project-context` (current working branch). `services/open-webui/` helper scripts and global `AGENTS.md` updated.
+
 ## Notes
 
 - Branch: `rebrand/hori` (integration), slice branches to be created as `slice/NN-description`
