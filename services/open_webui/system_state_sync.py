@@ -150,7 +150,14 @@ def render_project_decisions_md(
     for source in sources:
         if not source.exists():
             raise FileNotFoundError(f"Project-decisions source not found: {source}")
-        parts.append(f"## Source: {source}\n\n")
+        # Use a path relative to the user's home directory to avoid
+        # embedding PII/usernames in the generated Open-WebUI document.
+        display = source
+        try:
+            display = source.relative_to(Path.home())
+        except ValueError:
+            pass
+        parts.append(f"## Source: {display}\n\n")
         parts.append(source.read_text(encoding="utf-8", errors="replace"))
         parts.append("\n\n")
 
