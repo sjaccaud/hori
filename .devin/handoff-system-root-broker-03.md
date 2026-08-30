@@ -1,8 +1,8 @@
 # Handoff — System Root Broker Slice 3
 
-**Slice:** confirmation gates and sandboxing
+**Slice:** confirmation gates and sandboxing — COMPLETE
 **Branch:** `slice/system-root-broker-01`
-**Commit (handoff point):** `92dd551`
+**Commit (handoff point):** `d989315`
 **Date:** 2026-08-30
 
 ## What was built
@@ -56,28 +56,28 @@
 - `make test-adversarial` — 142 passed.
 - `make test` — unit, integration, regression, and adversarial suites all green.
 
-## Remaining work
+## Live smoke test — passed
 
-- **Live smoke test:** the wrapper must be installed as root and the broker
-  service restarted so the live `service_stop`/`service_restart` paths run as
-  the `root-broker` user. Once installed, run:
-  ```bash
-  cd <repo-root>
-  sudo scripts/hardening/install_root_broker.sh
-  sudo systemctl restart system-root-broker
-  ```
-  Then exercise through the broker CLI from the repo root:
-  ```bash
-  PYTHONPATH=. ./venv/bin/python3 -m services.broker.client \
-    service_stop --service llamacpp
-  # expected: status denied
+Installed with `sudo scripts/hardening/install_root_broker.sh` and
+`sudo systemctl restart system-root-broker`. Then exercised through the broker
+CLI:
 
-  PYTHONPATH=. ./venv/bin/python3 -m services.broker.client \
-    service_stop --service llamacpp --confirm operator-2026-08-30
-  # expected: status ok, llamacpp stopped and restarted
-  ```
-  Verify the audit entry at `/var/log/system-root-broker/audit.jsonl` contains
-  both `confirmed_by` and `sandbox_profile`.
+- Unconfirmed `service_stop --service llamacpp` → `denied`.
+- Confirmed `service_stop --service llamacpp --confirm operator-2026-08-30`
+  → `ok`, `sandbox_profile: "seccomp+landlock"`, `llamacpp` stopped.
+- `service_status --service llamacpp` after the stop → `exit_code: 3`,
+  `stdout: "inactive"`, `sandbox_profile: "seccomp+landlock"`.
+- Confirmed `service_restart --service llamacpp --confirm operator-2026-08-30`
+  → `ok`, `llamacpp` active again.
+- Audit entries at `/var/log/system-root-broker/audit.jsonl` correctly record
+  `confirmed_by` and `sandbox_profile`.
+
+## What changed during the live test
+
+1. `install_root_broker.sh` was not executable in git; mode fixed to `0755`.
+2. `services/tool_daemon/landlock.py` printed a non-existent-path skip message
+   to `stdout`, which corrupted the wrapper's JSON output. The message is now
+   written to `sys.stderr` so the wrapper's `stdout` stays valid JSON.
 
 ## Open questions / decisions
 

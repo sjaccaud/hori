@@ -5,8 +5,8 @@
 
 ## Current Slice
 
-SLICE: System Root Broker — Slice 3: confirmation gates and sandboxing
-(in progress 2026-08-30, branch `slice/system-root-broker-01`; sandbox build complete, live smoke test pending)
+SLICE: System Root Broker — Slice 3: confirmation gates and sandboxing — COMPLETE
+(2026-08-30, branch `slice/system-root-broker-01`)
 
 **Problem:** `service_restart` and `service_stop` are destructive. A
 stolen broker token or a confused admin click could stop `aios_core`,
@@ -31,10 +31,10 @@ operations.
   confirmed-but-injected arguments still denied.
 - [x] Add adversarial tests for sandbox escape, `/etc/shadow` denial, and
   network socket denial.
-- [ ] Live smoke test: a confirmed `service_stop` on `llamacpp` stops and
+- [x] Live smoke test: a confirmed `service_stop` on `llamacpp` stops and
   restarts; an unconfirmed one is denied; the audit entry contains the
   confirmation identity and sandbox profile.
-- Commit on `slice/system-root-broker-01`.
+- [x] Commit on `slice/system-root-broker-01`.
 
 **Demo criterion:** Call `service_stop --service llamacpp` without
 confirmation and get `denied`; call it with `confirmed_by=<identity>`
@@ -51,6 +51,17 @@ confirmation identity and sandbox profile.
 - Local wrapper runs (as the repository user) produced valid JSON with
   `sandbox_profile: "seccomp+landlock"` for `service_status` and
   `journalctl_unit`.
+
+**Live demo verification:**
+- Unconfirmed `service_stop --service llamacpp` → `denied`.
+- Confirmed `service_stop --service llamacpp --confirm operator-2026-08-30` → `ok`, `sandbox_profile: "seccomp+landlock"`, `llamacpp` stopped.
+- `service_status --service llamacpp` after stop → `exit_code: 3`, `stdout: "inactive"`, `sandbox_profile: "seccomp+landlock"`.
+- Confirmed `service_restart --service llamacpp --confirm operator-2026-08-30` → `ok`, `llamacpp` active again.
+- Audit entries at `/var/log/system-root-broker/audit.jsonl` correctly record
+  `confirmed_by` and `sandbox_profile: "seccomp+landlock"` for allowed
+  operations, `sandbox_profile: "none"` for unconfirmed attempts.
+- `make test` — unit, integration, regression, and adversarial suites all green
+  after the live fix.
 
 **Surprises / notes so far:**
 1. `systemctl stop` and `service_restart` require root; without `sudo`
@@ -76,6 +87,44 @@ confirmation identity and sandbox profile.
   paused while the broker security work continues.
 
 ## Completed Slices
+
+### SLICE-SYSTEM-ROOT-BROKER-03: confirmation gates and sandboxing — COMPLETE
+
+**Branch:** `slice/system-root-broker-01` (`d989315`)
+
+**What was built:**
+- `confirmed_by` confirmation identity gating for `service_restart` and
+  `service_stop`; `confirmed_by` must not be the broker token and must match
+  a safe pattern/length.
+- Sandboxed wrappers `hori-systemctl` and `hori-journalctl` installed to
+  `/usr/local/sbin`; each reads a JSON request, validates it, applies
+  Landlock/seccomp, and execs only the intended `systemctl`/`journalctl`
+  command.
+- `services/broker/sandbox.py` wraps the existing tool daemon Landlock and
+  seccomp primitives with broker-specific path allowlists.
+- `services/broker/broker.py` routes all four broker operations through the
+  wrappers, parses their JSON, and carries `sandbox_profile` into audit.
+- `scripts/hardening/install_root_broker.sh` installs both wrappers and
+  narrows sudoers to only those two fixed paths.
+- `services/broker/system-root-broker.service` hardened for sandboxed
+  children with writable `/run/systemd`, `/run/dbus`, and `/var/log/journal`.
+- `services/tool_daemon/landlock.py` gained an `execute` flag and
+  file-vs-directory access rights so Landlock can confine processes that
+  `exec` real binaries.
+- Adversarial tests for token-as-confirmation, shell meta-characters in
+  `confirmed_by`, ptrace blocking, `/etc/shadow`/`/etc/group`/`~/.ssh`
+  denial, TCP socket denial, and audit `confirmed_by` + `sandbox_profile`.
+
+**Verification:**
+- `services/broker/test_broker.py` — 17 passed.
+- `tests/adversarial/test_root_broker.py` — 17 passed.
+- `make test-unit` — 411 passed, 2 skipped.
+- `make test-adversarial` — 142 passed.
+- `make test` — all suites green.
+- Live smoke test: unconfirmed `service_stop` on `llamacpp` denied; confirmed
+  `service_stop` and `service_restart` succeeded with
+  `sandbox_profile: "seccomp+landlock"`; audit records contain both
+  `confirmed_by` and `sandbox_profile`.
 
 ### SLICE-SYSTEM-ROOT-BROKER-02: service_stop and journalctl_unit — COMPLETE
 
