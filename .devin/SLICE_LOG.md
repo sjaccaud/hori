@@ -19,18 +19,19 @@ operations.
 - [x] Use `/write-prd` to produce `.devin/prd/system-root-broker-03.md`
   with the interface + test contract for confirmation gates and
   sandboxed execution.
-- Add a per-operation confirmation identity field (`confirmed_by`) that
+- [x] Add a per-operation confirmation identity field (`confirmed_by`) that
   must be present for destructive operations (`service_restart`,
   `service_stop`), but not for read-only ones (`service_status`,
   `journalctl_unit`).
-- Run destructive commands inside a sandbox (Landlock/seccomp-bpf
+- [ ] Run destructive commands inside a sandbox (Landlock/seccomp-bpf
   restriction on filesystem/network, no shell, no arbitrary paths).
-- Wire the admin panel so destructive actions require an explicit
+- [x] Wire the admin panel so destructive actions require an explicit
   confirmation string or prompt, not just a query parameter.
-- Extend adversarial tests: unconfirmed destructive ops denied,
-  confirmed-but-injected arguments still denied, sandbox escape attempts
-  blocked, audit entries record confirmation identity.
-- Live smoke test: a confirmed `service_stop` on `llamacpp` stops and
+- [x] Extend adversarial tests: unconfirmed destructive ops denied and
+  confirmed-but-injected arguments still denied.
+- [ ] Add adversarial tests for sandbox escape, `/etc/shadow` denial, and
+  network socket denial.
+- [ ] Live smoke test: a confirmed `service_stop` on `llamacpp` stops and
   restarts; an unconfirmed one is denied; the audit entry contains the
   confirmation identity and sandbox profile.
 - Commit on `slice/system-root-broker-01`.
