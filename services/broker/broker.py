@@ -213,7 +213,6 @@ class RootBroker:
         return handler(params)
 
     def _op_service_restart(self, params: dict[str, Any]) -> dict[str, Any]:
-        service = str(params.get("service"))
         timeout = float(
             params.get(
                 "timeout",
@@ -228,7 +227,6 @@ class RootBroker:
         )
 
     def _op_service_status(self, params: dict[str, Any]) -> dict[str, Any]:
-        service = str(params.get("service"))
         timeout = float(
             params.get(
                 "timeout",
@@ -243,7 +241,6 @@ class RootBroker:
         )
 
     def _op_service_stop(self, params: dict[str, Any]) -> dict[str, Any]:
-        service = str(params.get("service"))
         timeout = float(
             params.get(
                 "timeout",
@@ -280,6 +277,69 @@ class RootBroker:
         return self._run_wrapper(
             "/usr/local/sbin/hori-journalctl",
             "journalctl_unit",
+            wrapped_params,
+            timeout,
+        )
+
+    def _op_gpu_status(self, params: dict[str, Any]) -> dict[str, Any]:
+        timeout = float(
+            params.get(
+                "timeout",
+                self._default_for("gpu_status", "timeout") or DEFAULT_TIMEOUT,
+            )
+        )
+        wrapped_params: dict[str, Any] = {"operation": "gpu_status"}
+        if "card" in params:
+            wrapped_params["card"] = str(params["card"])
+        return self._run_wrapper(
+            "/usr/local/sbin/hori-gpu",
+            "gpu_status",
+            wrapped_params,
+            timeout,
+        )
+
+    def _op_docker_status(self, params: dict[str, Any]) -> dict[str, Any]:
+        query = str(params.get("query"))
+        timeout = float(
+            params.get(
+                "timeout",
+                self._default_for("docker_status", "timeout") or DEFAULT_TIMEOUT,
+            )
+        )
+        return self._run_wrapper(
+            "/usr/local/sbin/hori-docker",
+            "docker_status",
+            {"operation": "docker_status", "query": query},
+            timeout,
+        )
+
+    def _op_ufw_status(self, params: dict[str, Any]) -> dict[str, Any]:
+        timeout = float(
+            params.get(
+                "timeout",
+                self._default_for("ufw_status", "timeout") or DEFAULT_TIMEOUT,
+            )
+        )
+        return self._run_wrapper(
+            "/usr/local/sbin/hori-ufw",
+            "ufw_status",
+            {"operation": "ufw_status"},
+            timeout,
+        )
+
+    def _op_fail2ban_status(self, params: dict[str, Any]) -> dict[str, Any]:
+        timeout = float(
+            params.get(
+                "timeout",
+                self._default_for("fail2ban_status", "timeout") or DEFAULT_TIMEOUT,
+            )
+        )
+        wrapped_params: dict[str, Any] = {"operation": "fail2ban_status"}
+        if "jail" in params:
+            wrapped_params["jail"] = str(params["jail"])
+        return self._run_wrapper(
+            "/usr/local/sbin/hori-fail2ban",
+            "fail2ban_status",
             wrapped_params,
             timeout,
         )

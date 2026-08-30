@@ -113,14 +113,22 @@ _install_wrapper() {
 
 _install_wrapper "${REPO_ROOT}/scripts/hardening/hori_systemctl.py" /usr/local/sbin/hori-systemctl
 _install_wrapper "${REPO_ROOT}/scripts/hardening/hori_journalctl.py" /usr/local/sbin/hori-journalctl
+_install_wrapper "${REPO_ROOT}/scripts/hardening/hori_gpu.py" /usr/local/sbin/hori-gpu
+_install_wrapper "${REPO_ROOT}/scripts/hardening/hori_docker.py" /usr/local/sbin/hori-docker
+_install_wrapper "${REPO_ROOT}/scripts/hardening/hori_ufw.py" /usr/local/sbin/hori-ufw
+_install_wrapper "${REPO_ROOT}/scripts/hardening/hori_fail2ban.py" /usr/local/sbin/hori-fail2ban
 
 # --- Install sudoers rule for the broker itself ---
 SUDOERS_FILE="/etc/sudoers.d/system-root-broker"
 {
-    echo "# system-root-broker: allow only the two sandboxed wrappers."
+    echo "# system-root-broker: allow only the sandboxed wrappers."
     echo "# This is the *only* root path for the broker user."
     echo "root-broker ALL=(root) NOPASSWD: /usr/local/sbin/hori-systemctl"
     echo "root-broker ALL=(root) NOPASSWD: /usr/local/sbin/hori-journalctl"
+    echo "root-broker ALL=(root) NOPASSWD: /usr/local/sbin/hori-gpu"
+    echo "root-broker ALL=(root) NOPASSWD: /usr/local/sbin/hori-docker"
+    echo "root-broker ALL=(root) NOPASSWD: /usr/local/sbin/hori-ufw"
+    echo "root-broker ALL=(root) NOPASSWD: /usr/local/sbin/hori-fail2ban"
 } > "${SUDOERS_FILE}"
 chmod 0440 "${SUDOERS_FILE}"
 

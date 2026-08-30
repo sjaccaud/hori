@@ -237,6 +237,144 @@ def test_journalctl_unit_rejects_invalid_since(client: RootBrokerClient):
     assert response["status"] == "denied"
 
 
+def test_gpu_status_success(client: RootBrokerClient, broker, monkeypatch):
+    b, _ = broker
+
+    def _fake_run(command, timeout, env=None, input_data=None):
+        assert command[0] == "sudo"
+        assert command[1] == "-n"
+        assert command[2] == "/usr/local/sbin/hori-gpu"
+        payload = json.loads(input_data)
+        assert payload["operation"] == "gpu_status"
+        return (
+            0,
+            json.dumps(
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "stdout": "{}",
+                    "stderr": "",
+                    "sandbox_profile": "seccomp+landlock",
+                    "parsed": {
+                        "cards": [
+                            {
+                                "name": "AMD Radeon AI PRO R9700",
+                                "temperature_edge_c": 32.0,
+                                "vram_used_b": 18966749184,
+                            }
+                        ]
+                    },
+                }
+            ),
+            "",
+        )
+
+    monkeypatch.setattr(b, "_run_command", _fake_run)
+    response = client.call("gpu_status")
+    assert response["status"] == "ok"
+    assert response["exit_code"] == 0
+    assert response["parsed"]["cards"][0]["name"] == "AMD Radeon AI PRO R9700"
+
+
+def test_docker_status_ps_success(client: RootBrokerClient, broker, monkeypatch):
+    b, _ = broker
+
+    def _fake_run(command, timeout, env=None, input_data=None):
+        assert command[0] == "sudo"
+        assert command[1] == "-n"
+        assert command[2] == "/usr/local/sbin/hori-docker"
+        payload = json.loads(input_data)
+        assert payload["operation"] == "docker_status"
+        assert payload["query"] == "ps"
+        return (
+            0,
+            json.dumps(
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "stdout": "[]",
+                    "stderr": "",
+                    "sandbox_profile": "seccomp+landlock",
+                }
+            ),
+            "",
+        )
+
+    monkeypatch.setattr(b, "_run_command", _fake_run)
+    response = client.call("docker_status", {"query": "ps"})
+    assert response["status"] == "ok"
+    assert response["exit_code"] == 0
+    assert response["stdout"] == "[]"
+
+
+def test_ufw_status_success(client: RootBrokerClient, broker, monkeypatch):
+    b, _ = broker
+
+    def _fake_run(command, timeout, env=None, input_data=None):
+        assert command[0] == "sudo"
+        assert command[1] == "-n"
+        assert command[2] == "/usr/local/sbin/hori-ufw"
+        payload = json.loads(input_data)
+        assert payload["operation"] == "ufw_status"
+        return (
+            0,
+            json.dumps(
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "stdout": "Status: active",
+                    "stderr": "",
+                    "sandbox_profile": "seccomp+landlock",
+                }
+            ),
+            "",
+        )
+
+    monkeypatch.setattr(b, "_run_command", _fake_run)
+    response = client.call("ufw_status")
+    assert response["status"] == "ok"
+    assert response["stdout"].startswith("Status: active")
+
+
+def test_fail2ban_status_success(client: RootBrokerClient, broker, monkeypatch):
+    b, _ = broker
+
+    def _fake_run(command, timeout, env=None, input_data=None):
+        assert command[0] == "sudo"
+        assert command[1] == "-n"
+        assert command[2] == "/usr/local/sbin/hori-fail2ban"
+        payload = json.loads(input_data)
+        assert payload["operation"] == "fail2ban_status"
+        return (
+            0,
+            json.dumps(
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "stdout": "Status\n|- Number of jail:\t1\n",
+                    "stderr": "",
+                    "sandbox_profile": "seccomp+landlock",
+                }
+            ),
+            "",
+        )
+
+    monkeypatch.setattr(b, "_run_command", _fake_run)
+    response = client.call("fail2ban_status")
+    assert response["status"] == "ok"
+    assert "Number of jail" in response["stdout"]
+
+
+def test_docker_status_rejects_invalid_query(client: RootBrokerClient):
+    response = client.call("docker_status", {"query": "rm"})
+    assert response["status"] == "denied"
+
+
+def test_fail2ban_status_rejects_invalid_jail(client: RootBrokerClient):
+    response = client.call("fail2ban_status", {"jail": "sshd; rm -rf /"})
+    assert response["status"] == "denied"
+
+
 def test_service_stop_uses_wrapper_and_records_sandbox_profile(
     client: RootBrokerClient, broker, monkeypatch
 ):

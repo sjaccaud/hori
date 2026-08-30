@@ -13,12 +13,10 @@ TRACES TO:
 """
 from __future__ import annotations
 
-import json
 import os
 import socket
 import subprocess
 import sys
-from dataclasses import dataclass
 from typing import Any
 
 from services.tool_daemon.landlock import AllowedPath, apply_landlock_restrictions
@@ -88,6 +86,39 @@ _OPERATION_ALLOWED_PATHS: dict[str, list[AllowedPath]] = {
     "journalctl_unit": [
         # Machine-specific journal directory is under /var/log/journal.
         AllowedPath("/var/log/journal", read_only=True),
+    ],
+    "gpu_status": [
+        # DRM sysfs provides all read-only GPU state for amdgpu/nvidia.
+        AllowedPath("/sys/class/drm", read_only=True),
+        AllowedPath("/sys/bus/pci", read_only=True),
+        AllowedPath("/sys/devices", read_only=True),
+        AllowedPath("/usr/share/misc/pci.ids", read_only=True),
+    ],
+    "docker_status": [
+        AllowedPath("/usr/bin/docker", read_only=True, execute=True),
+        # /run and /var/run are already allowed by _BASE_ALLOWED_PATHS;
+        # the docker socket lives there.  We do not grant the whole of /etc/docker.
+        AllowedPath("/etc/docker", read_only=True),
+    ],
+    "ufw_status": [
+        AllowedPath("/usr/sbin/ufw", read_only=True, execute=True),
+        AllowedPath("/usr/sbin/iptables", read_only=True, execute=True),
+        AllowedPath("/usr/sbin/nft", read_only=True, execute=True),
+        AllowedPath("/usr/sbin/ip6tables", read_only=True, execute=True),
+        AllowedPath("/etc/ufw", read_only=True),
+        AllowedPath("/usr/share/ufw", read_only=True),
+        AllowedPath("/lib/ufw", read_only=True),
+        AllowedPath("/var/lib/ufw", read_only=True),
+        AllowedPath("/etc/iptables", read_only=True),
+        AllowedPath("/etc/default/ufw", read_only=True),
+    ],
+    "fail2ban_status": [
+        AllowedPath("/usr/bin/fail2ban-client", read_only=True, execute=True),
+        AllowedPath("/usr/bin/python3", read_only=True, execute=True),
+        AllowedPath("/etc/fail2ban", read_only=True),
+        AllowedPath("/var/lib/fail2ban", read_only=True),
+        AllowedPath("/run/fail2ban", read_only=True),
+        AllowedPath("/var/run/fail2ban", read_only=True),
     ],
 }
 
@@ -186,8 +217,12 @@ def sandbox_self_check() -> dict[str, Any]:
 
 if __name__ == "__main__":
     # When run directly, run a self-check in a child process and print JSON.
+    script = (
+        "import json,sys; from services.broker.sandbox import sandbox_self_check; "
+        "print(json.dumps(sandbox_self_check()))"
+    )
     proc = subprocess.run(
-        [sys.executable, "-c", "import json,sys; from services.broker.sandbox import sandbox_self_check; print(json.dumps(sandbox_self_check()))"],
+        [sys.executable, "-c", script],
         capture_output=True,
         text=True,
         env={"PYTHONPATH": os.getcwd()},

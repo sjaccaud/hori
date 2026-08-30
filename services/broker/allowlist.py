@@ -47,6 +47,25 @@ class Allowlist:
             "timeout": {"min": 5, "max": 60, "default": 30},
             "_required": ["unit"],
         },
+        "gpu_status": {
+            "card": {"pattern": r"^card[0-9]+$"},
+            "timeout": {"min": 5, "max": 60, "default": 30},
+            "_required": [],
+        },
+        "docker_status": {
+            "query": ["ps", "system_df", "info"],
+            "timeout": {"min": 5, "max": 60, "default": 30},
+            "_required": ["query"],
+        },
+        "ufw_status": {
+            "timeout": {"min": 5, "max": 60, "default": 30},
+            "_required": [],
+        },
+        "fail2ban_status": {
+            "jail": {"pattern": r"^[A-Za-z0-9_-]{1,64}$"},
+            "timeout": {"min": 5, "max": 60, "default": 30},
+            "_required": [],
+        },
     }
 
     def __init__(self, path: str | Path, fallback: dict[str, Any] | None = None):

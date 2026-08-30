@@ -5,7 +5,19 @@
 
 ## Current Slice
 
-No active slice.
+### SLICE-SYSTEM-ROOT-BROKER-05: Read-only GPU / Docker / firewall / fail2ban queries through the root broker — IN PROGRESS
+
+**Branch:** `slice/system-root-broker-05`
+
+**Goal:** Expand the root broker with safe, read-only operations so Devin CLI
+and HORI admin surfaces can query GPU state (`rocm-smi`/`nvidia-smi`), Docker
+status, `ufw` rules/status, and `fail2ban-client` status **without** requiring
+the primary user to be in `sudo` or `docker`. This is the prerequisite for
+removing `<user>` from the `sudo` and `docker` groups.
+
+**Demo criterion:** Run `python -m services.broker.client gpu_status` and get
+back a JSON summary of GPU temperature, VRAM, and fan/clock without `sudo`;
+similarly for `docker_status`, `ufw_status`, and `fail2ban_status`.
 
 ## Completed Slices
 

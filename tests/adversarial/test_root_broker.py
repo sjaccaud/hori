@@ -349,3 +349,102 @@ def test_broker_audit_records_confirmation_and_sandbox_profile(
     entries = broker.audit_logger.read()
     assert entries[-1]["confirmed_by"] == identity
     assert entries[-1]["sandbox_profile"] == "seccomp+landlock"
+
+
+def test_broker_rejects_docker_status_state_change(client: RootBrokerClient, broker: RootBroker):
+    """`docker_status` must only allow read-only queries.
+
+    Defends: arbitrary docker command execution via the broker.
+    Traces to: .devin/prd/system-root-broker-05.md.
+    """
+    response = client.call("docker_status", {"query": "exec"})
+    assert response["status"] == "denied"
+    response = client.call("docker_status", {"query": "run"})
+    assert response["status"] == "denied"
+
+
+def test_broker_rejects_docker_status_shell_injection(client: RootBrokerClient, broker: RootBroker):
+    """`query` containing shell meta-characters is denied before it reaches docker.
+
+    Defends: shell injection through the docker query parameter.
+    Traces to: .devin/prd/system-root-broker-05.md.
+    """
+    response = client.call("docker_status", {"query": "ps; rm -rf /"})
+    assert response["status"] == "denied"
+
+
+def test_broker_rejects_fail2ban_shell_injection(client: RootBrokerClient, broker: RootBroker):
+    """A jail name containing shell meta-characters is denied.
+
+    Defends: shell injection through the fail2ban jail parameter.
+    Traces to: .devin/prd/system-root-broker-05.md.
+    """
+    response = client.call("fail2ban_status", {"jail": "sshd; cat /etc/shadow"})
+    assert response["status"] == "denied"
+
+
+def test_broker_gpu_status_sandbox_blocks_etc_shadow():
+    """A sandboxed child cannot read /etc/shadow after applying the gpu_status sandbox.
+
+    Defends: filesystem confinement for the new gpu_status operation.
+    Traces to: .devin/prd/system-root-broker-05.md.
+    """
+    script = """
+import sys, json
+sys.path.insert(0, ".")
+from services.broker.sandbox import apply_broker_sandbox
+
+result = apply_broker_sandbox("gpu_status")
+if result["sandbox_profile"] == "denied":
+    print(json.dumps(result))
+    sys.exit(2)
+
+try:
+    with open("/etc/shadow"):
+        sys.exit(1)
+except (OSError, PermissionError):
+    sys.exit(0)
+"""
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[2],
+    )
+    assert proc.returncode == 0, f"/etc/shadow was readable in gpu_status sandbox: {proc.stderr}"
+
+
+def test_broker_docker_status_sandbox_denies_network_connect():
+    """A sandboxed child cannot create a TCP socket after applying the docker_status sandbox.
+
+    Defends: network confinement for the new docker_status operation.
+    Traces to: .devin/prd/system-root-broker-05.md.
+    """
+    script = """
+import socket, errno, sys
+import json
+sys.path.insert(0, ".")
+from services.broker.sandbox import apply_broker_sandbox
+
+result = apply_broker_sandbox("docker_status")
+if result["sandbox_profile"] == "denied":
+    print(json.dumps(result))
+    sys.exit(2)
+
+try:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    s.close()
+    sys.exit(1)
+except OSError as exc:
+    if exc.errno in (errno.EACCES, errno.EPERM):
+        sys.exit(0)
+    sys.exit(1)
+"""
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[2],
+    )
+    assert proc.returncode == 0, f"TCP socket was not denied in docker_status sandbox: {proc.stderr}"

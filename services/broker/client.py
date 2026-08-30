@@ -84,6 +84,10 @@ def _main() -> None:
             "service_restart",
             "service_stop",
             "journalctl_unit",
+            "gpu_status",
+            "docker_status",
+            "ufw_status",
+            "fail2ban_status",
         ],
         help="Broker operation to call.",
     )
@@ -93,6 +97,11 @@ def _main() -> None:
     parser.add_argument(
         "--since", type=str, help="Signed relative time window (e.g. -1h)."
     )
+    parser.add_argument(
+        "--query", type=str, help="Docker subquery: ps, system_df, info."
+    )
+    parser.add_argument("--jail", type=str, help="fail2ban jail name.")
+    parser.add_argument("--card", type=str, help="GPU card selector (e.g. card0).")
     parser.add_argument(
         "--confirm",
         type=str,
@@ -115,6 +124,12 @@ def _main() -> None:
         params["lines"] = args.lines
     if args.since:
         params["since"] = args.since
+    if args.query:
+        params["query"] = args.query
+    if args.jail:
+        params["jail"] = args.jail
+    if args.card:
+        params["card"] = args.card
     if args.confirm:
         params["confirmed_by"] = args.confirm
 
