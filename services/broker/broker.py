@@ -106,7 +106,7 @@ class RootBroker:
         command: list[str],
         timeout: float,
         env: dict[str, str] | None = None,
-        input_data: bytes | None = None,
+        input_data: str | None = None,
     ) -> tuple[int, str, str]:
         """Run a subprocess with a hard timeout.
 
@@ -226,7 +226,7 @@ class RootBroker:
         exit_code, stdout, stderr = self._run_command(
             command,
             timeout,
-            input_data=json.dumps(payload).encode("utf-8"),
+            input_data=json.dumps(payload),
         )
         return {
             "status": "ok" if exit_code == 0 else "error",

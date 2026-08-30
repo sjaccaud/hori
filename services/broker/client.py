@@ -70,3 +70,51 @@ class RootBrokerClient:
         import uuid
 
         return str(uuid.uuid4())
+
+
+def _main() -> None:
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(description="Root broker command-line client.")
+    parser.add_argument(
+        "operation",
+        choices=[
+            "service_status",
+            "service_restart",
+            "service_stop",
+            "journalctl_unit",
+        ],
+        help="Broker operation to call.",
+    )
+    parser.add_argument("--service", type=str, help="Service name.")
+    parser.add_argument("--unit", type=str, help="Journald unit name.")
+    parser.add_argument("--lines", type=int, help="Number of journal lines.")
+    parser.add_argument(
+        "--since", type=str, help="Signed relative time window (e.g. -1h)."
+    )
+    parser.add_argument(
+        "--socket", type=str, default=BROKER_SOCKET_PATH, help="Broker socket path."
+    )
+    parser.add_argument(
+        "--secrets", type=str, default=BROKER_SECRETS_PATH, help="Broker secrets file."
+    )
+    args = parser.parse_args()
+
+    params: dict[str, Any] = {}
+    if args.service:
+        params["service"] = args.service
+    if args.unit:
+        params["unit"] = args.unit
+    if args.lines is not None:
+        params["lines"] = args.lines
+    if args.since:
+        params["since"] = args.since
+
+    client = RootBrokerClient(socket_path=args.socket, secrets_path=args.secrets)
+    response = client.call(args.operation, params)
+    print(json.dumps(response, indent=2))
+
+
+if __name__ == "__main__":
+    _main()
