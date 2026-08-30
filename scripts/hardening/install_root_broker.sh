@@ -49,21 +49,40 @@ chmod 0750 "${LOG_DIR}"
 chown "root:${BROKER_GROUP}" "${RUN_DIR}"
 chmod 0755 "${RUN_DIR}"
 
-# --- Install default allowlist ---
-if [ ! -f "${ETC_DIR}/broker-allowlist.json" ]; then
-    # Extract the DEFAULT allowlist from the Python module.
-    # A production install may ship a hand-written JSON file instead.
-    PYTHONPATH="${REPO_ROOT}" "${REPO_ROOT}/venv/bin/python3" - <<'PY'
+# --- Install / update default allowlist ---
+# Merge the current Allowlist.DEFAULT into any existing file so new
+# operations are added without clobbering admin-local overrides.
+PYTHONPATH="${REPO_ROOT}" "${REPO_ROOT}/venv/bin/python3" - <<'PY'
 import json
+import os
+from pathlib import Path
 from services.broker.allowlist import Allowlist
-data = dict(Allowlist.DEFAULT)
-data.setdefault("_meta", {"version": "1.0"})
-with open("/etc/system-root-broker/broker-allowlist.json", "w") as f:
+
+path = Path("/etc/system-root-broker/broker-allowlist.json")
+existing = {}
+if path.exists():
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        existing = {}
+
+# Merge DEFAULT entries over the existing ones. This keeps the shape
+# canonical while preserving any custom keys not in DEFAULT.
+data = {**dict(Allowlist.DEFAULT), **existing}
+for key, value in Allowlist.DEFAULT.items():
+    data[key] = value
+
+data.setdefault("_meta", {"version": "1.1"})
+if "_meta" in data and isinstance(data["_meta"], dict):
+    data["_meta"]["version"] = "1.1"
+
+path.parent.mkdir(parents=True, exist_ok=True)
+with open(path, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
 PY
-    chown "root:${BROKER_GROUP}" "${ETC_DIR}/broker-allowlist.json"
-    chmod 0640 "${ETC_DIR}/broker-allowlist.json"
-fi
+chown "root:${BROKER_GROUP}" "${ETC_DIR}/broker-allowlist.json"
+chmod 0640 "${ETC_DIR}/broker-allowlist.json"
 
 # --- Generate token if missing ---
 SECRETS_FILE="${ETC_DIR}/broker-secrets.env"
@@ -80,22 +99,20 @@ fi
 
 # --- Install sudoers rule for the broker itself ---
 SUDOERS_FILE="/etc/sudoers.d/system-root-broker"
-cat > "${SUDOERS_FILE}" <<EOF
-# system-root-broker: allow only specific systemctl commands.
-# This is the *only* root path for the broker user.
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl restart aios_core
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl restart aios-sherpa
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl restart aios-tool-daemon
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl restart llamacpp
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl stop aios_core
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl stop aios-sherpa
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl stop aios-tool-daemon
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl stop llamacpp
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl is-active aios_core
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl is-active aios-sherpa
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl is-active aios-tool-daemon
-root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl is-active llamacpp
-EOF
+ALLOWED_SERVICES=(aios_core aios-sherpa aios-tool-daemon llamacpp)
+{
+    echo "# system-root-broker: allow only specific systemctl/journalctl commands."
+    echo "# This is the *only* root path for the broker user."
+    for svc in "${ALLOWED_SERVICES[@]}"; do
+        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl restart ${svc}"
+        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl stop ${svc}"
+        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl is-active ${svc}"
+        # journalctl rules: with and without --since. The numeric/max
+        # patterns keep the allowed argument shape narrow.
+        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/journalctl -u ${svc} --no-pager -n [0-9]*"
+        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/journalctl -u ${svc} --no-pager -n [0-9]* --since [+-][0-9]*[smhd]"
+    done
+} > "${SUDOERS_FILE}"
 chmod 0440 "${SUDOERS_FILE}"
 
 # --- Install systemd unit ---

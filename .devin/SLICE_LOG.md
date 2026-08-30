@@ -5,46 +5,66 @@
 
 ## Current Slice
 
-SLICE: System Root Broker — Slice 1: service restart/status and systemd unit
+SLICE: System Root Broker — Slice 2: service_stop and journalctl_unit
 (in progress 2026-08-30, branch `slice/system-root-broker-01`)
 
-**Problem:** The `<user>` account still has broad root-equivalent access
-through sudoers `(ALL : ALL) ALL`, `NOPASSWD: /usr/bin/sh`, and the
-`docker` group. Agents and the admin panel currently invoke `sudo`
-directly for service restarts, package installs, and system file writes.
-This grants root for the lifetime of the command with no audit,
-confirmation, or sandbox.
+**Problem:** The broker currently only supports `service_status` and
+`service_restart`. The admin panel and hardening scripts also need the
+ability to stop an allowlisted service and to fetch recent journal logs
+for a unit. Adding these two operations extends the broker's usefulness
+without yet opening package/file/docker paths or removing the human
+user's `sudo`/`docker` groups.
 
 **Plan:**
-- Build a minimal `system-root-broker` daemon that listens on a Unix
-  socket and accepts only two operations in this slice:
-  `service_restart` and `service_status` for an allowlist of units.
-- Provide a systemd unit and socket, and an install script
-  `scripts/hardening/install_root_broker.sh`.
-- Add a small `root_broker_client` library for the admin panel.
-- Write adversarial tests for auth, allowlist, and audit-log correctness.
-- Commit on `slice/system-root-broker-01`. Do not touch sudoers yet;
-  the broker must be proven before it replaces any sudo rules.
+- Use `/write-prd` to produce `.devin/prd/system-root-broker-02.md`
+  with the interface + test contract for `service_stop` and
+  `journalctl_unit`.
+- Implement both operations in the broker allowlist and executor
+  (`services/broker/broker.py`).
+- Add client support in `services/broker/client.py`.
+- Write adversarial tests proving non-allowlisted units are denied and
+  log tampering is still detected.
+- Update the admin panel (`services/aios_core/main.py`) to route a
+  stop/log endpoint through the broker.
+- Run `services/broker/test_broker.py`, `tests/adversarial/test_root_broker.py`,
+  and `services/aios_core/test_main.py`.
+- Live smoke test with a dummy service and `journalctl_unit --unit aios_core`.
+- Commit on `slice/system-root-broker-01`.
 
-**Demo criterion:** Run `systemctl start system-root-broker`, then call
-`root_broker_client service_restart --service aios_core` from the
-`<user>` shell. The service restarts, an entry is appended to
-`/var/log/system-root-broker/audit.jsonl`, and the client returns a
-JSON result. A wrong token or a non-allowlisted service is denied.
-
-**Status:** Slice 1 is complete and committed on
-`slice/system-root-broker-01` (`791551c`). The broker is installed,
-`service_status` and `service_restart` work end-to-end, and the admin
-panel `/admin/api/service/restart` now routes through the broker. The
-critical `/etc/sudoers.d/10-devin` root shell and the legacy
-`aios-admin` admin-panel sudoers have been removed. All broker,
-adversarial, and admin tests pass (56). Full context:
-`.devin/handoff-system-root-broker-01.md`.
+**Demo criterion:** Run `systemctl start system-root-broker`, then from
+ the `<user>` shell call `root_broker_client service_stop --service
+ <allowlisted-unit>` and `root_broker_client journalctl_unit --unit
+ aios_core --lines 50`. Both return JSON; a valid audit entry is appended;
+ a non-allowlisted unit or wrong token is denied.
 
 **Deferred:** macOS Project Context slice (`slice/macos-project-context`)
-is paused while this security work is completed.
+remains paused while the broker security work continues.
 
 ## Completed Slices
+
+### SLICE-SYSTEM-ROOT-BROKER-01: service restart/status and systemd unit — COMPLETE
+
+**Branch:** `slice/system-root-broker-01` (`791551c`)
+
+**What was built:**
+- `system-root-broker` systemd service and socket.
+- `service_status` and `service_restart` for the allowlist `aios_core`,
+  `aios-sherpa`, `aios-tool-daemon`, `llamacpp`.
+- Client library (`services/broker/client.py`) and admin-panel integration.
+- Audit log at `/var/log/system-root-broker/audit.jsonl` with correct
+  `root:root-broker 0620` permissions.
+- Adversarial tests for auth, allowlist, and audit-log correctness.
+
+**Demo:** Start the broker, call `service_restart --service aios_core`;
+service restarts, audit entry appended, wrong token and non-allowlisted
+service denied. Admin panel `/admin/api/service/restart` now uses the
+broker.
+
+**Tests:** `services/broker/test_broker.py` (8),
+`tests/adversarial/test_root_broker.py` (6), and
+`services/aios_core/test_main.py` (42) pass.
+
+**Full context:** `.devin/handoff-system-root-broker-01.md`.
 
 ### SLICE-MACOS-07: The Koi, Menu Bar, Sound, Accessibility Audit (completed 2026-08-14)
 

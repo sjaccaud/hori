@@ -563,18 +563,19 @@ async def admin_trigger_consolidation(max_clusters: int = 10, _admin_auth: None 
 
 @app.post("/admin/api/service/{action}")
 async def admin_service_control(action: str, service: str = "aios_core", _admin_auth: None = Depends(_check_admin_auth)):
-    """Restart or check status of a systemd service.
+    """Restart, stop, or check status of a systemd service.
 
     SECURITY: The service name is validated against an allowlist.
-    Restart requests are routed through the system root broker; the
-    broker runs the privileged `systemctl restart` as the unprivileged
-    root-broker user and writes an audit entry. Status requests still
-    use read-only `systemctl status`, which does not require root.
+    Restart and stop requests are routed through the system root broker;
+    the broker runs the privileged `systemctl` command as the
+    unprivileged root-broker user and writes an audit entry. Status
+    requests still use read-only `systemctl status`, which does not
+    require root.
 
-    SELF-RESTART: When restarting aios_core (itself), the response is
-    sent BEFORE the restart happens. A detached subprocess sleeps 1.5s
-    then asks the broker to restart aios_core — enough time for the
-    HTTP response to reach the browser before the process is killed.
+    SELF-RESTART / SELF-STOP: When restarting or stopping aios_core
+    (itself), the response is sent BEFORE the action happens. A detached
+    subprocess sleeps 1.5s then asks the broker to act — enough time for
+    the HTTP response to reach the browser before the process is killed.
     """
     import asyncio as _asyncio
     import subprocess as _subprocess
@@ -648,8 +649,50 @@ async def admin_service_control(action: str, service: str = "aios_core", _admin_
             "output": output[-4000:] if output else "(no output)",
         }
 
+    elif action == "stop":
+        is_self = service == "aios_core"
+        if is_self:
+            python = sys.executable
+            _subprocess.Popen(
+                [
+                    python,
+                    "-c",
+                    "import time; time.sleep(1.5); "
+                    "from services.broker.client import RootBrokerClient; "
+                    "RootBrokerClient().call('service_stop', {'service': 'aios_core'})",
+                ],
+                start_new_session=True,
+                stdout=_subprocess.DEVNULL,
+                stderr=_subprocess.DEVNULL,
+            )
+            return {
+                "service": service,
+                "action": action,
+                "exit_code": 0,
+                "output": f"Stopping {service} in 1.5s... (response sent before stop)",
+            }
+
+        try:
+            client = RootBrokerClient()
+            result = await _asyncio.to_thread(client.call, "service_stop", {"service": service})
+        except Exception as exc:
+            return {
+                "service": service,
+                "action": action,
+                "exit_code": -1,
+                "output": f"Broker error: {exc}",
+            }
+
+        output = (result.get("stdout", "") + "\n" + result.get("stderr", "")).strip()
+        return {
+            "service": service,
+            "action": action,
+            "exit_code": result.get("exit_code", 0),
+            "output": output[-4000:] if output else "(no output)",
+        }
+
     else:
-        return {"error": f"Action '{action}' not supported. Use 'restart' or 'status'."}
+        return {"error": f"Action '{action}' not supported. Use 'restart', 'stop', or 'status'."}
 
 
 @app.get("/admin/api/logs/{log_type}")
@@ -700,6 +743,48 @@ async def admin_view_logs(log_type: str, lines: int = 50, _admin_auth: None = De
     except _asyncio.TimeoutError:
         proc.kill()
         return {"log_type": log_type, "lines": 0, "content": "TIMEOUT"}
+
+
+@app.get("/admin/api/logs/unit/{unit}")
+async def admin_journalctl_unit(
+    unit: str,
+    lines: int = 50,
+    since: str | None = None,
+    _admin_auth: None = Depends(_check_admin_auth),
+):
+    """View journal logs for a specific allowlisted systemd unit.
+
+    SECURITY: Routed through the system root broker; the broker validates
+    the unit against its allowlist and applies the narrow `journalctl`
+    sudoers rule. The admin panel never invokes `journalctl` directly.
+    """
+    import asyncio as _asyncio
+
+    allowed_units = {"aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp"}
+    if unit not in allowed_units:
+        return {"error": f"Unit '{unit}' not in allowlist"}
+
+    try:
+        client = RootBrokerClient()
+        params: dict[str, Any] = {"unit": unit, "lines": lines}
+        if since:
+            params["since"] = since
+        result = await _asyncio.to_thread(client.call, "journalctl_unit", params)
+    except Exception as exc:
+        return {
+            "unit": unit,
+            "lines": lines,
+            "exit_code": -1,
+            "content": f"Broker error: {exc}",
+        }
+
+    output = (result.get("stdout", "") + "\n" + result.get("stderr", "")).strip()
+    return {
+        "unit": unit,
+        "lines": lines,
+        "exit_code": result.get("exit_code", 0),
+        "content": output[-4000:] if output else "(no output)",
+    }
 
 
 # --- Incident Memory (PoC 12.5) ---

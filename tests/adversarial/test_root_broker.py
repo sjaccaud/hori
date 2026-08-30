@@ -28,12 +28,22 @@ def broker():
         secrets_path = runtime / "secrets.env"
         token = "adversarial-token"
 
-        # Default allowlist in this test is restricted to one service.
+        # Default allowlist in this test is restricted to one service/unit.
         allowlist = {
             "service_status": {
                 "service": ["aios_core"],
                 "timeout": {"min": 5, "max": 60, "default": 30},
                 "_required": ["service"],
+            },
+            "service_stop": {
+                "service": ["aios_core"],
+                "timeout": {"min": 5, "max": 300, "default": 60},
+                "_required": ["service"],
+            },
+            "journalctl_unit": {
+                "unit": ["aios_core"],
+                "lines": {"min": 1, "max": 100, "default": 50},
+                "_required": ["unit"],
             },
         }
         allowlist_path.write_text(json.dumps(allowlist))
@@ -102,3 +112,52 @@ def test_broker_audit_log_never_leaks_token(
     client.call("service_status", {"service": "nginx"})
     raw = broker.audit_logger.log_path.read_text()
     assert "adversarial-token" not in raw
+
+
+def test_broker_rejects_shell_injection_via_service_stop(
+    client: RootBrokerClient, broker: RootBroker
+):
+    """A semicolon in the service name must not reach systemctl stop.
+
+    Defends: root broker allowlist validation.
+    """
+    response = client.call("service_stop", {"service": "aios_core; rm -rf /"})
+    assert response["status"] == "denied"
+
+
+def test_broker_rejects_shell_injection_via_journalctl_unit(
+    client: RootBrokerClient, broker: RootBroker
+):
+    """A semicolon in the unit name must not reach journalctl.
+
+    Defends: root broker allowlist value validation.
+    """
+    response = client.call(
+        "journalctl_unit", {"unit": "aios_core; cat /etc/shadow", "lines": 50}
+    )
+    assert response["status"] == "denied"
+
+
+def test_broker_journalctl_rejects_arbitrary_arguments(
+    client: RootBrokerClient, broker: RootBroker
+):
+    """`--output=json`, `--follow`, or other journalctl options are not allowlisted.
+
+    Defends: root broker parameter allowlist.
+    """
+    response = client.call(
+        "journalctl_unit",
+        {"unit": "aios_core", "lines": 50, "output": "json"},
+    )
+    assert response["status"] == "denied"
+
+
+def test_broker_journalctl_rejects_disallowed_unit(
+    client: RootBrokerClient, broker: RootBroker
+):
+    """`journalctl` must only be run for the four broker-allowlisted units.
+
+    Defends: root broker unit allowlist.
+    """
+    response = client.call("journalctl_unit", {"unit": "systemd-journald", "lines": 50})
+    assert response["status"] == "denied"

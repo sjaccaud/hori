@@ -441,12 +441,13 @@ def test_admin_api_service_control_allowlist(admin_client):
 
 
 def test_admin_api_service_control_bad_action(admin_client):
-    """Service control should reject actions other than restart/status."""
+    """Service control should reject actions other than restart/stop/status."""
     response = admin_client.post("/admin/api/service/hack?service=aios_core", headers=_admin_headers())
     assert response.status_code == 200
     data = response.json()
     assert "error" in data
     assert "not supported" in data["error"]
+    assert "stop" in data["error"]
 
 
 def test_admin_api_service_self_restart_detached(admin_client):
@@ -486,6 +487,75 @@ def test_admin_api_service_restart_uses_broker(admin_client):
         assert data["exit_code"] == 0
         mock_client_cls.assert_called_once()
         mock_client.call.assert_called_once_with("service_restart", {"service": "llamacpp"})
+
+
+def test_admin_api_service_stop_uses_broker(admin_client):
+    """Stopping an allowlisted service should call the root broker."""
+    with patch("services.aios_core.main.RootBrokerClient") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.call.return_value = {
+            "status": "ok",
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "request_id": "test-req",
+        }
+        mock_client_cls.return_value = mock_client
+        response = admin_client.post(
+            "/admin/api/service/stop?service=llamacpp", headers=_admin_headers()
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exit_code"] == 0
+        mock_client_cls.assert_called_once()
+        mock_client.call.assert_called_once_with(
+            "service_stop", {"service": "llamacpp"}
+        )
+
+
+def test_admin_api_service_self_stop_detached(admin_client):
+    """Self-stop (aios_core) should return immediately with a deferred message,
+    and the detached command must use the broker, not `sudo` or `bash`."""
+    with patch("subprocess.Popen") as mock_popen:
+        response = admin_client.post(
+            "/admin/api/service/stop?service=aios_core", headers=_admin_headers()
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exit_code"] == 0
+        assert "1.5s" in data["output"]
+        mock_popen.assert_called_once()
+        cmd = mock_popen.call_args[0][0]
+        joined = " ".join(cmd)
+        assert "sudo" not in joined
+        assert "bash" not in joined
+        assert "RootBrokerClient" in joined
+        assert "service_stop" in joined
+
+
+def test_admin_api_journalctl_unit_uses_broker(admin_client):
+    """Fetching unit logs should call the root broker, not run journalctl directly."""
+    with patch("services.aios_core.main.RootBrokerClient") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.call.return_value = {
+            "status": "ok",
+            "exit_code": 0,
+            "stdout": "log line",
+            "stderr": "",
+            "request_id": "test-req",
+        }
+        mock_client_cls.return_value = mock_client
+        response = admin_client.get(
+            "/admin/api/logs/unit/aios_core?lines=50", headers=_admin_headers()
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exit_code"] == 0
+        assert "log line" in data["content"]
+        mock_client_cls.assert_called_once()
+        mock_client.call.assert_called_once_with(
+            "journalctl_unit", {"unit": "aios_core", "lines": 50}
+        )
 
 
 def test_admin_api_logs_unknown_type(admin_client):

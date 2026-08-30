@@ -1,0 +1,9 @@
+{
+  "type": "work_order",
+  "id": "system-root-broker-02",
+  "parent_charter_id": "aios-foundation-charter-001",
+  "version": "1.0.0",
+  "description": "Extend the system root broker with service_stop and journalctl_unit operations, including allowlist, executor, sudoers, tests, and admin panel integration.",
+  "status": "backlog",
+  "priority": "high"
+}

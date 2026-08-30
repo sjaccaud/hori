@@ -109,6 +109,79 @@ def test_allowlist_default_restricts_services():
     assert not ok
 
 
+def test_service_stop_allowlisted_success(
+    client: RootBrokerClient, broker, monkeypatch
+):
+    b, _ = broker
+
+    def _fake_run(command, timeout, env=None):
+        assert command[0:4] == ["sudo", "-n", "systemctl", "stop"]
+        assert command[4] == "aios_core"
+        return 0, "stopped", ""
+
+    monkeypatch.setattr(b, "_run_command", _fake_run)
+    response = client.call("service_stop", {"service": "aios_core"})
+    assert response["request_id"]
+    assert response["status"] == "ok"
+    assert response["exit_code"] == 0
+    assert response["stdout"] == "stopped"
+
+
+def test_service_stop_non_allowlisted_denied(client: RootBrokerClient):
+    response = client.call("service_stop", {"service": "nginx"})
+    assert response["status"] == "denied"
+
+
+def test_journalctl_unit_allowlisted_success(
+    client: RootBrokerClient, broker, monkeypatch
+):
+    b, _ = broker
+
+    def _fake_run(command, timeout, env=None):
+        assert command[0:4] == ["sudo", "-n", "journalctl", "-u"]
+        assert command[4] == "aios_core"
+        assert "--no-pager" in command
+        return 0, "log line", ""
+
+    monkeypatch.setattr(b, "_run_command", _fake_run)
+    response = client.call("journalctl_unit", {"unit": "aios_core", "lines": 50})
+    assert response["request_id"]
+    assert response["status"] == "ok"
+    assert response["exit_code"] == 0
+    assert response["stdout"] == "log line"
+
+
+def test_journalctl_unit_non_allowlisted_denied(client: RootBrokerClient):
+    response = client.call("journalctl_unit", {"unit": "nginx", "lines": 50})
+    assert response["status"] == "denied"
+
+
+def test_journalctl_unit_default_lines(client: RootBrokerClient, broker, monkeypatch):
+    b, _ = broker
+
+    def _fake_run(command, timeout, env=None):
+        # Find the journalctl `-n` (after --no-pager), not `sudo -n`.
+        idx = command.index("-n", command.index("--no-pager"))
+        assert command[idx + 1] == "50"
+        return 0, "log line", ""
+
+    monkeypatch.setattr(b, "_run_command", _fake_run)
+    response = client.call("journalctl_unit", {"unit": "aios_core"})
+    assert response["status"] == "ok"
+
+
+def test_journalctl_unit_lines_bound(client: RootBrokerClient):
+    response = client.call("journalctl_unit", {"unit": "aios_core", "lines": 9999})
+    assert response["status"] == "denied"
+
+
+def test_journalctl_unit_rejects_invalid_since(client: RootBrokerClient):
+    response = client.call(
+        "journalctl_unit", {"unit": "aios_core", "lines": 50, "since": "; rm -rf /"}
+    )
+    assert response["status"] == "denied"
+
+
 def test_audit_entry_serialization():
     entry = BrokerAuditEntry(
         timestamp=time.time(),

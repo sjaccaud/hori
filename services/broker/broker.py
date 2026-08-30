@@ -202,6 +202,41 @@ class RootBroker:
             "stderr": stderr,
         }
 
+    def _op_journalctl_unit(self, params: dict[str, Any]) -> dict[str, Any]:
+        unit = str(params.get("unit"))
+        lines = int(
+            params.get(
+                "lines",
+                self._default_for("journalctl_unit", "lines") or 50,
+            )
+        )
+        since = params.get("since")
+        timeout = float(
+            params.get(
+                "timeout",
+                self._default_for("journalctl_unit", "timeout") or DEFAULT_TIMEOUT,
+            )
+        )
+        command = [
+            "sudo",
+            "-n",
+            "journalctl",
+            "-u",
+            unit,
+            "--no-pager",
+            "-n",
+            str(lines),
+        ]
+        if since:
+            command += ["--since", str(since)]
+        exit_code, stdout, stderr = self._run_command(command, timeout)
+        return {
+            "status": "ok" if exit_code == 0 else "error",
+            "exit_code": exit_code,
+            "stdout": stdout,
+            "stderr": stderr,
+        }
+
     def handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
         """Process a single request and return the response.
 

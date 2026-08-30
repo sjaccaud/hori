@@ -36,6 +36,13 @@ class Allowlist:
             "timeout": {"min": 5, "max": 300, "default": 60},
             "_required": ["service"],
         },
+        "journalctl_unit": {
+            "unit": ["aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp"],
+            "lines": {"min": 1, "max": 1000, "default": 50},
+            "since": {"pattern": r"^[-+][0-9]+[smhd]$"},
+            "timeout": {"min": 5, "max": 60, "default": 30},
+            "_required": ["unit"],
+        },
     }
 
     def __init__(self, path: str | Path, fallback: dict[str, Any] | None = None):
