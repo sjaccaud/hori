@@ -546,7 +546,8 @@ async def admin_trigger_consolidation(max_clusters: int = 10, _admin_auth: None 
             "PYTHONPATH": ".",
             "LLM_API_URL": "http://localhost:8080/v1/chat/completions",
             "LLM_MODEL": "Qwen3.8-27B",
-            "EMBED_URL": "http://localhost:8081/v1/embeddings",
+            "EMBED_URL": "http://127.0.0.1:8082/v1/embeddings",
+            "EMBED_MODEL": "BAAI/bge-base-en-v1.5",
             "QDRANT_URL": "http://localhost:6333",
         },
     )
@@ -1045,7 +1046,7 @@ async def system_state():
     services = {
         "llama-server": {"port": 8080, "up": _check_port(8080)},
         "aios-core": {"port": 5680, "up": _check_port(5680)},
-        "embedding-server": {"port": 8081, "up": _check_port(8081)},
+        "embedding-server": {"port": 8082, "up": _check_port(8082)},
         "qdrant": {"port": 6333, "up": _check_port(6333)},
         "open-webui": {"port": 3000, "up": _check_port(3000)},
     }
@@ -2394,7 +2395,7 @@ def _maybe_inject_system_status(user_text: str) -> str:
     services = {
         "llama-server": _check_port(8080),
         "aios-core": _check_port(5680),
-        "embedding-server": _check_port(8081),
+        "embedding-server": _check_port(8082),
         "qdrant": _check_port(6333),
         "open-webui": _check_port(3000),
     }

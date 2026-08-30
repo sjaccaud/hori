@@ -38,8 +38,8 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-EMBED_URL = os.getenv("EMBED_URL", "http://localhost:8081/v1/embeddings")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text-v1.5.Q8_0")
+EMBED_URL = os.getenv("EMBED_URL", "http://127.0.0.1:8082/v1/embeddings")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
 
 METRICS_PATH = Path(__file__).resolve().parent.parent / "core" / "state" / "consolidation_metrics.json"
 

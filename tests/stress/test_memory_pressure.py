@@ -37,8 +37,8 @@ USER_MODEL_PATH = PROJECT_ROOT / "core" / "state" / "user_model.json"
 PROJECT_STATE_PATH = PROJECT_ROOT / "core" / "state" / "project_state.json"
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-EMBED_URL = os.getenv("EMBED_URL", "http://localhost:8081/v1/embeddings")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text-v1.5.Q8_0")
+EMBED_URL = os.getenv("EMBED_URL", "http://127.0.0.1:8082/v1/embeddings")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
 AIOS_CORE_URL = "http://localhost:5680"
 
 COLLECTION_WORKING = "aios_working"

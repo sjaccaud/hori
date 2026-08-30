@@ -3,9 +3,9 @@ import pytest
 import requests
 
 # Configuration
-EMBED_URL = "http://localhost:8081/v1/embeddings"
+EMBED_URL = "http://127.0.0.1:8082/v1/embeddings"
 QDRANT_URL = "http://localhost:6333"
-EMBEDDING_MODEL = "nomic-embed-text-v1.5.Q8_0"
+EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 COLLECTION_NAME = "test_collection"
 
 @pytest.fixture

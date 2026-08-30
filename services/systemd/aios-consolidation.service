@@ -18,8 +18,9 @@ User=%i
 WorkingDirectory=%h/Projects/hori
 Environment=PYTHONPATH=.
 Environment=LLM_API_URL=http://localhost:8080/v1/chat/completions
-Environment=LLM_MODEL=Qwen3.6-27B
-Environment=EMBED_URL=http://localhost:8081/v1/embeddings
+Environment=LLM_MODEL=Qwen3.8-27B
+Environment=EMBED_URL=http://127.0.0.1:8082/v1/embeddings
+Environment=EMBED_MODEL=BAAI/bge-base-en-v1.5
 Environment=QDRANT_URL=http://localhost:6333
 # Max clusters to distill per run (keeps each cycle bounded).
 # 10 clusters per night is enough to keep up with daily conversation volume.

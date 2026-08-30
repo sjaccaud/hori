@@ -58,10 +58,10 @@ sudo journalctl -u aios_core -f    # live logs
 # llama-server is a systemd service (port 8080)
 systemctl status llamacpp
 
-# Embedding server (port 8081, CPU-only, start manually)
-# Note: -ctk f16 -ctv f16 is required on the Spiritbuun fork (defaults to turbo4
-# which doesn't work with embedding models)
-llama-server --model ~/ai-models/nomic-embed-text-v1.5.Q8_0.gguf --host 127.0.0.1 --port 8081 --ctx-size 2048 --embedding --n-gpu-layers 0 -ctk f16 -ctv f16
+# Embedding server (port 8082, CPU-only, managed via Docker Compose)
+# BAAI/bge-base-en-v1.5 via sentence-transformers
+# Managed by services/open-webui/docker-compose.override.yml
+cd services/open-webui && docker compose up -d embedding
 ```
 
 ## Building & Testing the macOS App Remotely

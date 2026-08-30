@@ -22,8 +22,8 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-EMBED_URL = os.getenv("EMBED_URL", "http://localhost:8081/v1/embeddings")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text-v1.5.Q8_0")
+EMBED_URL = os.getenv("EMBED_URL", "http://127.0.0.1:8082/v1/embeddings")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
 COLLECTION = "aios_longterm"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

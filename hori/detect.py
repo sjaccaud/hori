@@ -361,7 +361,7 @@ llm:
   # If using a cloud provider, this is the model name (e.g. "gpt-4o").
 
 embedding:
-  model: "nomic-embed-text-v1.5.Q8_0"
+  model: "BAAI/bge-base-en-v1.5"
   dim: 768
 """
 

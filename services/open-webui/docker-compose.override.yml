@@ -1,0 +1,43 @@
+# Open-WebUI compose override: dedicated embedding server on 127.0.0.1:8082
+#
+# The Open-WebUI image no longer ships a standalone `embedding_server` module,
+# so we mount a tiny FastAPI server (`aios_embedding_server.py`) that uses the
+# image's built-in sentence-transformers / FastAPI packages.
+
+services:
+  embedding:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: aios_embedding
+    network_mode: host
+    restart: always
+    depends_on:
+      - open-webui
+    command: >
+      /bin/bash -c "PYTHONPATH=/app /usr/local/bin/uvicorn embedding_server:app --host 127.0.0.1 --port 8082"
+    environment:
+      - PORT=8082
+      # To match Open-WebUI/AGENTS, use BAAI. If you want to keep the previous
+      # all-MiniLM-L6-v2 model instead, change the next line.
+      - RAG_EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
+      - RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE=true
+      - HF_HOME=/app/backend/data/cache/embedding/models
+      - SENTENCE_TRANSFORMERS_HOME=/app/backend/data/cache/embedding/models
+      - DOCKER=true
+    volumes:
+      - open-webui:/app/backend/data
+      - ./aios_embedding_server.py:/app/embedding_server.py:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          curl -s --max-time 30 --fail
+          http://127.0.0.1:8082/health -o /dev/null
+      interval: 60s
+      timeout: 60s
+      retries: 5
+      start_period: 600s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 4g

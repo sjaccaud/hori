@@ -376,7 +376,7 @@ A scheduled agent that surveys the landscape and proposes work orders.
 - Ingests HORI's own Python source files (by function/class) and markdown docs (by section) into `aios_longterm`
 - 114 chunks covering aios_core, red_teaming, recovery, telemetry, scripts, core, docs
 - Enables HORI to answer questions about its own architecture and reason about changes
-- Run: `PYTHONPATH=. ./venv/bin/python3 scripts/ingest_codebase.py` (requires embedding server on :8081)
+- Run: `PYTHONPATH=. ./venv/bin/python3 scripts/ingest_codebase.py` (requires embedding server on :8082)
 
 ## Stress Tests
 
@@ -450,15 +450,16 @@ PYTHONPATH=. ./venv/bin/python3 -u tests/stress/test_ten_thousand_turns.py \
 - The admin panel's Stress Runner can also start it, but the browser
   tab must stay open to poll for status
 
-## Embedding Server (:8081)
+## Embedding Server (:8082)
 
 Dedicated embedding server for RAG/memory, separate from the chat model to avoid VRAM contention.
 
-- **Binary:** `~/llama.cpp/build/bin/llama-server`
-- **Model:** `~/ai-models/nomic-embed-text-v1.5.Q8_0.gguf` (140 MiB, 768-dim vectors)
-- **Start:** `llama-server --model ~/ai-models/nomic-embed-text-v1.5.Q8_0.gguf --host 127.0.0.1 --port 8081 --ctx-size 2048 --embedding --n-gpu-layers 0`
-- **Endpoint:** `POST http://localhost:8081/v1/embeddings` (OpenAI-compatible shape)
-- **Note:** Runs on CPU only (`--n-gpu-layers 0`) to keep VRAM free for chat models
+- **Container:** `aios_embedding` from `services/open-webui/docker-compose.override.yml`
+- **Image:** `ghcr.io/open-webui/open-webui:main` with a minimal FastAPI server mounted at `/app/embedding_server.py`
+- **Model:** `BAAI/bge-base-en-v1.5` (768-dim vectors)
+- **Start:** `cd services/open-webui && docker compose up -d embedding`
+- **Endpoint:** `POST http://127.0.0.1:8082/v1/embeddings` (OpenAI-compatible shape)
+- **Note:** Runs on CPU to keep VRAM free for chat models
 
 ## Qdrant Memory Tiers
 
@@ -506,7 +507,7 @@ Three collections for hierarchical memory (the anti-groundhog mechanism):
 - **Cleanup:** All references to Ollama (port 11434) have been removed from:
   - `services/recovery/config.json` (now monitors `llamacpp`)
   - `services/red_teaming/engine.py` (now uses `/v1/chat/completions`)
-  - `scripts/qdrant_ingest.py` (now uses `/v1/embeddings` on :8081)
+  - `scripts/qdrant_ingest.py` (now uses `/v1/embeddings` on :8082)
   - `scripts/test_rag.py` (same)
 
 ## Retired Services

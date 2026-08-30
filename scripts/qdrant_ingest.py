@@ -10,8 +10,8 @@ from qdrant_client.http import models
 # --- CONFIGURATION ---
 MIDI_VAULT_PATH = "/mnt/8TB/midi_archives"
 QDRANT_URL = "http://localhost:6333"
-EMBED_URL = "http://localhost:8081/v1/embeddings"
-EMBEDDING_MODEL = "nomic-embed-text-v1.5.Q8_0"
+EMBED_URL = "http://127.0.0.1:8082/v1/embeddings"
+EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 COLLECTION_NAME = "riff_library_qdrant"
 
 print("🧠 Booting Riffmaster Qdrant Ingestion (UNLIMITED)...")

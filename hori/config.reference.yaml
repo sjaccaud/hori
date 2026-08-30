@@ -26,8 +26,8 @@ llm:
 
 # --- Embedding (for memory) ---
 embedding:
-  api_url: "http://localhost:8081/v1/embeddings"
-  model: "nomic-embed-text-v1.5.Q8_0"
+  api_url: "http://127.0.0.1:8082/v1/embeddings"
+  model: "BAAI/bge-base-en-v1.5"
   dim: 768
 
 # --- Memory (vector database for semantic recall) ---

@@ -120,9 +120,8 @@ def _print_next_steps(detect_result) -> None:
         print(f"     ollama serve")
     print()
     print(f"2. Start the embedding server (for memory)")
-    print(f"   If using llama.cpp:")
-    print(f"     llama-server --model ~/ai-models/nomic-embed-text-v1.5.Q8_0.gguf"
-          f" --host 127.0.0.1 --port 8081 --embedding --n-gpu-layers 0")
+    print(f"   The Open-WebUI compose stack provides it on 127.0.0.1:8082:")
+    print(f"     cd services/open-webui && docker compose up -d embedding")
     print()
     print(f"3. Start HORI")
     print(f"   PYTHONPATH=. python -m uvicorn services.aios_core.main:app"

@@ -72,7 +72,7 @@ def _get_embed_url() -> str:
         from services.aios_core.config import EMBED_URL
         return EMBED_URL
     except ImportError:
-        return os.getenv("EMBED_URL", "http://localhost:8081/v1/embeddings")
+        return os.getenv("EMBED_URL", "http://127.0.0.1:8082/v1/embeddings")
 
 
 def _get_embed_model() -> str:
@@ -83,7 +83,7 @@ def _get_embed_model() -> str:
         from services.aios_core.config import EMBED_MODEL
         return EMBED_MODEL
     except ImportError:
-        return os.getenv("EMBED_MODEL", "nomic-embed-text-v1.5.Q8_0")
+        return os.getenv("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
 
 
 def _get_embed_dim() -> int:
