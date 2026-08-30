@@ -102,6 +102,7 @@ _OPERATION_ALLOWED_PATHS: dict[str, list[AllowedPath]] = {
     ],
     "ufw_status": [
         AllowedPath("/usr/sbin/ufw", read_only=True, execute=True),
+        AllowedPath("/usr/bin/python3", read_only=True, execute=True),
         AllowedPath("/usr/sbin/iptables", read_only=True, execute=True),
         AllowedPath("/usr/sbin/nft", read_only=True, execute=True),
         AllowedPath("/usr/sbin/ip6tables", read_only=True, execute=True),
