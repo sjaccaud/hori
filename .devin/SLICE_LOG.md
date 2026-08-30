@@ -6,7 +6,7 @@
 ## Current Slice
 
 SLICE: System Root Broker — Slice 1: service restart/status and systemd unit
-(in progress, branch `slice/system-root-broker-01`)
+(completed 2026-08-30, branch `slice/system-root-broker-01`)
 
 **Problem:** The `<user>` account still has broad root-equivalent access
 through sudoers `(ALL : ALL) ALL`, `NOPASSWD: /usr/bin/sh`, and the
