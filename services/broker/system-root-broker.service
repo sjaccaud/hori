@@ -26,10 +26,16 @@ RestrictSUIDSGID=true
 RestrictRealtime=true
 RestrictNamespaces=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
+# The broker's children (systemctl, journalctl) need PROT_EXEC for shared libs.
+MemoryDenyWriteExecute=false
+
+Environment=PYTHONPATH=@@REPO_ROOT@@
 
 # The broker must write its audit log and RuntimeDirectory.
-ReadWritePaths=/var/log/system-root-broker
+# The sandboxed wrappers need to connect to /run/dbus and /run/systemd,
+# and journalctl needs to read /var/log/journal.
+ReadOnlyPaths=@@REPO_ROOT@@
+ReadWritePaths=/var/log/system-root-broker /run/systemd /run/dbus /run/system-root-broker
 # Sudo is in /usr/bin, systemctl is in /usr/bin.
 
 # The broker needs to execute systemctl with a very narrow sudoers rule.
