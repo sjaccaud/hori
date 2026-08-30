@@ -116,9 +116,23 @@ def test_service_stop_confirmed_success(
     b, _ = broker
 
     def _fake_run(command, timeout, env=None, input_data=None):
-        assert command[0:4] == ["sudo", "-n", "systemctl", "stop"]
-        assert command[4] == "aios_core"
-        return 0, "stopped", ""
+        assert command == ["sudo", "-n", "/usr/local/sbin/hori-systemctl"]
+        payload = json.loads(input_data)
+        assert payload["operation"] == "service_stop"
+        assert payload["service"] == "aios_core"
+        return (
+            0,
+            json.dumps(
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "stdout": "stopped",
+                    "stderr": "",
+                    "sandbox_profile": "seccomp+landlock",
+                }
+            ),
+            "",
+        )
 
     monkeypatch.setattr(b, "_run_command", _fake_run)
     response = client.call(
@@ -151,9 +165,22 @@ def test_journalctl_unit_allowlisted_success(
         assert command == ["sudo", "-n", "/usr/local/sbin/hori-journalctl"]
         assert input_data is not None
         payload = json.loads(input_data)
+        assert payload["operation"] == "journalctl_unit"
         assert payload["unit"] == "aios_core"
         assert payload["lines"] == 50
-        return 0, "log line", ""
+        return (
+            0,
+            json.dumps(
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "stdout": "log line",
+                    "stderr": "",
+                    "sandbox_profile": "seccomp+landlock",
+                }
+            ),
+            "",
+        )
 
     monkeypatch.setattr(b, "_run_command", _fake_run)
     response = client.call("journalctl_unit", {"unit": "aios_core", "lines": 50})
@@ -175,10 +202,23 @@ def test_journalctl_unit_default_lines(client: RootBrokerClient, broker, monkeyp
         assert command == ["sudo", "-n", "/usr/local/sbin/hori-journalctl"]
         assert input_data is not None
         payload = json.loads(input_data)
+        assert payload["operation"] == "journalctl_unit"
         assert payload["unit"] == "aios_core"
         assert payload["lines"] == 50
         assert "since" not in payload
-        return 0, "log line", ""
+        return (
+            0,
+            json.dumps(
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "stdout": "log line",
+                    "stderr": "",
+                    "sandbox_profile": "seccomp+landlock",
+                }
+            ),
+            "",
+        )
 
     monkeypatch.setattr(b, "_run_command", _fake_run)
     response = client.call("journalctl_unit", {"unit": "aios_core"})
@@ -195,6 +235,44 @@ def test_journalctl_unit_rejects_invalid_since(client: RootBrokerClient):
         "journalctl_unit", {"unit": "aios_core", "lines": 50, "since": "; rm -rf /"}
     )
     assert response["status"] == "denied"
+
+
+def test_service_stop_uses_wrapper_and_records_sandbox_profile(
+    client: RootBrokerClient, broker, monkeypatch
+):
+    """service_stop calls the wrapper, parses JSON, and records sandbox_profile."""
+    b, _ = broker
+
+    def _fake_run(command, timeout, env=None, input_data=None):
+        assert command == ["sudo", "-n", "/usr/local/sbin/hori-systemctl"]
+        payload = json.loads(input_data)
+        assert payload["operation"] == "service_stop"
+        assert payload["service"] == "aios_core"
+        assert payload["confirmed_by"] == "operator-2026-08-30"
+        return (
+            0,
+            json.dumps(
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "stdout": "stopped",
+                    "stderr": "",
+                    "sandbox_profile": "seccomp+landlock",
+                }
+            ),
+            "",
+        )
+
+    monkeypatch.setattr(b, "_run_command", _fake_run)
+    response = client.call(
+        "service_stop",
+        {"service": "aios_core", "confirmed_by": "operator-2026-08-30"},
+    )
+    assert response["status"] == "ok"
+    assert response["stdout"] == "stopped"
+    assert response["exit_code"] == 0
+    entries = b.audit_logger.read()
+    assert entries[-1]["sandbox_profile"] == "seccomp+landlock"
 
 
 def test_audit_entry_serialization():

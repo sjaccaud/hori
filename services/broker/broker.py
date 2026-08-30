@@ -142,6 +142,65 @@ class RootBroker:
             return entry.get("default")
         return None
 
+    def _run_wrapper(
+        self,
+        wrapper: str,
+        operation: str,
+        params: dict[str, Any],
+        timeout: float,
+    ) -> dict[str, Any]:
+        """Run a sandboxed wrapper and parse its JSON response.
+
+        The wrapper validates the operation, applies Landlock/seccomp,
+        execs the narrow command, and returns a JSON object with the
+        command output and the sandbox profile that was applied.
+        """
+        payload = {"operation": operation, **params}
+        exit_code, stdout, stderr = self._run_command(
+            ["sudo", "-n", wrapper],
+            timeout,
+            input_data=json.dumps(payload) + "\n",
+        )
+
+        # If the wrapper is missing or cannot execute, fail closed.
+        if exit_code == 127:
+            return {
+                "status": "error",
+                "exit_code": exit_code,
+                "stdout": stdout,
+                "stderr": stderr,
+                "error": f"wrapper not found: {wrapper}",
+                "sandbox_profile": "denied",
+            }
+
+        try:
+            result = json.loads(stdout)
+        except json.JSONDecodeError:
+            return {
+                "status": "error",
+                "exit_code": exit_code,
+                "stdout": stdout,
+                "stderr": stderr,
+                "error": f"wrapper returned invalid JSON: {stderr or stdout}",
+                "sandbox_profile": "denied",
+            }
+
+        if not isinstance(result, dict):
+            return {
+                "status": "error",
+                "exit_code": exit_code,
+                "stdout": stdout,
+                "stderr": stderr,
+                "error": "wrapper returned non-object JSON",
+                "sandbox_profile": "denied",
+            }
+
+        if result.get("status") not in ("ok", "error", "denied"):
+            result["status"] = "error"
+
+        result.setdefault("sandbox_profile", "denied")
+        return result
+
     def _execute(
         self,
         operation: str,
@@ -161,14 +220,12 @@ class RootBroker:
                 self._default_for("service_restart", "timeout") or DEFAULT_TIMEOUT,
             )
         )
-        command = ["sudo", "-n", "systemctl", "restart", service]
-        exit_code, stdout, stderr = self._run_command(command, timeout)
-        return {
-            "status": "ok" if exit_code == 0 else "error",
-            "exit_code": exit_code,
-            "stdout": stdout,
-            "stderr": stderr,
-        }
+        return self._run_wrapper(
+            "/usr/local/sbin/hori-systemctl",
+            "service_restart",
+            params,
+            timeout,
+        )
 
     def _op_service_status(self, params: dict[str, Any]) -> dict[str, Any]:
         service = str(params.get("service"))
@@ -178,14 +235,12 @@ class RootBroker:
                 self._default_for("service_status", "timeout") or DEFAULT_TIMEOUT,
             )
         )
-        command = ["sudo", "-n", "systemctl", "is-active", service]
-        exit_code, stdout, stderr = self._run_command(command, timeout)
-        return {
-            "status": "ok" if exit_code == 0 else "error",
-            "exit_code": exit_code,
-            "stdout": stdout.strip(),
-            "stderr": stderr,
-        }
+        return self._run_wrapper(
+            "/usr/local/sbin/hori-systemctl",
+            "service_status",
+            params,
+            timeout,
+        )
 
     def _op_service_stop(self, params: dict[str, Any]) -> dict[str, Any]:
         service = str(params.get("service"))
@@ -195,14 +250,12 @@ class RootBroker:
                 self._default_for("service_stop", "timeout") or DEFAULT_TIMEOUT,
             )
         )
-        command = ["sudo", "-n", "systemctl", "stop", service]
-        exit_code, stdout, stderr = self._run_command(command, timeout)
-        return {
-            "status": "ok" if exit_code == 0 else "error",
-            "exit_code": exit_code,
-            "stdout": stdout,
-            "stderr": stderr,
-        }
+        return self._run_wrapper(
+            "/usr/local/sbin/hori-systemctl",
+            "service_stop",
+            params,
+            timeout,
+        )
 
     def _op_journalctl_unit(self, params: dict[str, Any]) -> dict[str, Any]:
         unit = str(params.get("unit"))
@@ -219,21 +272,17 @@ class RootBroker:
                 self._default_for("journalctl_unit", "timeout") or DEFAULT_TIMEOUT,
             )
         )
-        payload = {"unit": unit, "lines": lines}
+        wrapped_params: dict[str, Any] = {"unit": unit, "lines": lines}
         if since is not None:
-            payload["since"] = str(since)
-        command = ["sudo", "-n", "/usr/local/sbin/hori-journalctl"]
-        exit_code, stdout, stderr = self._run_command(
-            command,
+            wrapped_params["since"] = str(since)
+        if "confirmed_by" in params:
+            wrapped_params["confirmed_by"] = str(params["confirmed_by"])
+        return self._run_wrapper(
+            "/usr/local/sbin/hori-journalctl",
+            "journalctl_unit",
+            wrapped_params,
             timeout,
-            input_data=json.dumps(payload),
         )
-        return {
-            "status": "ok" if exit_code == 0 else "error",
-            "exit_code": exit_code,
-            "stdout": stdout,
-            "stderr": stderr,
-        }
 
     DESTRUCTIVE_OPERATIONS = frozenset({"service_restart", "service_stop"})
 
@@ -348,6 +397,7 @@ class RootBroker:
             stdout=result.get("stdout", ""),
             stderr=result.get("stderr", ""),
             error=result.get("error"),
+            sandbox_profile=result.get("sandbox_profile", "none"),
         )
 
         result["request_id"] = request_id
@@ -373,6 +423,7 @@ class RootBroker:
         stdout: str,
         stderr: str,
         error: str | None,
+        sandbox_profile: str = "none",
     ) -> None:
         safe_confirmed_by = self._redact_if_token(confirmed_by)
         safe_params = {
@@ -391,7 +442,7 @@ class RootBroker:
             stdout=stdout,
             stderr=stderr,
             error=error,
-            sandbox_profile="none",
+            sandbox_profile=sandbox_profile,
             revert_id=None,
         )
         self.audit_logger.log(entry)
