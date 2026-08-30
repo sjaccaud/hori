@@ -15,6 +15,26 @@ status, `ufw` rules/status, and `fail2ban-client` status **without** requiring
 the primary user to be in `sudo` or `docker`. This is the prerequisite for
 removing `<user>` from the `sudo` and `docker` groups.
 
+**What was built so far:**
+- `.devin/prd/system-root-broker-05.md` — interface, safety, and test contract.
+- `services/broker/allowlist.py` — added `gpu_status`, `docker_status`,
+  `ufw_status`, `fail2ban_status` with read-only params.
+- `services/broker/broker.py` — new operation handlers dispatching to
+  `/usr/local/sbin/hori-{gpu,docker,ufw,fail2ban}`.
+- `services/broker/client.py` — CLI supports the four new operations and their
+  options.
+- `services/broker/sandbox.py` — per-operation Landlock allowlists for GPU
+  sysfs, docker, ufw, and fail2ban.
+- `scripts/hardening/hori_{gpu,docker,ufw,fail2ban}.py` — sandboxed wrappers.
+- `scripts/hardening/install_root_broker.sh` — installs the new wrappers and
+  updates `/etc/sudoers.d/system-root-broker`.
+- Unit and adversarial tests pass (45 broker + adversarial tests, 417 unit
+  tests, 147 adversarial tests).
+
+**Pending:**
+- Run `sudo ./scripts/hardening/install_root_broker.sh` to install wrappers and
+  restart the broker, then live-demo the four client commands.
+
 **Demo criterion:** Run `python -m services.broker.client gpu_status` and get
 back a JSON summary of GPU temperature, VRAM, and fan/clock without `sudo`;
 similarly for `docker_status`, `ufw_status`, and `fail2ban_status`.
