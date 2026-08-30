@@ -32,18 +32,13 @@ confirmation, or sandbox.
 `/var/log/system-root-broker/audit.jsonl`, and the client returns a
 JSON result. A wrong token or a non-allowlisted service is denied.
 
-**Status:** Broker installed and running; audit log fixed and
-appending. `service_status` and `service_restart` both work end-to-end
-(live test via `scripts/hardening/test_broker_restart.sh` passed).
-`services/aios_core/main.py` admin panel now calls the broker for
-restarts; tests updated and passing. Critical `/etc/sudoers.d/10-devin`
-removed. Remaining live steps:
-1. Run `sudo bash scripts/hardening/install_root_broker.sh` to create
-   the `aios_core` drop-in (`SupplementaryGroups=root-broker`).
-2. Run `sudo systemctl restart aios_core` to apply it.
-3. Run `sudo bash scripts/hardening/setup_admin_sudoers.sh` to remove
-   the stale `aios-admin` sudoers.
-4. Run `visudo -c` and the broker tests to verify. Full context:
+**Status:** Slice 1 is complete and committed on
+`slice/system-root-broker-01` (`791551c`). The broker is installed,
+`service_status` and `service_restart` work end-to-end, and the admin
+panel `/admin/api/service/restart` now routes through the broker. The
+critical `/etc/sudoers.d/10-devin` root shell and the legacy
+`aios-admin` admin-panel sudoers have been removed. All broker,
+adversarial, and admin tests pass (56). Full context:
 `.devin/handoff-system-root-broker-01.md`.
 
 **Deferred:** macOS Project Context slice (`slice/macos-project-context`)
