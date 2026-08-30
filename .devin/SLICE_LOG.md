@@ -5,10 +5,48 @@
 
 ## Current Slice
 
-*None — see Completed Slices below.*
+SLICE: System Root Broker — Slice 3: confirmation gates and sandboxing
+(in progress 2026-08-30, branch `slice/system-root-broker-01`)
 
-**Deferred:** macOS Project Context slice (`slice/macos-project-context`)
-remains paused while the broker security work continues.
+**Problem:** `service_restart` and `service_stop` are destructive. A
+stolen broker token or a confused admin click could stop `aios_core`,
+`llamacpp`, or the broker itself without any human confirmation or
+execution isolation. Before we remove the human account from `sudo` and
+`docker`, the broker must prove it can gate and contain destructive
+operations.
+
+**Plan:**
+- [x] Use `/write-prd` to produce `.devin/prd/system-root-broker-03.md`
+  with the interface + test contract for confirmation gates and
+  sandboxed execution.
+- Add a per-operation confirmation identity field (`confirmed_by`) that
+  must be present for destructive operations (`service_restart`,
+  `service_stop`), but not for read-only ones (`service_status`,
+  `journalctl_unit`).
+- Run destructive commands inside a sandbox (Landlock/seccomp-bpf
+  restriction on filesystem/network, no shell, no arbitrary paths).
+- Wire the admin panel so destructive actions require an explicit
+  confirmation string or prompt, not just a query parameter.
+- Extend adversarial tests: unconfirmed destructive ops denied,
+  confirmed-but-injected arguments still denied, sandbox escape attempts
+  blocked, audit entries record confirmation identity.
+- Live smoke test: a confirmed `service_stop` on `llamacpp` stops and
+  restarts; an unconfirmed one is denied; the audit entry contains the
+  confirmation identity and sandbox profile.
+- Commit on `slice/system-root-broker-01`.
+
+**Demo criterion:** Call `service_stop --service llamacpp` without
+confirmation and get `denied`; call it with `confirmed_by=<identity>`
+and get `ok`. The command runs inside a sandbox that cannot read
+`/etc/shadow` or open network sockets. A valid audit entry records the
+confirmation identity and sandbox profile.
+
+**Deferred:**
+- Remove `<user>` from `sudo` and `docker` (Slice 4 or later, after
+  break-glass recovery is proven).
+- Tamper-evident audit chaining (still a candidate slice).
+- macOS Project Context slice (`slice/macos-project-context`) remains
+  paused while the broker security work continues.
 
 ## Completed Slices
 

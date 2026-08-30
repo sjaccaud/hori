@@ -1,0 +1,9 @@
+{
+  "type": "work_order",
+  "id": "system-root-broker-03",
+  "parent_charter_id": "aios-foundation-charter-001",
+  "version": "1.0.0",
+  "description": "Add confirmation gates and sandboxed execution to the system root broker for destructive operations (service_restart, service_stop), while keeping read-only operations (service_status, journalctl_unit) confirmation-free.",
+  "status": "in_progress",
+  "priority": "high"
+}
