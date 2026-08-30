@@ -14,13 +14,14 @@ remains paused while the broker security work continues.
 
 ### SLICE-SYSTEM-ROOT-BROKER-02: service_stop and journalctl_unit — COMPLETE
 
-**Branch:** `slice/system-root-broker-01` (`de41cf4`)
+**Branch:** `slice/system-root-broker-01` (`98bd87e`)
 
 **What was built:**
 - `service_stop` and `journalctl_unit` operations in the root broker
   allowlist and executor, with bounded `lines`, optional signed `since`,
   and the same four allowlisted units.
-- Client library needs no change (generic `call`).
+- `services/broker/client.py` gains a CLI so it can be run as
+  `python -m services.broker.client <operation> --service ...`.
 - Adversarial tests for non-allowlisted unit, shell-injection via unit
   name, arbitrary journalctl arguments, and line-count bounds.
 - Admin panel `POST /admin/api/service/stop` and
@@ -40,10 +41,10 @@ remains paused while the broker security work continues.
 - `make test-integration` — 23 passed, 2 failed (pre-existing installed
   `tmpfiles.d` drift; unrelated to this slice).
 
-**Demo:** Implementation is committed. The live end-to-end smoke test
-requires the installed broker allowlist and sudoers to be refreshed.
-See `.devin/handoff-system-root-broker-02.md` for the exact root-only
-commands the product owner must run to finish the demo.
+**Demo:** Live end-to-end successful. Verified `service_status`,
+`journalctl_unit`, and `service_stop --service llamacpp` via the broker
+CLI; service was restarted immediately after. The broker wrote audit
+entries to `/var/log/system-root-broker/audit.jsonl`.
 
 ### SLICE-SYSTEM-ROOT-BROKER-01: service restart/status and systemd unit — COMPLETE
 
