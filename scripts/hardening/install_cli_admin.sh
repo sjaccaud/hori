@@ -27,7 +27,8 @@ fi
 
 # Groups that are root-equivalent (lxd) or almost certainly unused on this rig.
 # Removing them reduces attack surface without affecting Devin CLI / day-to-day work.
-REMOVE_GROUPS=(lxd ollama lpadmin cdrom dip plugdev)
+# plugdev is kept because openrazer likely needs USB device access.
+REMOVE_GROUPS=(lxd ollama lpadmin cdrom dip)
 
 # Old, stale, or redundant sudoers fragments that should no longer exist.
 # The two .bak.* files are ignored by sudo because their names contain '.',

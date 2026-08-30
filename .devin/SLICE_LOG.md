@@ -24,7 +24,8 @@ ability to optimize the rig, so that stays deferred.
   membership. This is the break-glass / maintenance account. Product
   owner sets and records the password offline.
 - [ ] Remove `<user>` from clearly unused groups: `lxd`, `ollama`,
-  `lpadmin`, `cdrom`, `dip`, `plugdev`. Verify nothing breaks.
+  `lpadmin`, `cdrom`, `dip`. `plugdev` is kept because openrazer likely
+  needs USB device access.
 - [ ] Delete stale `.bak` files from `/etc/sudoers.d/`:
   `10-devin.bak.*`, `aios-admin.bak.*`.
 - [ ] Consolidate the remaining `<user>` NOPASSWD rules into one
@@ -46,7 +47,8 @@ ability to optimize the rig, so that stays deferred.
 **Demo criterion:**
 - `cli-admin` exists, can `sudo systemctl status llamacpp`, and cannot
   be confused with `<user>` or `root-broker`.
-- `<user>` is no longer in `lxd`/`ollama`/`lpadmin`/`cdrom`/`dip`/`plugdev`.
+- `<user>` is no longer in `lxd`/`ollama`/`lpadmin`/`cdrom`/`dip`. `plugdev`
+  is kept.
 - `/etc/sudoers.d/` contains only `README`, `hori-user`, and
   `system-root-broker`.
 - `sudo visudo -c` passes.
@@ -64,8 +66,8 @@ ability to optimize the rig, so that stays deferred.
 **Uncertain:**
 - Whether `ollama` service is still used (the system now uses
   `llama.cpp` via `llamacpp` service). We'll check before removing.
-- Whether `lpadmin`/`cdrom`/`dip`/`plugdev` are actually needed for any
-  hardware Jacko uses. We'll remove and test.
+- Whether `lpadmin`/`cdrom`/`dip` are actually needed for any hardware.
+  `plugdev` is kept for openrazer.
 
 ## Completed Slices
 

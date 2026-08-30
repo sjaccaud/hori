@@ -18,7 +18,7 @@ if [ -z "$PRIMARY_USER" ] || [ "$PRIMARY_USER" = "root" ]; then
     exit 1
 fi
 
-REMOVED_GROUPS=(lxd ollama lpadmin cdrom dip plugdev)
+REMOVED_GROUPS=(lxd ollama lpadmin cdrom dip)
 
 echo "=== Verifying cli-admin / sudoers hygiene ==="
 echo
