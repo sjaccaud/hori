@@ -5,17 +5,24 @@
 
 ## Current Slice
 
-### SLICE-SYSTEM-ROOT-BROKER-05: Read-only GPU / Docker / firewall / fail2ban queries through the root broker — IN PROGRESS
+### Current slice: TBD — next slice not selected
 
-**Branch:** `slice/system-root-broker-05`
+The most likely next hardening steps are:
+1. Remove `<user>` from `sudo` and `docker` (requires proving every routine
+   privileged task has broker coverage — package operations, system tuning,
+   and any remaining Devin CLI paths).
+2. Add tamper-evident audit chaining / append-only audit log.
+3. Add fail2ban/ufw *mutation* operations behind `confirmed_by`.
 
-**Goal:** Expand the root broker with safe, read-only operations so Devin CLI
-and HORI admin surfaces can query GPU state (`rocm-smi`/`nvidia-smi`), Docker
-status, `ufw` rules/status, and `fail2ban-client` status **without** requiring
-the primary user to be in `sudo` or `docker`. This is the prerequisite for
-removing `<user>` from the `sudo` and `docker` groups.
+Select the next slice with the product owner.
 
-**What was built so far:**
+## Completed Slices
+
+### SLICE-SYSTEM-ROOT-BROKER-05: Read-only GPU / Docker / firewall / fail2ban queries through the root broker — COMPLETE
+
+**Branch:** `slice/system-root-broker-05` (merged to `rebrand/hori`)
+
+**What was built:**
 - `.devin/prd/system-root-broker-05.md` — interface, safety, and test contract.
 - `services/broker/allowlist.py` — added `gpu_status`, `docker_status`,
   `ufw_status`, `fail2ban_status` with read-only params.
@@ -28,18 +35,33 @@ removing `<user>` from the `sudo` and `docker` groups.
 - `scripts/hardening/hori_{gpu,docker,ufw,fail2ban}.py` — sandboxed wrappers.
 - `scripts/hardening/install_root_broker.sh` — installs the new wrappers and
   updates `/etc/sudoers.d/system-root-broker`.
-- Unit and adversarial tests pass (45 broker + adversarial tests, 417 unit
-  tests, 147 adversarial tests).
 
-**Pending:**
-- Run `sudo ./scripts/hardening/install_root_broker.sh` to install wrappers and
-  restart the broker, then live-demo the four client commands.
+**Verification:**
+- `make test-unit` — 417 passed, 2 skipped.
+- `make test-adversarial` — 147 passed.
+- `make test-integration` — 25 passed, 2 skipped.
+- `make test-regression` — 7 passed.
+- Broker client live commands:
+  - `gpu_status` → `sandbox_profile: "seccomp+landlock"`, parsed AMD GPU stats.
+  - `docker_status --query ps` → `sandbox_profile: "seccomp+landlock"`, container list.
+  - `ufw_status` → `sandbox_profile: "seccomp+landlock"`, firewall rules.
+  - `fail2ban_status --jail sshd` → `sandbox_profile: "seccomp+landlock"`, jail stats.
+- `sudo visudo -c` passes implicitly via installer.
 
-**Demo criterion:** Run `python -m services.broker.client gpu_status` and get
-back a JSON summary of GPU temperature, VRAM, and fan/clock without `sudo`;
-similarly for `docker_status`, `ufw_status`, and `fail2ban_status`.
+**Surprises / notes:**
+- `docker` query parameter is allowlisted, not arbitrary: only `ps`,
+  `system_df`, `info` are accepted.
+- `ufw` is a Python script, so the `ufw_status` sandbox needs `/usr/bin/python3`
+  to be allowed — same as `fail2ban-client`.
+- GPU state is read from DRM sysfs (`/sys/class/drm/cardN/device`) and hwmon,
+  not `rocm-smi`, which keeps Landlock allowlists minimal and avoids device
+  node access.
 
-## Completed Slices
+**Deferred:**
+- Removing `<user>` from `sudo` and `docker` (requires more broker coverage or
+  a later hardening step).
+- Tamper-evident audit chaining.
+- Firewall/fail2ban mutation operations.
 
 ### SLICE-SYSTEM-ROOT-BROKER-04: sudoers hygiene and `cli-admin` break-glass — COMPLETE
 
