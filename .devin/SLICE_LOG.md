@@ -5,35 +5,35 @@
 
 ## Current Slice
 
-SLICE: Project Context — iterative building without context bloat
-(in progress, branch `slice/macos-project-context`)
+SLICE: System Root Broker — Slice 1: service restart/status and systemd unit
+(in progress, branch `slice/system-root-broker-01`)
 
-**Problem:** When HORI generates HTML, the full HTML block (often
-2000-4000 tokens) is stored in `windowState.messages` and sent back
-as conversation history on every subsequent turn. By turn 2-3, the
-previous HTML is eating most of the 16K context window, leaving
-little room for new output. Complex iterative tasks (adding features
-to an existing page) get truncated.
+**Problem:** The `<user>` account still has broad root-equivalent access
+through sudoers `(ALL : ALL) ALL`, `NOPASSWD: /usr/bin/sh`, and the
+`docker` group. Agents and the admin panel currently invoke `sudo`
+directly for service restarts, package installs, and system file writes.
+This grants root for the lifetime of the command with no audit,
+confirmation, or sandbox.
 
 **Plan:**
-- Strip HTML blocks from conversation history before sending to backend.
-  Replace with a compact reference: "[HTML generated and saved to
-  canvas — ask me to show it if you need to see it again]"
-- The Mac app still shows the full HORI reply (with HTML) in the UI.
-  Only the history sent to the backend is compacted.
-- This keeps the context window clean for iterative work: HORI knows
-  she made something, but doesn't need the full HTML in every turn.
-- If HORI needs to see the current HTML (e.g., "add a button to the
-  page I made"), she can ask for it — or we pass the current canvas
-  HTML as a separate context field (not in the conversation history).
+- Build a minimal `system-root-broker` daemon that listens on a Unix
+  socket and accepts only two operations in this slice:
+  `service_restart` and `service_status` for an allowlist of units.
+- Provide a systemd unit and socket, and an install script
+  `scripts/hardening/install_root_broker.sh`.
+- Add a small `root_broker_client` library for the admin panel.
+- Write adversarial tests for auth, allowlist, and audit-log correctness.
+- Commit on `slice/system-root-broker-01`. Do not touch sudoers yet;
+  the broker must be proven before it replaces any sudo rules.
 
-**Demo criterion:** Ask HORI to make a color picker → then ask her
-to add a feature → she generates the full updated page without
-truncation. Multiple iterations work without the HTML getting cut off.
+**Demo criterion:** Run `systemctl start system-root-broker`, then call
+`root_broker_client service_restart --service aios_core` from the
+`<user>` shell. The service restarts, an entry is appended to
+`/var/log/system-root-broker/audit.jsonl`, and the client returns a
+JSON result. A wrong token or a non-allowlisted service is denied.
 
-**Deferred:** MAC-08 (hardware sensing / setup wizard) is paused —
-needs dedicated iterative time. Branch `slice/macos-08-hardware-sensing`
-preserved with work done so far.
+**Deferred:** macOS Project Context slice (`slice/macos-project-context`)
+is paused while this security work is completed.
 
 ## Completed Slices
 

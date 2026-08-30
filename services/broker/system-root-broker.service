@@ -1,0 +1,44 @@
+[Unit]
+Description=System Root Broker
+After=network.target
+
+[Service]
+Type=simple
+User=root-broker
+Group=root-broker
+WorkingDirectory=@@REPO_ROOT@@
+RuntimeDirectory=system-root-broker
+RuntimeDirectoryMode=0755
+ExecStart=@@REPO_ROOT@@/.venv/bin/python3 -m services.broker.broker
+ExecStartPre=/bin/mkdir -p /var/log/system-root-broker
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# The broker must write its audit log and RuntimeDirectory.
+ReadWritePaths=/var/log/system-root-broker
+# Sudo is in /usr/bin, systemctl is in /usr/bin.
+
+# The broker needs to execute systemctl with a very narrow sudoers rule.
+# The install script sets up /etc/sudoers.d/system-root-broker.
+Environment="BROKER_SECRETS_PATH=/etc/system-root-broker/broker-secrets.env"
+Environment="BROKER_ALLOWLIST_PATH=/etc/system-root-broker/broker-allowlist.json"
+Environment="BROKER_AUDIT_LOG_PATH=/var/log/system-root-broker/audit.jsonl"
+Environment="BROKER_SOCKET_PATH=/run/system-root-broker/broker.sock"
+
+[Install]
+WantedBy=multi-user.target

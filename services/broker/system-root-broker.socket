@@ -1,0 +1,12 @@
+[Unit]
+Description=System Root Broker Socket
+Before=sockets.target
+
+[Socket]
+ListenStream=/run/system-root-broker/broker.sock
+SocketUser=root
+SocketGroup=root-broker
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target
