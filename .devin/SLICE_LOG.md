@@ -6,7 +6,7 @@
 ## Current Slice
 
 SLICE: System Root Broker — Slice 3: confirmation gates and sandboxing
-(in progress 2026-08-30, branch `slice/system-root-broker-01`)
+(in progress 2026-08-30, branch `slice/system-root-broker-01`; sandbox build complete, live smoke test pending)
 
 **Problem:** `service_restart` and `service_stop` are destructive. A
 stolen broker token or a confused admin click could stop `aios_core`,
@@ -23,13 +23,13 @@ operations.
   must be present for destructive operations (`service_restart`,
   `service_stop`), but not for read-only ones (`service_status`,
   `journalctl_unit`).
-- [ ] Run destructive commands inside a sandbox (Landlock/seccomp-bpf
+- [x] Run destructive commands inside a sandbox (Landlock/seccomp-bpf
   restriction on filesystem/network, no shell, no arbitrary paths).
 - [x] Wire the admin panel so destructive actions require an explicit
   confirmation string or prompt, not just a query parameter.
 - [x] Extend adversarial tests: unconfirmed destructive ops denied and
   confirmed-but-injected arguments still denied.
-- [ ] Add adversarial tests for sandbox escape, `/etc/shadow` denial, and
+- [x] Add adversarial tests for sandbox escape, `/etc/shadow` denial, and
   network socket denial.
 - [ ] Live smoke test: a confirmed `service_stop` on `llamacpp` stops and
   restarts; an unconfirmed one is denied; the audit entry contains the
@@ -41,6 +41,32 @@ confirmation and get `denied`; call it with `confirmed_by=<identity>`
 and get `ok`. The command runs inside a sandbox that cannot read
 `/etc/shadow` or open network sockets. A valid audit entry records the
 confirmation identity and sandbox profile.
+
+**Build verification (pre-live):**
+- `services/broker/test_broker.py` — 17/17 passed.
+- `tests/adversarial/test_root_broker.py` — 17/17 passed.
+- `make test-unit` — 411 passed, 2 skipped.
+- `make test-adversarial` — 142 passed.
+- `make test` — unit + integration + regression + adversarial all green.
+- Local wrapper runs (as the repository user) produced valid JSON with
+  `sandbox_profile: "seccomp+landlock"` for `service_status` and
+  `journalctl_unit`.
+
+**Surprises / notes so far:**
+1. `systemctl stop` and `service_restart` require root; without `sudo`
+  they hang on polkit authentication. The live smoke test therefore
+  requires the wrapper to be installed as root via the updated
+  `install_root_broker.sh`.
+2. Landlock requires different access bits for files vs. directories.
+  The `AllowedPath` dataclass in `services/tool_daemon/landlock.py`
+  gained an `execute` flag and the ruleset engine now skips `READ_DIR`
+  / `MAKE_REG` for file-only paths. This kept the tool daemon tests
+  green while allowing `systemctl` and `journalctl` binaries to be
+  execed from a Landlock sandbox.
+3. The `system-root-broker.service` hardening needed to keep
+  `MemoryDenyWriteExecute=false` and add `/run/systemd`, `/run/dbus`,
+  and `/var/log/journal` to `ReadWritePaths` so the sandboxed wrappers
+  can connect to the D-Bus/systemd sockets and journalctl can read logs.
 
 **Deferred:**
 - Remove `<user>` from `sudo` and `docker` (Slice 4 or later, after

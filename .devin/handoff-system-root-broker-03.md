@@ -2,86 +2,93 @@
 
 **Slice:** confirmation gates and sandboxing
 **Branch:** `slice/system-root-broker-01`
-**Commit (handoff point):** `e428773`
+**Commit (handoff point):** `92dd551`
 **Date:** 2026-08-30
 
 ## What was built
 
+### Confirmation gates (already in place from prior work)
+
 - `.devin/prd/system-root-broker-03.md` — interface, safety, and test contracts
   for confirmation gates and sandboxed execution.
-- `core/state/proposed_work_orders/system-root-broker-03.json` — work order.
-- `services/broker/allowlist.py` — all operations now accept an optional
+- `services/broker/allowlist.py` — all operations accept an optional
   `confirmed_by` parameter with a pattern/length constraint.
-- `services/broker/broker.py` —
-  - Added `DESTRUCTIVE_OPERATIONS` and `_require_confirmation`.
-  - `service_restart` and `service_stop` are denied unless `confirmed_by`
-    is present and is not the broker token.
-  - `handle_request` now passes the actual `confirmed_by` to `_audit` and
-    redacts it only when it equals the token.
-- `services/broker/audit.py` — records `confirmed_by` verbatim; the caller
-  is responsible for token redaction.
-- `services/broker/client.py` — added `--confirm` CLI flag, maps to
-  `confirmed_by`.
-- `services/aios_core/main.py` —
-  - `admin_service_control` accepts `confirm` and requires it for
-    non-self `restart`/`stop`.
-  - Self-restart/self-stop detached commands include `confirmed_by`.
-  - `admin_journalctl_unit` accepts optional `confirm`.
-- `services/broker/test_broker.py` and `services/aios_core/test_main.py` —
-  updated/added confirmation tests.
-- `tests/adversarial/test_root_broker.py` — added
-  `test_broker_rejects_destructive_op_without_confirmation`.
+- `services/broker/broker.py` — destructive operations require `confirmed_by`
+  that is not the broker token; the value is redacted in audit if it equals
+  the token.
+- `services/broker/client.py` — `--confirm` CLI flag maps to `confirmed_by`.
+- `services/aios_core/main.py` — admin service control and journalctl routes
+  pass the `confirm` parameter through to the broker.
 
-## Verification (after confirmation gate)
+### Sandboxing (this session)
 
-- `services/broker/test_broker.py` — 16 passed.
-- `tests/adversarial/test_root_broker.py` — 11 passed.
-- `services/aios_core/test_main.py` — 46 passed.
-- `make test-unit` — 410 passed, 2 skipped.
-- `make test-adversarial` — 136 passed.
+- `services/broker/sandbox.py` — `BrokerSandbox.apply()` wrapping
+  `services.tool_daemon.landlock` and `services.tool_daemon.seccomp_filter`,
+  with per-operation path allowlists.
+- `scripts/hardening/hori_systemctl.py` — fixed-path, sandboxed `systemctl`
+  wrapper; validates operation/service/`confirmed_by`, applies Landlock+seccomp,
+  execs only the intended command, returns JSON with `sandbox_profile`.
+- `scripts/hardening/hori_journalctl.py` — sandboxed `journalctl` wrapper;
+  validates unit/line count/since window, applies sandbox, returns JSON.
+- `services/broker/broker.py` — `_run_wrapper()` sends JSON to the wrapper on
+  stdin, parses the JSON response, and carries `sandbox_profile` through to
+  the audit log.
+- `services/broker/audit.py` — `BrokerAuditEntry` records `confirmed_by` and
+  `sandbox_profile`.
+- `services/tool_daemon/landlock.py` — `AllowedPath` gained an `execute` flag;
+  the ruleset engine now applies different rights for files vs. directories
+  so binary exec and shared-library `mmap` work under Landlock.
+- `scripts/hardening/install_root_broker.sh` — installs both wrappers to
+  `/usr/local/sbin/hori-{systemctl,journalctl}` and narrows the sudoers rule
+  to only those two fixed paths.
+- `services/broker/system-root-broker.service` — hardened for sandboxed
+  children (`MemoryDenyWriteExecute=false`, `ReadWritePaths` extended with
+  `/run/systemd`, `/run/dbus`, `/var/log/journal`, and `PYTHONPATH` set).
 
-## Remaining work (sandbox sub-slice)
+### Tests
 
-- Add `services/broker/sandbox.py` wrapping the existing
-  `services.tool_daemon.landlock` and `services.tool_daemon.seccomp_filter`
-  primitives.
-- Create `scripts/hardening/hori-systemctl.py` wrapper, validate the
-  operation and `confirmed_by`, then apply the sandbox before execing
-  `systemctl`.
-- Enhance `scripts/hardening/hori-journalctl.py` to apply the same sandbox
-  (or a read-only variant).
-- Update `services/broker/broker.py` `_run_command` to call the wrappers
-  (`/usr/local/sbin/hori-systemctl` and `/usr/local/sbin/hori-journalctl`)
-  and pass the full JSON request on stdin.
-- Update `services/broker/audit.py` to record the resulting
-  `sandbox_profile` (`seccomp`, `seccomp+landlock`, `denied`, etc.).
-- Update `scripts/hardening/install_root_broker.sh` to install the new
-  wrappers and emit narrow sudoers rules that allow only the two wrappers.
-- Add adversarial tests in `tests/adversarial/test_root_broker.py` for:
-  - confirmation identity cannot be the broker token,
-  - confirmation identity rejects shell meta-characters,
-  - sandbox blocks `ptrace`,
-  - sandbox blocks opening `/etc/shadow` or `~/.ssh/authorized_keys`,
-  - sandbox blocks TCP/UDP sockets,
-  - audit records `confirmed_by` and `sandbox_profile`.
-- Live smoke test:
-  - unconfirmed `service_stop --service llamacpp` returns `denied`,
-  - confirmed `service_stop --service llamacpp` returns `ok` and
-    restarts,
-  - audit entry contains `confirmed_by` and `sandbox_profile`.
+- `services/broker/test_broker.py` — 17 passed.
+- `tests/adversarial/test_root_broker.py` — 17 passed, including new tests for
+  token-as-confirmation, shell meta-characters in `confirmed_by`, ptrace
+  blocking, `/etc/shadow` and `/etc/group` denial, `~/.ssh/authorized_keys`
+  denial, TCP socket denial, and audit `confirmed_by` + `sandbox_profile`.
+- `make test-unit` — 411 passed, 2 skipped.
+- `make test-adversarial` — 142 passed.
+- `make test` — unit, integration, regression, and adversarial suites all green.
 
-## Open questions / decisions needed
+## Remaining work
 
-- Sandbox path allowlist: which runtime paths does `systemctl` actually
-  need? The PRD leaves this to implementation; the wrapper should fail
-  closed and the allowlist can be expanded if `journalctl`/`systemctl`
-  fail during the live smoke test.
-- Should `service_status` be sandboxed as well? The current design
-  sandboxes all children, but `service_status` is read-only and may
-  run with a lighter profile.
-- Installer: does `hori-systemctl` use the repo venv Python or the system
-  Python? The wrapper must be able to import `services.tool_daemon.landlock`
-  and `services.tool_daemon.seccomp_filter` from the repo.
+- **Live smoke test:** the wrapper must be installed as root and the broker
+  service restarted so the live `service_stop`/`service_restart` paths run as
+  the `root-broker` user. Once installed, run:
+  ```bash
+  cd <repo-root>
+  sudo scripts/hardening/install_root_broker.sh
+  sudo systemctl restart system-root-broker
+  ```
+  Then exercise through the broker CLI from the repo root:
+  ```bash
+  PYTHONPATH=. ./venv/bin/python3 -m services.broker.client \
+    service_stop --service llamacpp
+  # expected: status denied
+
+  PYTHONPATH=. ./venv/bin/python3 -m services.broker.client \
+    service_stop --service llamacpp --confirm operator-2026-08-30
+  # expected: status ok, llamacpp stopped and restarted
+  ```
+  Verify the audit entry at `/var/log/system-root-broker/audit.jsonl` contains
+  both `confirmed_by` and `sandbox_profile`.
+
+## Open questions / decisions
+
+- Sandbox path allowlist: the current list works for `service_status` and
+  `journalctl_unit` as the repository user; the live smoke test will confirm
+  whether `service_restart`/`service_stop` need additional runtime paths.
+- Should `service_status` be sandboxed as well? The broker wrapper does
+  sandbox it, but the admin panel `status` action still calls `systemctl status`
+  directly (read-only, no root). A future decision can unify these.
+- Installer: the wrappers use the repo venv Python and insert the repo root
+  into `sys.path` at runtime, so no `PYTHONPATH` inheritance is required.
 
 ## Safety notes
 
