@@ -2,7 +2,7 @@
 
 **Slice:** confirmation gates and sandboxing — COMPLETE
 **Branch:** `slice/system-root-broker-01`
-**Commit (handoff point):** `d989315`
+**Commit (handoff point):** `d80dab4`
 **Date:** 2026-08-30
 
 ## What was built
@@ -78,6 +78,9 @@ CLI:
 2. `services/tool_daemon/landlock.py` printed a non-existent-path skip message
    to `stdout`, which corrupted the wrapper's JSON output. The message is now
    written to `sys.stderr` so the wrapper's `stdout` stays valid JSON.
+3. The wrappers now set `XDG_CONFIG_HOME=/tmp/hori-root-broker` before
+   importing any service module, so `hori.config` does not try (and fail) to
+   create `/root/.config/hori` under `ProtectHome=read-only`.
 
 ## Open questions / decisions
 
