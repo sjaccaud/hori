@@ -78,6 +78,12 @@ confirmation identity and sandbox profile.
   `MemoryDenyWriteExecute=false` and add `/run/systemd`, `/run/dbus`,
   and `/var/log/journal` to `ReadWritePaths` so the sandboxed wrappers
   can connect to the D-Bus/systemd sockets and journalctl can read logs.
+4. `services/tool_daemon/landlock.py` printed a non-existent-path skip
+  message to `stdout`; that corrupted the wrapper JSON until it was moved
+  to `stderr`.
+5. The wrappers now set `XDG_CONFIG_HOME=/tmp/hori-root-broker` before
+  importing any service module, so `hori.config` does not try to create
+  `/root/.config/hori` under `ProtectHome=read-only`.
 
 **Deferred:**
 - Remove `<user>` from `sudo` and `docker` (Slice 4 or later, after
@@ -90,7 +96,7 @@ confirmation identity and sandbox profile.
 
 ### SLICE-SYSTEM-ROOT-BROKER-03: confirmation gates and sandboxing — COMPLETE
 
-**Branch:** `slice/system-root-broker-01` (`d989315`)
+**Branch:** `slice/system-root-broker-01` (`7d5ba23`)
 
 **What was built:**
 - `confirmed_by` confirmation identity gating for `service_restart` and
