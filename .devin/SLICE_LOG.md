@@ -5,92 +5,67 @@
 
 ## Current Slice
 
-SLICE: System Root Broker — Slice 3: confirmation gates and sandboxing — COMPLETE
-(2026-08-30, branch `slice/system-root-broker-01`)
+SLICE: System Root Broker — Slice 4: sudoers hygiene and `cli-admin`
+break-glass
+(in progress 2026-08-30, branch `slice/system-root-broker-04`)
 
-**Problem:** `service_restart` and `service_stop` are destructive. A
-stolen broker token or a confused admin click could stop `aios_core`,
-`llamacpp`, or the broker itself without any human confirmation or
-execution isolation. Before we remove the human account from `sudo` and
-`docker`, the broker must prove it can gate and contain destructive
-operations.
+**Problem:** The primary `<user>` account still has broad `sudo`
+(`%sudo ALL=(ALL:ALL) ALL`) and is in several groups (`lxd`, `ollama`,
+`lpadmin`, `cdrom`, `dip`, `plugdev`) that are likely unused and add
+root-equivalent or unnecessary attack surface. Stale backup files with
+dangerous old rules (`10-devin.bak.*`, `aios-admin.bak.*`) are still
+sitting in `/etc/sudoers.d/`, even if ignored. There is no break-glass
+account for recovery if the `<user>` session or the broker path fails.
+Removing `<user>` from `sudo`/`docker` right now would break Devin CLI's
+ability to optimize the rig, so that stays deferred.
 
 **Plan:**
-- [x] Use `/write-prd` to produce `.devin/prd/system-root-broker-03.md`
-  with the interface + test contract for confirmation gates and
-  sandboxed execution.
-- [x] Add a per-operation confirmation identity field (`confirmed_by`) that
-  must be present for destructive operations (`service_restart`,
-  `service_stop`), but not for read-only ones (`service_status`,
-  `journalctl_unit`).
-- [x] Run destructive commands inside a sandbox (Landlock/seccomp-bpf
-  restriction on filesystem/network, no shell, no arbitrary paths).
-- [x] Wire the admin panel so destructive actions require an explicit
-  confirmation string or prompt, not just a query parameter.
-- [x] Extend adversarial tests: unconfirmed destructive ops denied and
-  confirmed-but-injected arguments still denied.
-- [x] Add adversarial tests for sandbox escape, `/etc/shadow` denial, and
-  network socket denial.
-- [x] Live smoke test: a confirmed `service_stop` on `llamacpp` stops and
-  restarts; an unconfirmed one is denied; the audit entry contains the
-  confirmation identity and sandbox profile.
-- [x] Commit on `slice/system-root-broker-01`.
+- [ ] Create a `cli-admin` system user with a real shell and `sudo` group
+  membership. This is the break-glass / maintenance account. Product
+  owner sets and records the password offline.
+- [ ] Remove `<user>` from clearly unused groups: `lxd`, `ollama`,
+  `lpadmin`, `cdrom`, `dip`, `plugdev`. Verify nothing breaks.
+- [ ] Delete stale `.bak` files from `/etc/sudoers.d/`:
+  `10-devin.bak.*`, `aios-admin.bak.*`.
+- [ ] Consolidate the remaining `<user>` NOPASSWD rules into one
+  documented file (`/etc/sudoers.d/hori-user`) and remove the old
+  per-user fragments (`<user>-shutdown`, `nopasswd-suspend`, `pyxx`,
+  `pyxx-fail2ban`). Keep the current safe rules: shutdown/poweroff,
+  `systemctl suspend`, `ufw status`, `fail2ban-client status`.
+- [ ] Update `scripts/hardening/setup_admin_sudoers.sh` (or replace with a
+  new `install_cli_admin.sh`) so this state is installable and
+  idempotent.
+- [ ] Add tests/adversarial coverage: `cli-admin` can `sudo -l`, `<user>`
+  is not in the removed groups, stale sudoers files are gone,
+  `visudo -c` passes.
+- [ ] Live demo: `su - cli-admin`, run `sudo systemctl status llamacpp`.
+  Back as `<user>`, run `services.broker.client service_status` and the
+  broker still works. `make test` green.
+- [ ] Commit on `slice/system-root-broker-04`.
 
-**Demo criterion:** Call `service_stop --service llamacpp` without
-confirmation and get `denied`; call it with `confirmed_by=<identity>`
-and get `ok`. The command runs inside a sandbox that cannot read
-`/etc/shadow` or open network sockets. A valid audit entry records the
-confirmation identity and sandbox profile.
+**Demo criterion:**
+- `cli-admin` exists, can `sudo systemctl status llamacpp`, and cannot
+  be confused with `<user>` or `root-broker`.
+- `<user>` is no longer in `lxd`/`ollama`/`lpadmin`/`cdrom`/`dip`/`plugdev`.
+- `/etc/sudoers.d/` contains only `README`, `hori-user`, and
+  `system-root-broker`.
+- `sudo visudo -c` passes.
+- `make test` is green.
 
 **Build verification (pre-live):**
-- `services/broker/test_broker.py` — 17/17 passed.
-- `tests/adversarial/test_root_broker.py` — 17/17 passed.
-- `make test-unit` — 411 passed, 2 skipped.
-- `make test-adversarial` — 142 passed.
 - `make test` — unit + integration + regression + adversarial all green.
-- Local wrapper runs (as the repository user) produced valid JSON with
-  `sandbox_profile: "seccomp+landlock"` for `service_status` and
-  `journalctl_unit`.
-
-**Live demo verification:**
-- Unconfirmed `service_stop --service llamacpp` → `denied`.
-- Confirmed `service_stop --service llamacpp --confirm operator-2026-08-30` → `ok`, `sandbox_profile: "seccomp+landlock"`, `llamacpp` stopped.
-- `service_status --service llamacpp` after stop → `exit_code: 3`, `stdout: "inactive"`, `sandbox_profile: "seccomp+landlock"`.
-- Confirmed `service_restart --service llamacpp --confirm operator-2026-08-30` → `ok`, `llamacpp` active again.
-- Audit entries at `/var/log/system-root-broker/audit.jsonl` correctly record
-  `confirmed_by` and `sandbox_profile: "seccomp+landlock"` for allowed
-  operations, `sandbox_profile: "none"` for unconfirmed attempts.
-- `make test` — unit, integration, regression, and adversarial suites all green
-  after the live fix.
 
 **Surprises / notes so far:**
-1. `systemctl stop` and `service_restart` require root; without `sudo`
-  they hang on polkit authentication. The live smoke test therefore
-  requires the wrapper to be installed as root via the updated
-  `install_root_broker.sh`.
-2. Landlock requires different access bits for files vs. directories.
-  The `AllowedPath` dataclass in `services/tool_daemon/landlock.py`
-  gained an `execute` flag and the ruleset engine now skips `READ_DIR`
-  / `MAKE_REG` for file-only paths. This kept the tool daemon tests
-  green while allowing `systemctl` and `journalctl` binaries to be
-  execed from a Landlock sandbox.
-3. The `system-root-broker.service` hardening needed to keep
-  `MemoryDenyWriteExecute=false` and add `/run/systemd`, `/run/dbus`,
-  and `/var/log/journal` to `ReadWritePaths` so the sandboxed wrappers
-  can connect to the D-Bus/systemd sockets and journalctl can read logs.
-4. `services/tool_daemon/landlock.py` printed a non-existent-path skip
-  message to `stdout`; that corrupted the wrapper JSON until it was moved
-  to `stderr`.
-5. The wrappers now set `XDG_CONFIG_HOME=/tmp/hori-root-broker` before
-  importing any service module, so `hori.config` does not try to create
-  `/root/.config/hori` under `ProtectHome=read-only`.
+- `lxd` is root-equivalent; if no LXD containers are in use it is safe
+  to remove `<user>` from the `lxd` group.
+- `docker` is also root-equivalent, but Open-WebUI still needs it; keep
+  it for now.
 
-**Deferred:**
-- Remove `<user>` from `sudo` and `docker` (Slice 4 or later, after
-  break-glass recovery is proven).
-- Tamper-evident audit chaining (still a candidate slice).
-- macOS Project Context slice (`slice/macos-project-context`) remains
-  paused while the broker security work continues.
+**Uncertain:**
+- Whether `ollama` service is still used (the system now uses
+  `llama.cpp` via `llamacpp` service). We'll check before removing.
+- Whether `lpadmin`/`cdrom`/`dip`/`plugdev` are actually needed for any
+  hardware Jacko uses. We'll remove and test.
 
 ## Completed Slices
 
