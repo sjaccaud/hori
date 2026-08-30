@@ -46,6 +46,7 @@ from __future__ import annotations
 import ctypes
 import errno
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -404,8 +405,14 @@ def apply_landlock_restrictions(
                 if e.errno == errno.ENOENT:
                     # Path doesn't exist (e.g. ~/Projects expanded to a
                     # nonexistent home for a restricted service user). Skip
-                    # it — there's nothing to allow access to.
-                    print(f"Landlock: skipping non-existent path {ap.path!r}", flush=True)
+                    # it — there's nothing to allow access to. Use stderr so
+                    # callers that depend on stdout JSON (e.g. the broker
+                    # wrappers) don't get their output corrupted.
+                    print(
+                        f"Landlock: skipping non-existent path {ap.path!r}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                     continue
                 return LandlockResult(
                     success=False,
