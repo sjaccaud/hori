@@ -129,6 +129,8 @@ class RootBroker:
             return -1, "", "timeout"
         except FileNotFoundError:
             return 127, "", f"command not found: {command[0]}"
+        except OSError as exc:
+            return 126, "", f"failed to execute {command[0]}: {exc}"
 
     def _default_for(self, operation: str, param: str) -> Any:
         """Return the default value for an optional parameter."""
@@ -174,7 +176,7 @@ class RootBroker:
                 self._default_for("service_status", "timeout") or DEFAULT_TIMEOUT,
             )
         )
-        command = ["systemctl", "is-active", service]
+        command = ["sudo", "-n", "systemctl", "is-active", service]
         exit_code, stdout, stderr = self._run_command(command, timeout)
         return {
             "status": "ok" if exit_code == 0 else "error",
@@ -319,6 +321,8 @@ class RootBroker:
                 return
             response = self.handle_request(request)
             self._send_response(conn, response)
+        except Exception as exc:
+            self._send_response(conn, {"status": "error", "error": str(exc)})
         finally:
             conn.close()
 

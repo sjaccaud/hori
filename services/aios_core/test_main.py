@@ -451,7 +451,7 @@ def test_admin_api_service_control_bad_action(admin_client):
 
 def test_admin_api_service_self_restart_detached(admin_client):
     """Self-restart (aios_core) should return immediately with a deferred message,
-    not block waiting for the restart to complete."""
+    and the detached command must use the broker, not `sudo` or `bash`."""
     with patch("subprocess.Popen") as mock_popen:
         response = admin_client.post("/admin/api/service/restart?service=aios_core", headers=_admin_headers())
         assert response.status_code == 200
@@ -460,6 +460,32 @@ def test_admin_api_service_self_restart_detached(admin_client):
         assert "1.5s" in data["output"]
         # Popen should have been called to spawn the detached restart
         mock_popen.assert_called_once()
+        cmd = mock_popen.call_args[0][0]
+        joined = " ".join(cmd)
+        assert "sudo" not in joined
+        assert "bash" not in joined
+        assert "RootBrokerClient" in joined
+        assert "service_restart" in joined
+
+
+def test_admin_api_service_restart_uses_broker(admin_client):
+    """Restarting another service should call the root broker, not sudo systemctl."""
+    with patch("services.aios_core.main.RootBrokerClient") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.call.return_value = {
+            "status": "ok",
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "request_id": "test-req",
+        }
+        mock_client_cls.return_value = mock_client
+        response = admin_client.post("/admin/api/service/restart?service=llamacpp", headers=_admin_headers())
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exit_code"] == 0
+        mock_client_cls.assert_called_once()
+        mock_client.call.assert_called_once_with("service_restart", {"service": "llamacpp"})
 
 
 def test_admin_api_logs_unknown_type(admin_client):

@@ -53,7 +53,7 @@ chmod 0755 "${RUN_DIR}"
 if [ ! -f "${ETC_DIR}/broker-allowlist.json" ]; then
     # Extract the DEFAULT allowlist from the Python module.
     # A production install may ship a hand-written JSON file instead.
-    PYTHONPATH="${REPO_ROOT}" "${REPO_ROOT}/.venv/bin/python3" - <<'PY'
+    PYTHONPATH="${REPO_ROOT}" "${REPO_ROOT}/venv/bin/python3" - <<'PY'
 import json
 from services.broker.allowlist import Allowlist
 data = dict(Allowlist.DEFAULT)
@@ -70,10 +70,12 @@ SECRETS_FILE="${ETC_DIR}/broker-secrets.env"
 if [ ! -f "${SECRETS_FILE}" ] || ! grep -q '^ROOT_BROKER_TOKEN=' "${SECRETS_FILE}"; then
     TOKEN="$(head -c 32 /dev/urandom | xxd -p | tr -d '\n')"
     echo "ROOT_BROKER_TOKEN=${TOKEN}" > "${SECRETS_FILE}"
-    chmod 0600 "${SECRETS_FILE}"
+    chown "root:${BROKER_GROUP}" "${SECRETS_FILE}"
+    chmod 0640 "${SECRETS_FILE}"
     echo "Generated ROOT_BROKER_TOKEN. Save it if you need to configure clients."
 else
-    chmod 0600 "${SECRETS_FILE}"
+    chown "root:${BROKER_GROUP}" "${SECRETS_FILE}"
+    chmod 0640 "${SECRETS_FILE}"
 fi
 
 # --- Install sudoers rule for the broker itself ---
@@ -104,9 +106,11 @@ chown root:root /etc/systemd/system/system-root-broker.service
 chmod 0644 /etc/systemd/system/system-root-broker.service
 
 # --- Set audit log permissions ---
+# Permission separation: root-broker can append but cannot read or truncate.
+# Only root can read the audit log (mirrors tool_daemon audit log design).
 touch "${LOG_DIR}/audit.jsonl"
 chown "root:${BROKER_GROUP}" "${LOG_DIR}/audit.jsonl"
-chmod 0640 "${LOG_DIR}/audit.jsonl"
+chmod 0620 "${LOG_DIR}/audit.jsonl"
 
 # --- Reload and enable ---
 systemctl daemon-reload
@@ -122,3 +126,19 @@ fi
 echo
 echo "Installed system-root-broker. Start with:"
 echo "  sudo systemctl start system-root-broker"
+
+# --- Grant aios_core access to the broker socket ---
+# aios_core runs as the human client user. It must be in the root-broker
+# group to read the broker token and connect to the Unix socket.
+# NOTE: aios_core must be restarted after this drop-in is created.
+AIOS_DROPIN="/etc/systemd/system/aios_core.service.d/20-root-broker.conf"
+mkdir -p "$(dirname "${AIOS_DROPIN}")"
+cat > "${AIOS_DROPIN}" <<'EOF'
+[Service]
+SupplementaryGroups=root-broker
+EOF
+chmod 0644 "${AIOS_DROPIN}"
+systemctl daemon-reload
+echo
+echo "Created ${AIOS_DROPIN}."
+echo "Run 'sudo systemctl restart aios_core' so the admin panel can use the broker."

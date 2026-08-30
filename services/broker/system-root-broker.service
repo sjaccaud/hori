@@ -1,6 +1,7 @@
 [Unit]
 Description=System Root Broker
 After=network.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -9,15 +10,13 @@ Group=root-broker
 WorkingDirectory=@@REPO_ROOT@@
 RuntimeDirectory=system-root-broker
 RuntimeDirectoryMode=0755
-ExecStart=@@REPO_ROOT@@/.venv/bin/python3 -m services.broker.broker
-ExecStartPre=/bin/mkdir -p /var/log/system-root-broker
-Restart=on-failure
+ExecStart=@@REPO_ROOT@@/venv/bin/python3 -m services.broker.broker
+Restart=always
 RestartSec=5
 
 # Hardening
-NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=read-only
 PrivateTmp=true
 PrivateDevices=true
 ProtectKernelTunables=true

@@ -1,7 +1,7 @@
 """Append-only audit log for the system root broker.
 
 Mirrors the permission-separation pattern in services/tool_daemon/audit.py:
-the log is owned root:root-broker with mode 0640 so the broker can append
+the log is owned root:root-broker with mode 0620 so the broker can append
 but cannot read or truncate it.
 """
 

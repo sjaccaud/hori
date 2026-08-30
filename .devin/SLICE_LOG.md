@@ -6,7 +6,7 @@
 ## Current Slice
 
 SLICE: System Root Broker — Slice 1: service restart/status and systemd unit
-(completed 2026-08-30, branch `slice/system-root-broker-01`)
+(in progress 2026-08-30, branch `slice/system-root-broker-01`)
 
 **Problem:** The `<user>` account still has broad root-equivalent access
 through sudoers `(ALL : ALL) ALL`, `NOPASSWD: /usr/bin/sh`, and the
@@ -31,6 +31,20 @@ confirmation, or sandbox.
 `<user>` shell. The service restarts, an entry is appended to
 `/var/log/system-root-broker/audit.jsonl`, and the client returns a
 JSON result. A wrong token or a non-allowlisted service is denied.
+
+**Status:** Broker installed and running; audit log fixed and
+appending. `service_status` and `service_restart` both work end-to-end
+(live test via `scripts/hardening/test_broker_restart.sh` passed).
+`services/aios_core/main.py` admin panel now calls the broker for
+restarts; tests updated and passing. Critical `/etc/sudoers.d/10-devin`
+removed. Remaining live steps:
+1. Run `sudo bash scripts/hardening/install_root_broker.sh` to create
+   the `aios_core` drop-in (`SupplementaryGroups=root-broker`).
+2. Run `sudo systemctl restart aios_core` to apply it.
+3. Run `sudo bash scripts/hardening/setup_admin_sudoers.sh` to remove
+   the stale `aios-admin` sudoers.
+4. Run `visudo -c` and the broker tests to verify. Full context:
+`.devin/handoff-system-root-broker-01.md`.
 
 **Deferred:** macOS Project Context slice (`slice/macos-project-context`)
 is paused while this security work is completed.

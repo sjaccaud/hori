@@ -36,6 +36,7 @@ from .safety_events import verify_and_log
 from services.tool_daemon.output_parser import parse_tool_call, strip_tool_call_artifacts
 from services.tool_daemon.registry import get_tool_prompt_block
 from services.tool_daemon.tool_client import get_tool_client
+from services.broker.client import RootBrokerClient
 
 # Setup logging
 logging.basicConfig(
@@ -564,18 +565,20 @@ async def admin_trigger_consolidation(max_clusters: int = 10, _admin_auth: None 
 async def admin_service_control(action: str, service: str = "aios_core", _admin_auth: None = Depends(_check_admin_auth)):
     """Restart or check status of a systemd service.
 
-    SECURITY: The service name is validated against an allowlist. The
-    sudoers rule (/etc/sudoers.d/aios-admin, installed by
-    scripts/hardening/setup_admin_sudoers.sh) allows the user to restart
-    only these specific services without a password.
+    SECURITY: The service name is validated against an allowlist.
+    Restart requests are routed through the system root broker; the
+    broker runs the privileged `systemctl restart` as the unprivileged
+    root-broker user and writes an audit entry. Status requests still
+    use read-only `systemctl status`, which does not require root.
 
     SELF-RESTART: When restarting aios_core (itself), the response is
     sent BEFORE the restart happens. A detached subprocess sleeps 1.5s
-    then runs the restart — enough time for the HTTP response to reach
-    the browser before the process is killed.
+    then asks the broker to restart aios_core — enough time for the
+    HTTP response to reach the browser before the process is killed.
     """
     import asyncio as _asyncio
     import subprocess as _subprocess
+    import sys
 
     allowed_services = {"aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp"}
     if service not in allowed_services:
@@ -600,17 +603,20 @@ async def admin_service_control(action: str, service: str = "aios_core", _admin_
             return {"service": service, "action": action, "exit_code": -1, "output": "TIMEOUT"}
 
     elif action == "restart":
-        # For self-restart (aios_core), we must send the response first,
-        # then restart in a detached process that sleeps briefly.
-        # For other services, we can restart synchronously and return
-        # the result.
         is_self = service == "aios_core"
         if is_self:
-            # Spawn a detached process: sleep 1.5s, then restart.
+            # Spawn a detached process that asks the broker to restart us.
             # start_new_session=True detaches it from our process group
             # so it survives when aios-core is killed by the restart.
+            python = sys.executable
             _subprocess.Popen(
-                ["bash", "-c", f"sleep 1.5 && sudo systemctl restart {service}"],
+                [
+                    python,
+                    "-c",
+                    "import time; time.sleep(1.5); "
+                    "from services.broker.client import RootBrokerClient; "
+                    "RootBrokerClient().call('service_restart', {'service': 'aios_core'})",
+                ],
                 start_new_session=True,
                 stdout=_subprocess.DEVNULL,
                 stderr=_subprocess.DEVNULL,
@@ -621,23 +627,26 @@ async def admin_service_control(action: str, service: str = "aios_core", _admin_
                 "exit_code": 0,
                 "output": f"Restarting {service} in 1.5s... (response sent before restart)",
             }
-        else:
-            proc = await _asyncio.create_subprocess_exec(
-                "sudo", "systemctl", "restart", service,
-                stdout=_asyncio.subprocess.PIPE,
-                stderr=_asyncio.subprocess.STDOUT,
-            )
-            try:
-                stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=30)
-                return {
-                    "service": service,
-                    "action": action,
-                    "exit_code": proc.returncode,
-                    "output": stdout.decode("utf-8", errors="replace")[-4000:],
-                }
-            except _asyncio.TimeoutError:
-                proc.kill()
-                return {"service": service, "action": action, "exit_code": -1, "output": "TIMEOUT"}
+
+        # Route the restart through the system root broker.
+        try:
+            client = RootBrokerClient()
+            result = await _asyncio.to_thread(client.call, "service_restart", {"service": service})
+        except Exception as exc:
+            return {
+                "service": service,
+                "action": action,
+                "exit_code": -1,
+                "output": f"Broker error: {exc}",
+            }
+
+        output = (result.get("stdout", "") + "\n" + result.get("stderr", "")).strip()
+        return {
+            "service": service,
+            "action": action,
+            "exit_code": result.get("exit_code", 0),
+            "output": output[-4000:] if output else "(no output)",
+        }
 
     else:
         return {"error": f"Action '{action}' not supported. Use 'restart' or 'status'."}
