@@ -52,7 +52,7 @@ coverage:
 # Run regression tests
 test-regression:
 	@echo "🛡️ Running regression tests..."
-	PYTHONPATH=. ./venv/bin/python3 -m pytest tests/regression/ services/open-webui/test_*.py
+	PYTHONPATH=. ./venv/bin/python3 -m pytest tests/regression/ $(wildcard services/open-webui/test_*.py)
 
 # Re-apply Open-WebUI workspace/prompt/context configuration.
 # Run this after `docker compose up -d` or a volume/container recreate.
