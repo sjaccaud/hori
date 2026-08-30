@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import threading
 import time
@@ -137,10 +138,12 @@ def test_journalctl_unit_allowlisted_success(
 ):
     b, _ = broker
 
-    def _fake_run(command, timeout, env=None):
-        assert command[0:4] == ["sudo", "-n", "journalctl", "-u"]
-        assert command[4] == "aios_core"
-        assert "--no-pager" in command
+    def _fake_run(command, timeout, env=None, input_data=None):
+        assert command == ["sudo", "-n", "/usr/local/sbin/hori-journalctl"]
+        assert input_data is not None
+        payload = json.loads(input_data)
+        assert payload["unit"] == "aios_core"
+        assert payload["lines"] == 50
         return 0, "log line", ""
 
     monkeypatch.setattr(b, "_run_command", _fake_run)
@@ -159,10 +162,13 @@ def test_journalctl_unit_non_allowlisted_denied(client: RootBrokerClient):
 def test_journalctl_unit_default_lines(client: RootBrokerClient, broker, monkeypatch):
     b, _ = broker
 
-    def _fake_run(command, timeout, env=None):
-        # Find the journalctl `-n` (after --no-pager), not `sudo -n`.
-        idx = command.index("-n", command.index("--no-pager"))
-        assert command[idx + 1] == "50"
+    def _fake_run(command, timeout, env=None, input_data=None):
+        assert command == ["sudo", "-n", "/usr/local/sbin/hori-journalctl"]
+        assert input_data is not None
+        payload = json.loads(input_data)
+        assert payload["unit"] == "aios_core"
+        assert payload["lines"] == 50
+        assert "since" not in payload
         return 0, "log line", ""
 
     monkeypatch.setattr(b, "_run_command", _fake_run)

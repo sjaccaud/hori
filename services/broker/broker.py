@@ -106,6 +106,7 @@ class RootBroker:
         command: list[str],
         timeout: float,
         env: dict[str, str] | None = None,
+        input_data: bytes | None = None,
     ) -> tuple[int, str, str]:
         """Run a subprocess with a hard timeout.
 
@@ -121,6 +122,7 @@ class RootBroker:
                 timeout=timeout,
                 env=env,
                 shell=False,
+                input=input_data,
             )
             return proc.returncode, proc.stdout, proc.stderr
         except subprocess.TimeoutExpired as exc:
@@ -217,19 +219,15 @@ class RootBroker:
                 self._default_for("journalctl_unit", "timeout") or DEFAULT_TIMEOUT,
             )
         )
-        command = [
-            "sudo",
-            "-n",
-            "journalctl",
-            "-u",
-            unit,
-            "--no-pager",
-            "-n",
-            str(lines),
-        ]
-        if since:
-            command += ["--since", str(since)]
-        exit_code, stdout, stderr = self._run_command(command, timeout)
+        payload = {"unit": unit, "lines": lines}
+        if since is not None:
+            payload["since"] = str(since)
+        command = ["sudo", "-n", "/usr/local/sbin/hori-journalctl"]
+        exit_code, stdout, stderr = self._run_command(
+            command,
+            timeout,
+            input_data=json.dumps(payload).encode("utf-8"),
+        )
         return {
             "status": "ok" if exit_code == 0 else "error",
             "exit_code": exit_code,

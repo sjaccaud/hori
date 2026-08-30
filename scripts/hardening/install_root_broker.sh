@@ -97,21 +97,28 @@ else
     chmod 0640 "${SECRETS_FILE}"
 fi
 
+# --- Install journalctl wrapper ---
+# sudo-rs does not allow wildcards in command-line arguments, so a
+# fixed-path wrapper is the only portable way to give the broker narrow
+# journalctl access with variable unit/line count/since values.
+WRAPPER_SRC="${REPO_ROOT}/scripts/hardening/hori_journalctl.py"
+WRAPPER_DST="/usr/local/sbin/hori-journalctl"
+cp "${WRAPPER_SRC}" "${WRAPPER_DST}"
+chown root:root "${WRAPPER_DST}"
+chmod 0755 "${WRAPPER_DST}"
+
 # --- Install sudoers rule for the broker itself ---
 SUDOERS_FILE="/etc/sudoers.d/system-root-broker"
 ALLOWED_SERVICES=(aios_core aios-sherpa aios-tool-daemon llamacpp)
 {
-    echo "# system-root-broker: allow only specific systemctl/journalctl commands."
-    echo "# This is the *only* root path for the broker user."
+    echo "# system-root-broker: allow only specific systemctl commands and the"
+    echo "# journalctl wrapper. This is the *only* root path for the broker user."
     for svc in "${ALLOWED_SERVICES[@]}"; do
         echo "root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl restart ${svc}"
         echo "root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl stop ${svc}"
         echo "root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl is-active ${svc}"
-        # journalctl rules: with and without --since. The numeric/max
-        # patterns keep the allowed argument shape narrow.
-        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/journalctl -u ${svc} --no-pager -n [0-9]*"
-        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/journalctl -u ${svc} --no-pager -n [0-9]* --since [+-][0-9]*[smhd]"
     done
+    echo "root-broker ALL=(root) NOPASSWD: /usr/local/sbin/hori-journalctl"
 } > "${SUDOERS_FILE}"
 chmod 0440 "${SUDOERS_FILE}"
 

@@ -23,8 +23,10 @@
 - `services/aios_core/test_main.py` — admin tests for stop, self-stop, and
   journalctl unit endpoints.
 - `scripts/hardening/install_root_broker.sh` — now merges the installed
-  allowlist with `Allowlist.DEFAULT` and emits narrow `journalctl` and
-  `systemctl` sudoers rules.
+  allowlist with `Allowlist.DEFAULT`, copies `hori_journalctl.py` to
+  `/usr/local/sbin/hori-journalctl`, and emits narrow `systemctl` plus
+  wrapper sudoers rules (sudo-rs does not allow wildcards in command
+  arguments).
 
 ## Verification
 
