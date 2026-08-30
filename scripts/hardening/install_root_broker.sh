@@ -97,27 +97,29 @@ else
     chmod 0640 "${SECRETS_FILE}"
 fi
 
-# --- Install journalctl wrapper ---
+# --- Install sandboxed wrappers ---
 # sudo-rs does not allow wildcards in command-line arguments, so a
 # fixed-path wrapper is the only portable way to give the broker narrow
-# journalctl access with variable unit/line count/since values.
-WRAPPER_SRC="${REPO_ROOT}/scripts/hardening/hori_journalctl.py"
-WRAPPER_DST="/usr/local/sbin/hori-journalctl"
-cp "${WRAPPER_SRC}" "${WRAPPER_DST}"
-chown root:root "${WRAPPER_DST}"
-chmod 0755 "${WRAPPER_DST}"
+# systemctl/journalctl access. Each wrapper validates the JSON request,
+# applies Landlock/seccomp, and execs the narrow command.
+_install_wrapper() {
+    local src="$1"
+    local dst="$2"
+    cp "${src}" "${dst}"
+    sed -i "s|@@REPO_ROOT@@|${REPO_ROOT}|g" "${dst}"
+    chown root:root "${dst}"
+    chmod 0755 "${dst}"
+}
+
+_install_wrapper "${REPO_ROOT}/scripts/hardening/hori_systemctl.py" /usr/local/sbin/hori-systemctl
+_install_wrapper "${REPO_ROOT}/scripts/hardening/hori_journalctl.py" /usr/local/sbin/hori-journalctl
 
 # --- Install sudoers rule for the broker itself ---
 SUDOERS_FILE="/etc/sudoers.d/system-root-broker"
-ALLOWED_SERVICES=(aios_core aios-sherpa aios-tool-daemon llamacpp)
 {
-    echo "# system-root-broker: allow only specific systemctl commands and the"
-    echo "# journalctl wrapper. This is the *only* root path for the broker user."
-    for svc in "${ALLOWED_SERVICES[@]}"; do
-        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl restart ${svc}"
-        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl stop ${svc}"
-        echo "root-broker ALL=(root) NOPASSWD: /usr/bin/systemctl is-active ${svc}"
-    done
+    echo "# system-root-broker: allow only the two sandboxed wrappers."
+    echo "# This is the *only* root path for the broker user."
+    echo "root-broker ALL=(root) NOPASSWD: /usr/local/sbin/hori-systemctl"
     echo "root-broker ALL=(root) NOPASSWD: /usr/local/sbin/hori-journalctl"
 } > "${SUDOERS_FILE}"
 chmod 0440 "${SUDOERS_FILE}"

@@ -279,10 +279,14 @@ class AllowedPath:
 
     read_only=True grants only read access (read file, read dir).
     read_only=False grants read + write access.
+    execute=True additionally grants execute (and PROT_EXEC mmap), which
+    is required when Landlock is used to confine a child process that is
+    execed from this path.
     """
 
     path: str
     read_only: bool = True
+    execute: bool = False
 
 
 @dataclass
@@ -359,12 +363,19 @@ def apply_landlock_restrictions(
         # Add filesystem rules for each allowed path
         granted_paths = []
         for ap in allowed_paths:
-            # Determine access rights for this path
+            # Determine access rights for this path. Files and directories
+            # have different meaningful rights (READ_DIR / MAKE_REG only
+            # make sense for directories). Read-only access to a file
+            # (e.g. a specific binary) only grants READ_FILE.
+            is_dir = os.path.isdir(ap.path)
             if ap.read_only:
-                path_access = (
-                    LANDLOCK_ACCESS_FS_READ_FILE
-                    | LANDLOCK_ACCESS_FS_READ_DIR
-                )
+                if is_dir:
+                    path_access = (
+                        LANDLOCK_ACCESS_FS_READ_FILE
+                        | LANDLOCK_ACCESS_FS_READ_DIR
+                    )
+                else:
+                    path_access = LANDLOCK_ACCESS_FS_READ_FILE
             else:
                 # Read + write workspace: can read, write, create, and
                 # delete regular files. Cannot create directories,
@@ -372,12 +383,15 @@ def apply_landlock_restrictions(
                 # read-only tools; minimizes attack surface).
                 path_access = (
                     LANDLOCK_ACCESS_FS_READ_FILE
-                    | LANDLOCK_ACCESS_FS_READ_DIR
                     | LANDLOCK_ACCESS_FS_WRITE_FILE
                     | LANDLOCK_ACCESS_FS_TRUNCATE
                     | LANDLOCK_ACCESS_FS_MAKE_REG
                     | LANDLOCK_ACCESS_FS_REMOVE_FILE
                 )
+                if is_dir:
+                    path_access |= LANDLOCK_ACCESS_FS_READ_DIR
+            if ap.execute:
+                path_access |= LANDLOCK_ACCESS_FS_EXECUTE
             # Clamp to what the ABI supports
             path_access &= fs_mask
 
