@@ -39,7 +39,6 @@ echo
 for legacy in "${LEGACY_SUDOERS[@]}"; do
     if [ -f "$legacy" ]; then
         echo "Removing legacy admin sudoers: $legacy"
-        cp -p "$legacy" "$legacy.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
         rm -f "$legacy"
     fi
 done
