@@ -5,42 +5,44 @@
 
 ## Current Slice
 
-SLICE: System Root Broker — Slice 2: service_stop and journalctl_unit
-(in progress 2026-08-30, branch `slice/system-root-broker-01`)
-
-**Problem:** The broker currently only supports `service_status` and
-`service_restart`. The admin panel and hardening scripts also need the
-ability to stop an allowlisted service and to fetch recent journal logs
-for a unit. Adding these two operations extends the broker's usefulness
-without yet opening package/file/docker paths or removing the human
-user's `sudo`/`docker` groups.
-
-**Plan:**
-- Use `/write-prd` to produce `.devin/prd/system-root-broker-02.md`
-  with the interface + test contract for `service_stop` and
-  `journalctl_unit`.
-- Implement both operations in the broker allowlist and executor
-  (`services/broker/broker.py`).
-- Add client support in `services/broker/client.py`.
-- Write adversarial tests proving non-allowlisted units are denied and
-  log tampering is still detected.
-- Update the admin panel (`services/aios_core/main.py`) to route a
-  stop/log endpoint through the broker.
-- Run `services/broker/test_broker.py`, `tests/adversarial/test_root_broker.py`,
-  and `services/aios_core/test_main.py`.
-- Live smoke test with a dummy service and `journalctl_unit --unit aios_core`.
-- Commit on `slice/system-root-broker-01`.
-
-**Demo criterion:** Run `systemctl start system-root-broker`, then from
- the `<user>` shell call `root_broker_client service_stop --service
- <allowlisted-unit>` and `root_broker_client journalctl_unit --unit
- aios_core --lines 50`. Both return JSON; a valid audit entry is appended;
- a non-allowlisted unit or wrong token is denied.
+*None — see Completed Slices below.*
 
 **Deferred:** macOS Project Context slice (`slice/macos-project-context`)
 remains paused while the broker security work continues.
 
 ## Completed Slices
+
+### SLICE-SYSTEM-ROOT-BROKER-02: service_stop and journalctl_unit — COMPLETE
+
+**Branch:** `slice/system-root-broker-01` (`c75b490`)
+
+**What was built:**
+- `service_stop` and `journalctl_unit` operations in the root broker
+  allowlist and executor, with bounded `lines`, optional signed `since`,
+  and the same four allowlisted units.
+- Client library needs no change (generic `call`).
+- Adversarial tests for non-allowlisted unit, shell-injection via unit
+  name, arbitrary journalctl arguments, and line-count bounds.
+- Admin panel `POST /admin/api/service/stop` and
+  `GET /admin/api/logs/unit/{unit}` routed through `RootBrokerClient`,
+  with self-stop detached handling.
+- `scripts/hardening/install_root_broker.sh` now merges the allowlist
+  and emits narrow `journalctl`/`systemctl` sudoers rules.
+- PRD: `.devin/prd/system-root-broker-02.md`.
+
+**Verification:**
+- `services/broker/test_broker.py` — 15/15 passed.
+- `tests/adversarial/test_root_broker.py` — 10/10 passed.
+- `services/aios_core/test_main.py` admin tests — 11/11 passed.
+- `make test-unit` — 408 passed, 2 skipped.
+- `make test-adversarial` — 135 passed.
+- `make test-integration` — 23 passed, 2 failed (pre-existing installed
+  `tmpfiles.d` drift; unrelated to this slice).
+
+**Demo:** Implementation is committed. The live end-to-end smoke test
+requires the installed broker allowlist and sudoers to be refreshed.
+See `.devin/handoff-system-root-broker-02.md` for the exact root-only
+commands the product owner must run to finish the demo.
 
 ### SLICE-SYSTEM-ROOT-BROKER-01: service restart/status and systemd unit — COMPLETE
 

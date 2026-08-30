@@ -40,7 +40,7 @@ Response schema (same as existing broker operations):
 - `POST /admin/api/service/{action}` where `action ∈ {status, restart, stop}`.
   - `service` query/body parameter is validated against the broker allowlist.
   - `stop` is routed through `RootBrokerClient.call("service_stop", ...)`, exactly like `restart`.
-- `GET /admin/api/logs/unit?unit=<unit>&lines=<int>&since=<optional>`
+- `GET /admin/api/logs/unit/{unit}?lines=<int>&since=<optional>`
   - `unit` is validated against the broker allowlist.
   - Routed through `RootBrokerClient.call("journalctl_unit", ...)`.
   - Returns `{"unit": "...", "lines": N, "content": "...", "exit_code": 0}`.
@@ -78,7 +78,7 @@ sg root-broker -c 'PYTHONPATH=. ./venv/bin/python3 -c "from services.broker.clie
 
 `services/aios_core/test_main.py`:
 - `test_admin_service_stop_uses_broker` — `POST /admin/api/service/stop?service=aios_core` with a valid admin token calls `RootBrokerClient` and returns the broker result.
-- `test_admin_journalctl_unit_uses_broker` — `GET /admin/api/logs/unit?unit=aios_core&lines=50` with a valid admin token returns the broker `journalctl_unit` result.
+- `test_admin_journalctl_unit_uses_broker` — `GET /admin/api/logs/unit/aios_core?lines=50` with a valid admin token returns the broker `journalctl_unit` result.
 
 ### Adversarial tests
 
