@@ -36,7 +36,12 @@ class BrokerAuditEntry:
     sequence: int = field(default_factory=lambda: int(time.time() * 1_000_000))
 
     def to_jsonl(self) -> str:
-        """Serialize to a single JSON line for the append-only log."""
+        """Serialize to a single JSON line for the append-only log.
+
+        The caller (RootBroker) is responsible for ensuring `confirmed_by`
+        is never the raw bearer token before constructing the entry. This
+        lets us record the identity verbatim while still protecting secrets.
+        """
         return json.dumps(
             {
                 "timestamp": self.timestamp,
@@ -46,7 +51,7 @@ class BrokerAuditEntry:
                 "operation": self.operation,
                 "params": self._sanitize(self.params),
                 "allowed": self.allowed,
-                "confirmed_by": self._redact_token(self.confirmed_by),
+                "confirmed_by": self.confirmed_by,
                 "exit_code": self.exit_code,
                 "stdout_hash": self._hash(self.stdout),
                 "stderr_hash": self._hash(self.stderr),

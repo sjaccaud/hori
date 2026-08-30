@@ -161,3 +161,16 @@ def test_broker_journalctl_rejects_disallowed_unit(
     """
     response = client.call("journalctl_unit", {"unit": "systemd-journald", "lines": 50})
     assert response["status"] == "denied"
+
+
+def test_broker_rejects_destructive_op_without_confirmation(
+    client: RootBrokerClient, broker: RootBroker
+):
+    """Destructive operations must require an explicit confirmed_by identity.
+
+    Defends: root broker confirmation gate (Tier 2).
+    Traces to: .devin/prd/system-root-broker-03.md and .devin/prd/root-broker.md.
+    """
+    response = client.call("service_stop", {"service": "aios_core"})
+    assert response["status"] == "denied"
+    assert "confirmed_by" in response.get("error", "").lower()

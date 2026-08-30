@@ -110,22 +110,31 @@ def test_allowlist_default_restricts_services():
     assert not ok
 
 
-def test_service_stop_allowlisted_success(
+def test_service_stop_confirmed_success(
     client: RootBrokerClient, broker, monkeypatch
 ):
     b, _ = broker
 
-    def _fake_run(command, timeout, env=None):
+    def _fake_run(command, timeout, env=None, input_data=None):
         assert command[0:4] == ["sudo", "-n", "systemctl", "stop"]
         assert command[4] == "aios_core"
         return 0, "stopped", ""
 
     monkeypatch.setattr(b, "_run_command", _fake_run)
-    response = client.call("service_stop", {"service": "aios_core"})
+    response = client.call(
+        "service_stop",
+        {"service": "aios_core", "confirmed_by": "operator-2026-08-30"},
+    )
     assert response["request_id"]
     assert response["status"] == "ok"
     assert response["exit_code"] == 0
     assert response["stdout"] == "stopped"
+
+
+def test_service_stop_requires_confirmed_by(client: RootBrokerClient):
+    response = client.call("service_stop", {"service": "aios_core"})
+    assert response["status"] == "denied"
+    assert "confirmed_by" in response["error"].lower()
 
 
 def test_service_stop_non_allowlisted_denied(client: RootBrokerClient):
@@ -197,7 +206,7 @@ def test_audit_entry_serialization():
         operation="service_status",
         params={"service": "aios_core"},
         allowed=True,
-        confirmed_by="secret-token-1234",
+        confirmed_by="operator-2026-08-30",
         exit_code=0,
         stdout="active",
         stderr="",
@@ -206,5 +215,6 @@ def test_audit_entry_serialization():
         revert_id=None,
     )
     line = entry.to_jsonl()
-    assert "secret-token-1234" not in line
-    assert "secr...1234" in line
+    assert "operator-2026-08-30" in line
+    assert "active" not in line
+    assert "sha256:" in line

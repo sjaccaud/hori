@@ -235,15 +235,34 @@ class RootBroker:
             "stderr": stderr,
         }
 
+    DESTRUCTIVE_OPERATIONS = frozenset({"service_restart", "service_stop"})
+
+    def _require_confirmation(
+        self, operation: str, params: dict[str, Any], token: str | None
+    ) -> tuple[bool, str | None]:
+        """Return (True, None) if the operation is either non-destructive
+        or has a valid `confirmed_by` identity. Destructive operations
+        require a non-empty `confirmed_by` that is not the broker token.
+        """
+        if operation not in self.DESTRUCTIVE_OPERATIONS:
+            return True, None
+        confirmed_by = params.get("confirmed_by")
+        if not isinstance(confirmed_by, str) or not confirmed_by:
+            return False, f"operation '{operation}' requires a 'confirmed_by' identity"
+        if token is not None and confirmed_by == token:
+            return False, "'confirmed_by' cannot be the broker token"
+        return True, None
+
     def handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
         """Process a single request and return the response.
 
-        This is the core gate: authenticate -> allowlist -> execute -> audit.
+        This is the core gate: authenticate -> allowlist -> confirm -> execute -> audit.
         """
         request_id = str(request.get("request_id", uuid.uuid4()))
         token = request.get("token")
         operation = request.get("operation", "")
         params = request.get("params", {}) or {}
+        confirmed_by = params.get("confirmed_by")
 
         if not self._authenticate(token):
             self._audit(
@@ -269,7 +288,7 @@ class RootBroker:
                 operation=operation,
                 params=params,
                 allowed=False,
-                confirmed_by=token,
+                confirmed_by=confirmed_by,
                 exit_code=None,
                 stdout="",
                 stderr="",
@@ -288,13 +307,34 @@ class RootBroker:
                 operation=operation,
                 params=params,
                 allowed=False,
-                confirmed_by=token,
+                confirmed_by=confirmed_by,
                 exit_code=None,
                 stdout="",
                 stderr="",
                 error=reason,
             )
             return {"request_id": request_id, "status": "denied", "error": reason}
+
+        confirmed_ok, confirm_reason = self._require_confirmation(
+            operation, params, token
+        )
+        if not confirmed_ok:
+            self._audit(
+                request_id=request_id,
+                operation=operation,
+                params=params,
+                allowed=False,
+                confirmed_by=confirmed_by,
+                exit_code=None,
+                stdout="",
+                stderr="",
+                error=confirm_reason,
+            )
+            return {
+                "request_id": request_id,
+                "status": "denied",
+                "error": confirm_reason,
+            }
 
         result = self._execute(operation, params)
 
@@ -303,7 +343,7 @@ class RootBroker:
             operation=operation,
             params=params,
             allowed=True,
-            confirmed_by=token,
+            confirmed_by=confirmed_by,
             exit_code=result.get("exit_code"),
             stdout=result.get("stdout", ""),
             stderr=result.get("stderr", ""),
@@ -312,6 +352,14 @@ class RootBroker:
 
         result["request_id"] = request_id
         return result
+
+    def _redact_if_token(self, value: Any) -> Any:
+        """Mask a value if it equals the broker token, otherwise leave it."""
+        if self._expected_token is None:
+            return value
+        if isinstance(value, str) and value == self._expected_token:
+            return "***"
+        return value
 
     def _audit(
         self,
@@ -326,15 +374,19 @@ class RootBroker:
         stderr: str,
         error: str | None,
     ) -> None:
+        safe_confirmed_by = self._redact_if_token(confirmed_by)
+        safe_params = {
+            k: self._redact_if_token(v) for k, v in params.items()
+        }
         entry = BrokerAuditEntry(
             timestamp=time.time(),
             request_id=request_id,
             caller_uid=os.getuid(),
             caller_exe=None,
             operation=operation,
-            params=params,
+            params=safe_params,
             allowed=allowed,
-            confirmed_by=confirmed_by,
+            confirmed_by=safe_confirmed_by,
             exit_code=exit_code,
             stdout=stdout,
             stderr=stderr,
