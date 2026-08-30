@@ -562,7 +562,12 @@ async def admin_trigger_consolidation(max_clusters: int = 10, _admin_auth: None 
 
 
 @app.post("/admin/api/service/{action}")
-async def admin_service_control(action: str, service: str = "aios_core", _admin_auth: None = Depends(_check_admin_auth)):
+async def admin_service_control(
+    action: str,
+    service: str = "aios_core",
+    confirm: str | None = None,
+    _admin_auth: None = Depends(_check_admin_auth),
+):
     """Restart, stop, or check status of a systemd service.
 
     SECURITY: The service name is validated against an allowlist.
@@ -606,17 +611,18 @@ async def admin_service_control(action: str, service: str = "aios_core", _admin_
     elif action == "restart":
         is_self = service == "aios_core"
         if is_self:
-            # Spawn a detached process that asks the broker to restart us.
-            # start_new_session=True detaches it from our process group
-            # so it survives when aios-core is killed by the restart.
+            # Self-restart: the detached command must carry the confirmation
+            # identity so the broker accepts it after we exit.
+            confirmed_by = confirm or "admin-self"
             python = sys.executable
+            params = json.dumps({"service": "aios_core", "confirmed_by": confirmed_by})
             _subprocess.Popen(
                 [
                     python,
                     "-c",
-                    "import time; time.sleep(1.5); "
-                    "from services.broker.client import RootBrokerClient; "
-                    "RootBrokerClient().call('service_restart', {'service': 'aios_core'})",
+                    f"import time; time.sleep(1.5); "
+                    f"from services.broker.client import RootBrokerClient; "
+                    f"RootBrokerClient().call('service_restart', {params})",
                 ],
                 start_new_session=True,
                 stdout=_subprocess.DEVNULL,
@@ -629,10 +635,20 @@ async def admin_service_control(action: str, service: str = "aios_core", _admin_
                 "output": f"Restarting {service} in 1.5s... (response sent before restart)",
             }
 
+        if not confirm:
+            raise HTTPException(
+                status_code=422,
+                detail="Missing required confirm identity for service_restart",
+            )
+
         # Route the restart through the system root broker.
         try:
             client = RootBrokerClient()
-            result = await _asyncio.to_thread(client.call, "service_restart", {"service": service})
+            result = await _asyncio.to_thread(
+                client.call,
+                "service_restart",
+                {"service": service, "confirmed_by": confirm},
+            )
         except Exception as exc:
             return {
                 "service": service,
@@ -652,14 +668,16 @@ async def admin_service_control(action: str, service: str = "aios_core", _admin_
     elif action == "stop":
         is_self = service == "aios_core"
         if is_self:
+            confirmed_by = confirm or "admin-self"
             python = sys.executable
+            params = json.dumps({"service": "aios_core", "confirmed_by": confirmed_by})
             _subprocess.Popen(
                 [
                     python,
                     "-c",
-                    "import time; time.sleep(1.5); "
-                    "from services.broker.client import RootBrokerClient; "
-                    "RootBrokerClient().call('service_stop', {'service': 'aios_core'})",
+                    f"import time; time.sleep(1.5); "
+                    f"from services.broker.client import RootBrokerClient; "
+                    f"RootBrokerClient().call('service_stop', {params})",
                 ],
                 start_new_session=True,
                 stdout=_subprocess.DEVNULL,
@@ -672,9 +690,19 @@ async def admin_service_control(action: str, service: str = "aios_core", _admin_
                 "output": f"Stopping {service} in 1.5s... (response sent before stop)",
             }
 
+        if not confirm:
+            raise HTTPException(
+                status_code=422,
+                detail="Missing required confirm identity for service_stop",
+            )
+
         try:
             client = RootBrokerClient()
-            result = await _asyncio.to_thread(client.call, "service_stop", {"service": service})
+            result = await _asyncio.to_thread(
+                client.call,
+                "service_stop",
+                {"service": service, "confirmed_by": confirm},
+            )
         except Exception as exc:
             return {
                 "service": service,
@@ -750,6 +778,7 @@ async def admin_journalctl_unit(
     unit: str,
     lines: int = 50,
     since: str | None = None,
+    confirm: str | None = None,
     _admin_auth: None = Depends(_check_admin_auth),
 ):
     """View journal logs for a specific allowlisted systemd unit.
@@ -769,6 +798,8 @@ async def admin_journalctl_unit(
         params: dict[str, Any] = {"unit": unit, "lines": lines}
         if since:
             params["since"] = since
+        if confirm:
+            params["confirmed_by"] = confirm
         result = await _asyncio.to_thread(client.call, "journalctl_unit", params)
     except Exception as exc:
         return {

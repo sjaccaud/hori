@@ -94,6 +94,11 @@ def _main() -> None:
         "--since", type=str, help="Signed relative time window (e.g. -1h)."
     )
     parser.add_argument(
+        "--confirm",
+        type=str,
+        help="Confirmation identity for destructive operations.",
+    )
+    parser.add_argument(
         "--socket", type=str, default=BROKER_SOCKET_PATH, help="Broker socket path."
     )
     parser.add_argument(
@@ -110,6 +115,8 @@ def _main() -> None:
         params["lines"] = args.lines
     if args.since:
         params["since"] = args.since
+    if args.confirm:
+        params["confirmed_by"] = args.confirm
 
     client = RootBrokerClient(socket_path=args.socket, secrets_path=args.secrets)
     response = client.call(args.operation, params)

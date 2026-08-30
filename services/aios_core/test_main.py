@@ -470,27 +470,8 @@ def test_admin_api_service_self_restart_detached(admin_client):
 
 
 def test_admin_api_service_restart_uses_broker(admin_client):
-    """Restarting another service should call the root broker, not sudo systemctl."""
-    with patch("services.aios_core.main.RootBrokerClient") as mock_client_cls:
-        mock_client = MagicMock()
-        mock_client.call.return_value = {
-            "status": "ok",
-            "exit_code": 0,
-            "stdout": "",
-            "stderr": "",
-            "request_id": "test-req",
-        }
-        mock_client_cls.return_value = mock_client
-        response = admin_client.post("/admin/api/service/restart?service=llamacpp", headers=_admin_headers())
-        assert response.status_code == 200
-        data = response.json()
-        assert data["exit_code"] == 0
-        mock_client_cls.assert_called_once()
-        mock_client.call.assert_called_once_with("service_restart", {"service": "llamacpp"})
-
-
-def test_admin_api_service_stop_uses_broker(admin_client):
-    """Stopping an allowlisted service should call the root broker."""
+    """Restarting another service should call the root broker with a
+    confirmation identity."""
     with patch("services.aios_core.main.RootBrokerClient") as mock_client_cls:
         mock_client = MagicMock()
         mock_client.call.return_value = {
@@ -502,14 +483,54 @@ def test_admin_api_service_stop_uses_broker(admin_client):
         }
         mock_client_cls.return_value = mock_client
         response = admin_client.post(
-            "/admin/api/service/stop?service=llamacpp", headers=_admin_headers()
+            "/admin/api/service/restart?service=llamacpp&confirm=admin-2026-08-30",
+            headers=_admin_headers(),
         )
         assert response.status_code == 200
         data = response.json()
         assert data["exit_code"] == 0
         mock_client_cls.assert_called_once()
         mock_client.call.assert_called_once_with(
-            "service_stop", {"service": "llamacpp"}
+            "service_restart",
+            {"service": "llamacpp", "confirmed_by": "admin-2026-08-30"},
+        )
+
+
+def test_admin_api_service_stop_requires_confirm(admin_client):
+    """Destructive service actions must include a confirmation identity."""
+    response = admin_client.post(
+        "/admin/api/service/stop?service=llamacpp", headers=_admin_headers()
+    )
+    assert response.status_code == 422
+    data = response.json()
+    detail = data.get("detail", "").lower()
+    assert "confirm" in detail or "confirmed_by" in detail
+
+
+def test_admin_api_service_stop_uses_broker(admin_client):
+    """Stopping an allowlisted service should call the root broker with a
+    confirmation identity."""
+    with patch("services.aios_core.main.RootBrokerClient") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.call.return_value = {
+            "status": "ok",
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "request_id": "test-req",
+        }
+        mock_client_cls.return_value = mock_client
+        response = admin_client.post(
+            "/admin/api/service/stop?service=llamacpp&confirm=admin-2026-08-30",
+            headers=_admin_headers(),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exit_code"] == 0
+        mock_client_cls.assert_called_once()
+        mock_client.call.assert_called_once_with(
+            "service_stop",
+            {"service": "llamacpp", "confirmed_by": "admin-2026-08-30"},
         )
 
 
