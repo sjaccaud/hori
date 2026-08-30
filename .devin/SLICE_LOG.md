@@ -14,7 +14,7 @@ remains paused while the broker security work continues.
 
 ### SLICE-SYSTEM-ROOT-BROKER-02: service_stop and journalctl_unit — COMPLETE
 
-**Branch:** `slice/system-root-broker-01` (`c75b490`)
+**Branch:** `slice/system-root-broker-01` (`de41cf4`)
 
 **What was built:**
 - `service_stop` and `journalctl_unit` operations in the root broker
@@ -26,8 +26,9 @@ remains paused while the broker security work continues.
 - Admin panel `POST /admin/api/service/stop` and
   `GET /admin/api/logs/unit/{unit}` routed through `RootBrokerClient`,
   with self-stop detached handling.
-- `scripts/hardening/install_root_broker.sh` now merges the allowlist
-  and emits narrow `journalctl`/`systemctl` sudoers rules.
+- `scripts/hardening/install_root_broker.sh` now merges the allowlist,
+  installs a fixed-path `hori-journalctl` wrapper, and emits narrow
+  `systemctl`/wrapper sudoers rules for `sudo-rs` compatibility.
 - PRD: `.devin/prd/system-root-broker-02.md`.
 
 **Verification:**
