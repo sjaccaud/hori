@@ -22,6 +22,11 @@ REPO_ROOT = "@@REPO_ROOT@@"
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+# The wrapper runs under a systemd service that may have ProtectHome=read-only,
+# so point hori.config at a writable scratch directory before any service module
+# is imported and tries to create /root/.config.
+os.environ["XDG_CONFIG_HOME"] = "/tmp/hori-root-broker"
+
 from services.broker.sandbox import apply_broker_sandbox
 
 ALLOWED_SERVICES = frozenset({
