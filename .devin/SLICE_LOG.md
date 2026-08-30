@@ -5,71 +5,52 @@
 
 ## Current Slice
 
-SLICE: System Root Broker — Slice 4: sudoers hygiene and `cli-admin`
-break-glass
-(in progress 2026-08-30, branch `slice/system-root-broker-04`)
-
-**Problem:** The primary `<user>` account still has broad `sudo`
-(`%sudo ALL=(ALL:ALL) ALL`) and is in several groups (`lxd`, `ollama`,
-`lpadmin`, `cdrom`, `dip`, `plugdev`) that are likely unused and add
-root-equivalent or unnecessary attack surface. Stale backup files with
-dangerous old rules (`10-devin.bak.*`, `aios-admin.bak.*`) are still
-sitting in `/etc/sudoers.d/`, even if ignored. There is no break-glass
-account for recovery if the `<user>` session or the broker path fails.
-Removing `<user>` from `sudo`/`docker` right now would break Devin CLI's
-ability to optimize the rig, so that stays deferred.
-
-**Plan:**
-- [ ] Create a `cli-admin` system user with a real shell and `sudo` group
-  membership. This is the break-glass / maintenance account. Product
-  owner sets and records the password offline.
-- [ ] Remove `<user>` from clearly unused groups: `lxd`, `ollama`,
-  `lpadmin`, `cdrom`, `dip`. `plugdev` is kept because openrazer likely
-  needs USB device access.
-- [ ] Delete stale `.bak` files from `/etc/sudoers.d/`:
-  `10-devin.bak.*`, `aios-admin.bak.*`.
-- [ ] Consolidate the remaining `<user>` NOPASSWD rules into one
-  documented file (`/etc/sudoers.d/hori-user`) and remove the old
-  per-user fragments (`<user>-shutdown`, `nopasswd-suspend`, `pyxx`,
-  `pyxx-fail2ban`). Keep the current safe rules: shutdown/poweroff,
-  `systemctl suspend`, `ufw status`, `fail2ban-client status`.
-- [ ] Update `scripts/hardening/setup_admin_sudoers.sh` (or replace with a
-  new `install_cli_admin.sh`) so this state is installable and
-  idempotent.
-- [ ] Add tests/adversarial coverage: `cli-admin` can `sudo -l`, `<user>`
-  is not in the removed groups, stale sudoers files are gone,
-  `visudo -c` passes.
-- [ ] Live demo: `su - cli-admin`, run `sudo systemctl status llamacpp`.
-  Back as `<user>`, run `services.broker.client service_status` and the
-  broker still works. `make test` green.
-- [ ] Commit on `slice/system-root-broker-04`.
-
-**Demo criterion:**
-- `cli-admin` exists, can `sudo systemctl status llamacpp`, and cannot
-  be confused with `<user>` or `root-broker`.
-- `<user>` is no longer in `lxd`/`ollama`/`lpadmin`/`cdrom`/`dip`. `plugdev`
-  is kept.
-- `/etc/sudoers.d/` contains only `README`, `hori-user`, and
-  `system-root-broker`.
-- `sudo visudo -c` passes.
-- `make test` is green.
-
-**Build verification (pre-live):**
-- `make test` — unit + integration + regression + adversarial all green.
-
-**Surprises / notes so far:**
-- `lxd` is root-equivalent; if no LXD containers are in use it is safe
-  to remove `<user>` from the `lxd` group.
-- `docker` is also root-equivalent, but Open-WebUI still needs it; keep
-  it for now.
-
-**Uncertain:**
-- Whether `ollama` service is still used (the system now uses
-  `llama.cpp` via `llamacpp` service). We'll check before removing.
-- Whether `lpadmin`/`cdrom`/`dip` are actually needed for any hardware.
-  `plugdev` is kept for openrazer.
+No active slice.
 
 ## Completed Slices
+
+### SLICE-SYSTEM-ROOT-BROKER-04: sudoers hygiene and `cli-admin` break-glass — COMPLETE
+
+**Branch:** `slice/system-root-broker-04`
+
+**What was built:**
+- `scripts/hardening/install_cli_admin.sh` creates the `cli-admin`
+  break-glass account (real shell, sudo group, password set by the
+  product owner), removes `<user>` from `lxd`/`ollama`/`lpadmin`/`cdrom`/
+  `dip`, deletes stale `/etc/sudoers.d/*.bak.*` and old per-user
+  fragments, and writes `/etc/sudoers.d/hori-user` with the consolidated
+  safe NOPASSWD rules.
+- `scripts/hardening/test_cli_admin.sh` verifies the install.
+- `scripts/hardening/setup_admin_sudoers.sh` updated so it no longer
+  creates new `.bak.*` files when it removes legacy admin sudoers.
+- The primary `<user>` keeps `sudo` and `docker` so Devin CLI can still
+  optimize the rig. `plugdev` is left in place for openrazer.
+
+**Verification:**
+- `cli-admin` exists, has `/bin/bash`, is in the `sudo` group, and can
+  run `sudo systemctl status llamacpp`.
+- `<user>` is no longer in `lxd`, `ollama`, `lpadmin`, `cdrom`, or `dip`.
+- `/etc/sudoers.d/` contains only `README`, `hori-user`, and
+  `system-root-broker`; old `.bak.*` files and per-user fragments gone.
+- `sudo visudo -c` passes.
+- `make test` — unit, integration, regression, and adversarial all green.
+- Broker client `service_status --service llamacpp` still returns
+  `sandbox_profile: "seccomp+landlock"`.
+
+**Surprises / notes:**
+- `make test` cannot run as `cli-admin` because the repo `logs/` and
+  `.pytest_cache/` are owned by the primary `<user>`; this is correct
+  and confirms `cli-admin` is not a daily-driver account.
+- `ollama` service was already `inactive` and `lxc` was not configured,
+  so removing the `ollama` and `lxd` groups was safe.
+- `plugdev` was left in place because openrazer likely needs USB device
+  access.
+
+**Deferred:**
+- Removing `<user>` from `sudo` and `docker` (Slice 5 or later, after
+  broker/Devin CLI privileged command paths are expanded or a narrow
+  allowlist is proven).
+- Tamper-evident audit chaining (still a candidate slice).
 
 ### SLICE-SYSTEM-ROOT-BROKER-03: confirmation gates and sandboxing — COMPLETE
 
