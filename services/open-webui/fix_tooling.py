@@ -22,15 +22,19 @@ ALL_QWEN_DEVSTRAL = [
     "devstral-coding",
     "qwen-128k",
     "qwen-256k-batch",
+    "qwen-dsh-fast",
+    "qwen-dsh-low",
+    "qwen-dsh-medium",
 ]
 
 TOOL_USAGE = (
     "\n\nTool-use rules:\n"
     "- kb_exec is disabled; do not use it.\n"
+    "- get_status ({USER_NAME} Local Tools) is the right tool for 'what is my system status?', 'are my services running?', or quick GPU/VRAM/disk summaries.\n"
     "- read_file and run_safe_command ({USER_NAME} Local Tools) are the right tools for inspecting the host filesystem and reading exact file content.\n"
     "- For project/directory surveys, 'list my projects', or questions that need current filesystem state, prefer run_safe_command (ls, tree, find, etc.) and read_file. "
     "Only call query_knowledge_files for conceptual/historical questions that are likely covered in the attached knowledge collections.\n"
-    "- Do not issue multiple parallel read_file/run_safe_command calls with huge outputs. Issue one focused command, read the result, then decide the next step."
+    "- For small known files, you may call read_file up to 4 times in parallel. For large outputs or exploration, issue one focused call, read the result, then decide the next step."
 )
 
 PLANNING_PROMPT = ((
@@ -38,9 +42,11 @@ PLANNING_PROMPT = ((
     "You have access to the following local tools:\n"
     "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
+    "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
     "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like inxi, rocm-smi, lscpu, lsusb, ps, df, systemctl, journalctl, dmesg, etc.\n\n"
     "When the user asks about {USER_NAME}'s projects, hardware, preferences, local files, system status, or background, use these local tools first. "
+    "Use get_status for 'what is my system status?' or 'are my services running?'. "
     "Use query_knowledge_files for conceptual questions that may be covered in the knowledge collections, "
     "and read_file or run_safe_command when you need exact current system values.\n\n"
     "Only use web search if the user explicitly asks for external/fresh information (e.g. 'latest news', 'what does the internet say', 'current events'), "
@@ -55,9 +61,11 @@ LONG_PROMPT = ((
     "You have access to the following local tools:\n"
     "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
+    "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
     "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like inxi, rocm-smi, lscpu, ps, df, etc.\n\n"
     "For questions about {USER_NAME}'s projects, hardware, preferences, local files, system status, or background, use these local tools first. "
+    "Use get_status for 'what is my system status?' or 'are my services running?'. "
     "Only use web search if the user explicitly asks for external/fresh information or if local tools cannot answer.\n\n"
     "Be thorough but concise. Summarize long documents clearly. "
     "Do not output code unless the user explicitly asks for it."
@@ -68,9 +76,11 @@ THINK_PROMPT = ((
     "You have access to the following local tools:\n"
     "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
+    "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
     "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like inxi, rocm-smi, lscpu, ps, df, etc.\n\n"
     "For questions about {USER_NAME}'s projects, hardware, preferences, local files, system status, or background, use these local tools first. "
+    "Use get_status for 'what is my system status?' or 'are my services running?'. "
     "Only use web search if the user explicitly asks for external/fresh information or if local tools cannot answer.\n\n"
     "Think step by step and show your reasoning clearly when the question benefits from it. "
     "Be concise, accurate, and avoid unnecessary preamble. "
@@ -82,9 +92,11 @@ BALANCED_PROMPT = ((
     "You have access to the following local tools:\n"
     "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
+    "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
     "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like inxi, rocm-smi, lscpu, ps, df, etc.\n\n"
     "For questions about {USER_NAME}'s projects, hardware, preferences, local files, system status, or background, use these local tools first. "
+    "Use get_status for 'what is my system status?' or 'are my services running?'. "
     "Only use web search if the user explicitly asks for external/fresh information or if local tools cannot answer.\n\n"
     "Be concise, accurate, and avoid unnecessary preamble. "
     "You may include small code examples only when directly relevant to the user's request."
@@ -96,9 +108,11 @@ CODING_PROMPT = ((
     "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- execute_code: run Python/shell code in the Open-WebUI sandbox for calculations and small transformations.\n"
     "- get_current_timestamp: get the current date and time.\n"
+    "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
     "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like ls, cat, grep, ps, df, systemctl, journalctl, dmesg, inxi, rocm-smi, etc.\n\n"
     "When the user asks about {USER_NAME}'s projects, hardware, preferences, local files, system status, or background, use these local tools first. "
+    "Use get_status for 'what is my system status?' or 'are my services running?'. "
     "Read files directly with read_file or run_safe_command when you need exact content. "
     "Use query_knowledge_files for conceptual questions that may be covered in the knowledge collections.\n\n"
     "Only use web search if the user explicitly asks for external/fresh information (e.g. 'latest news', 'what does the internet say', 'current events'), "
@@ -119,6 +133,9 @@ FUNCTION_CALLING_BY_MODEL = {
     "qwen-256k-batch": "native",
     "qwen-quality": "native",
     "devstral-coding": "native",
+    "qwen-dsh-fast": "native",
+    "qwen-dsh-low": "native",
+    "qwen-dsh-medium": "native",
 }
 
 # Per-model prompts align with AGENTS.md usage:
@@ -126,7 +143,7 @@ FUNCTION_CALLING_BY_MODEL = {
 # - qwen-long/qwen-128k/qwen-256k-batch: long-document analysis
 # - qwen-think: reasoning
 # - qwen-balanced: balanced coding/research
-# - qwen-quality/devstral-coding: coding with local tools
+# - qwen-quality/devstral-coding/qwen-dsh-*: coding with local tools
 MODEL_PROMPTS = {
     "qwen-fast": PLANNING_PROMPT,
     "qwen-long": LONG_PROMPT,
@@ -136,25 +153,34 @@ MODEL_PROMPTS = {
     "qwen-balanced": BALANCED_PROMPT,
     "qwen-quality": CODING_PROMPT,
     "devstral-coding": CODING_PROMPT,
+    "qwen-dsh-fast": CODING_PROMPT,
+    "qwen-dsh-low": CODING_PROMPT,
+    "qwen-dsh-medium": CODING_PROMPT,
 }
 
 # Per-model default features:
-# - fast/long/think/balanced/128k: knowledge, time, web_search, memory (no code by default)
-# - qwen-256k-batch: batch, no web search
-# - quality/devstral: knowledge, time, code_interpreter, memory, web_search
+# - Web search and code interpreter are available (capabilities/builtinTools) but OFF by default
+#   so the assistant doesn't call out to the internet or run code unless you explicitly toggle it.
+# - Non-coding models: knowledge, time, memory, local tools
+# - Coding/DSH models: also code_interpreter (toggleable, on by default for quick coding)
 MODEL_DEFAULT_FEATURES = {
-    "qwen-fast": ["knowledge", "time", "web_search", "memory"],
-    "qwen-long": ["knowledge", "time", "web_search", "memory"],
-    "qwen-128k": ["knowledge", "time", "web_search", "memory"],
-    "qwen-think": ["knowledge", "time", "web_search", "memory"],
-    "qwen-balanced": ["knowledge", "time", "web_search", "memory"],
+    "qwen-fast": ["knowledge", "time", "memory"],
+    "qwen-long": ["knowledge", "time", "memory"],
+    "qwen-128k": ["knowledge", "time", "memory"],
+    "qwen-think": ["knowledge", "time", "memory"],
+    "qwen-balanced": ["knowledge", "time", "memory"],
     "qwen-256k-batch": ["knowledge", "time", "memory"],
-    "qwen-quality": ["knowledge", "time", "code_interpreter", "memory", "web_search"],
-    "devstral-coding": ["knowledge", "time", "code_interpreter", "memory", "web_search"],
+    "qwen-quality": ["knowledge", "time", "code_interpreter", "memory"],
+    "devstral-coding": ["knowledge", "time", "code_interpreter", "memory"],
+    "qwen-dsh-fast": ["knowledge", "time", "code_interpreter", "memory"],
+    "qwen-dsh-low": ["knowledge", "time", "code_interpreter", "memory"],
+    "qwen-dsh-medium": ["knowledge", "time", "code_interpreter", "memory"],
 }
 
+# Capabilities = what the UI is allowed to show/offer for a model.
+# All toggles (web_search, code_interpreter, builtin_tools) are available by default.
 META_CAPABILITIES = {
-    "web_search": True,       # toggleable, but not in default features
+    "web_search": True,
     "knowledge": True,
     "memory": True,
     "builtin_tools": True,
@@ -162,13 +188,15 @@ META_CAPABILITIES = {
     "time": True,
 }
 
-META_DEFAULT_FEATURES = ["knowledge", "time", "code_interpreter", "memory"]
+# Default feature toggles for auto-discovered / fallback models.
+# Web search and code interpreter are OFF by default; the user toggles them when needed.
+META_DEFAULT_FEATURES = ["knowledge", "time", "memory"]
 
 META_BUILTINTOOLS = {
     "knowledge": True,
     "time": True,
     "code_interpreter": True,
-    "web_search": True,       # only injected when user toggles it
+    "web_search": True,
 }
 
 TOOL_SERVER_FILTER_SOURCE = '''
@@ -302,13 +330,18 @@ def main():
     if row:
         conns = json.loads(row[0])
         for conn_cfg in conns:
-            if conn_cfg.get('url') == 'http://127.0.0.1:8766':
+            url = conn_cfg.get('url', '')
+            if url == 'http://127.0.0.1:8766':
                 conn_cfg['config'] = conn_cfg.get('config', {})
                 conn_cfg['config']['enable'] = True
-                conn_cfg['config']['function_name_filter_list'] = 'read_file,run_safe_command'
+                conn_cfg['config']['function_name_filter_list'] = 'read_file,run_safe_command,get_status'
                 conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info']['id'] = 'local-tools'
                 conn_cfg['info']['name'] = 'Local Tools'
+            elif url in ('http://127.0.0.1:8767', 'http://127.0.0.1:8768'):
+                # OaK tool servers are not running; keep them disabled to reduce bloat.
+                conn_cfg.setdefault('config', {})['enable'] = False
+                print(f"disabled tool server {conn_cfg.get('info', {}).get('id', url)}")
         c.execute(
             "UPDATE config SET value=?, updated_at=? WHERE key=?",
             (json.dumps(conns, ensure_ascii=False), now(), 'tool_server.connections'),
@@ -327,13 +360,17 @@ def main():
 
         # Set per-model prompt, function_calling, and limits
         params["system"] = MODEL_PROMPTS.get(mid, PLANNING_PROMPT)
-        params["function_calling"] = FUNCTION_CALLING_BY_MODEL.get(mid, "legacy")
+        params["function_calling"] = FUNCTION_CALLING_BY_MODEL.get(mid, "native")
         params["max_tokens"] = 4096
+        # All Qwen/Devstral presets can use local tools; let them run read-only tools
+        # without a per-call prompt, but web search and code interpreter still need the
+        # user to toggle them on per chat.
+        params["tool_approval_mode"] = "full"
 
         # Apply meta overrides
         meta["capabilities"] = {**meta.get("capabilities", {}), **META_CAPABILITIES}
         meta["default_feature_ids"] = MODEL_DEFAULT_FEATURES.get(
-            mid, ["knowledge", "time", "web_search", "memory"]
+            mid, ["knowledge", "time", "memory"]
         )
         meta["builtinTools"] = {**meta.get("builtinTools", {}), **META_BUILTINTOOLS}
 
@@ -407,14 +444,14 @@ def main():
     print(f"updated {local_first_filter_id[0]}")
 
     # 4. Update global default metadata / params for auto-discovered models
-    # Global defaults for auto-discovered or fallback models: planning/chat.
+    # Default for any new/fallback model: assistant-like, local tools on, web search/code interpreter OFF.
     default_meta = {
         "capabilities": META_CAPABILITIES,
-        "default_feature_ids": ["knowledge", "time", "web_search", "memory"],
+        "default_feature_ids": META_DEFAULT_FEATURES,
         "builtinTools": META_BUILTINTOOLS,
     }
     default_params = {
-        "function_calling": "legacy",
+        "function_calling": "native",
         "max_tokens": 4096,
         "temperature": 0.7,
         "system": PLANNING_PROMPT,
@@ -431,14 +468,16 @@ def main():
     print("updated models.default_metadata and models.default_params")
 
     # 5. Keep the UI model list and pinned list current.
+    # Pin the everyday models; DSH variants are available but collapsed to reduce UI clutter.
     pinned = [
         "qwen-fast",
         "qwen-long",
         "qwen-128k",
-        "qwen-quality",
-        "qwen-balanced",
         "qwen-think",
+        "qwen-balanced",
+        "qwen-quality",
         "devstral-coding",
+        "qwen-dsh-medium",
         "qwen-256k-batch",
     ]
     c.execute(

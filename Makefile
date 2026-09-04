@@ -82,3 +82,33 @@ install-local-tools:
 # Quick health check for the local-tools server.
 check-local-tools:
 	@./venv/bin/python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8766/health').read().decode())"
+
+# Non-sudo health check for the whole AIOS spine.
+health:
+	@./venv/bin/python3 scripts/health.py
+
+# Bring up the user-facing AIOS stack (Docker + user services).
+# System inference services (aios_core, llamacpp, aios-sherpa, aios-tool-daemon)
+# are normally started at boot; if not, run:
+#   sudo systemctl start aios_core llamacpp aios-sherpa aios-tool-daemon
+aios-up:
+	@echo "Starting local-tools user service..."
+	@systemctl --user start local-tools
+	@echo "Starting searchrouter..."
+	@cd services/searchrouter && docker compose up -d
+	@echo "Starting Qdrant..."
+	@docker start qdrant_aios >/dev/null 2>&1 || true
+	@echo "Starting Open-WebUI / embedding Docker stack..."
+	@cd services/open-webui && docker compose up -d
+	@echo "Use 'make health' to verify."
+
+# Shut down the user-facing stack.
+aios-down:
+	@echo "Stopping Open-WebUI / embedding Docker stack..."
+	@cd services/open-webui && docker compose down
+	@echo "Stopping searchrouter..."
+	@cd services/searchrouter && docker compose down
+	@echo "Stopping Qdrant..."
+	@docker stop qdrant_aios >/dev/null 2>&1 || true
+	@echo "Stopping local-tools user service..."
+	@systemctl --user stop local-tools

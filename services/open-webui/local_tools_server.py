@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """local-tools — OpenAPI tool server for Open-WebUI.
 
-Exposes two server-side tools:
+Exposes server-side read-only tools:
 
 - read_file: read a text file from an allowed host path.
 - run_safe_command: run a pre-approved, read-only diagnostic command.
+- get_status: fetch a concise AIOS system status snapshot.
 
 Design:
 - Single-file, stdlib only, no external dependencies.
@@ -28,6 +29,8 @@ import shlex
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
@@ -355,9 +358,29 @@ def tool_run_safe_command(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def tool_get_status(_args: dict[str, Any]) -> dict[str, Any]:
+    """Fetch a concise AIOS system status snapshot from aios_core /system/state.
+
+    This is a read-only, local-only call. It lets the assistant answer
+    "what's my system status?" in one tool call.
+    """
+    url = "http://127.0.0.1:5680/system/state"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return {"ok": True, "status": data}
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "error": f"aios-core returned {e.code}: {e.reason}"}
+    except urllib.error.URLError as e:
+        return {"ok": False, "error": f"could not reach aios-core: {e.reason}"}
+    except Exception as e:
+        return {"ok": False, "error": f"status fetch failed: {e}"}
+
+
 TOOLS = {
     "read_file": tool_read_file,
     "run_safe_command": tool_run_safe_command,
+    "get_status": tool_get_status,
 }
 
 
@@ -385,6 +408,29 @@ OPENAPI_SPEC: dict[str, Any] = {
     },
     "servers": [{"url": f"http://{HOST}:{PORT}"}],
     "paths": {
+        "/get_status": {
+            "post": {
+                "operationId": "get_status",
+                "summary": "Fetch a concise AIOS system status snapshot (services, GPU, disk, model).",
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {},
+                            }
+                        }
+                    },
+                },
+                "responses": {
+                    "200": {
+                        "description": "System status snapshot or error",
+                        "content": {"application/json": {"schema": {"type": "object"}}},
+                    }
+                },
+            }
+        },
         "/read_file": {
             "post": {
                 "operationId": "read_file",

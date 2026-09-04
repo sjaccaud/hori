@@ -26,6 +26,29 @@ def test_health_and_openapi_are_sane():
     assert spec["info"]["id"] == "local-tools"
     assert "/read_file" in spec["paths"]
     assert "/run_safe_command" in spec["paths"]
+    assert "/get_status" in spec["paths"]
+
+
+def test_get_status_fetches_aios_core_state(monkeypatch):
+    """get_status should call aios-core /system/state and return the snapshot."""
+    fake_payload = b'{"status":"healthy","services":{"llama-server":{"up":true}}}'
+
+    class FakeResponse:
+        def read(self):
+            return fake_payload
+        def __enter__(self, *args):
+            return self
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(url, timeout=None):
+        assert "127.0.0.1:5680/system/state" in url
+        return FakeResponse()
+
+    monkeypatch.setattr(jlt.urllib.request, "urlopen", fake_urlopen)
+    result = jlt.tool_get_status({})
+    assert result["ok"]
+    assert result["status"]["status"] == "healthy"
 
 
 def test_read_allowed_text_file(tmp_path):

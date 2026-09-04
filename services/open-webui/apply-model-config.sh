@@ -53,4 +53,8 @@ for i in $(seq 1 60); do
   sleep 2
 done
 
+echo "Patching model display names in container..."
+docker cp "$scripts_dir/patch_openai_model_names.py" "$OPENWEBUI_CONTAINER:/tmp/patch_openai_model_names.py"
+docker exec "$OPENWEBUI_CONTAINER" python3 /tmp/patch_openai_model_names.py
+
 echo "Open-WebUI model config applied."

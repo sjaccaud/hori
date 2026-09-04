@@ -48,8 +48,8 @@ NEW_BLOCK = """    models = get_merged_models(map(extract_data, responses))
 
 def main() -> int:
     if not OPENAI_PATH.exists():
-        print(f"ERROR: {OPENAI_PATH} not found", file=sys.stderr)
-        return 1
+        print(f"WARNING: {OPENAI_PATH} not found; skipping display-name patch.", file=sys.stderr)
+        return 0
 
     text = OPENAI_PATH.read_text()
 
@@ -59,11 +59,11 @@ def main() -> int:
 
     if OLD_BLOCK not in text:
         print(
-            "ERROR: could not find the expected block to patch; "
-            "the upstream openai.py may have changed.",
+            "WARNING: could not find the expected block to patch; "
+            "the upstream openai.py may have changed. Display names may not work.",
             file=sys.stderr,
         )
-        return 1
+        return 0
 
     text = text.replace(OLD_BLOCK, NEW_BLOCK)
     OPENAI_PATH.write_text(text)

@@ -115,6 +115,7 @@ def _list_kokoro_voices() -> list:
         voice_names = kokoro.get_voices()
         for name in sorted(voice_names):
             voices.append({
+                "id": name,
                 "name": name,
                 "backend": "kokoro",
                 "model_path": KOKORO_MODEL_PATH,
@@ -179,6 +180,7 @@ def _list_piper_voices() -> list:
             name = f.stem
             config_file = f.with_suffix(".onnx.json")
             voices.append({
+                "id": name,
                 "name": name,
                 "backend": "piper",
                 "model_path": str(f),

@@ -5,16 +5,32 @@
 
 ## Current Slice
 
-### Current slice: TBD — next slice not selected
+### Current slice: SLICE-06-ON-THE-GO-ASSISTANT-HARDENING — Reconcile Open-WebUI config, make the default assistant useful on mobile, and close surface/privacy gaps.
 
-The most likely next hardening steps are:
-1. Remove `<user>` from `sudo` and `docker` (requires proving every routine
-   privileged task has broker coverage — package operations, system tuning,
-   and any remaining Devin CLI paths).
-2. Add tamper-evident audit chaining / append-only audit log.
-3. Add fail2ban/ufw *mutation* operations behind `confirmed_by`.
+**Branch:** `slice/06-on-the-go-assistant-hardening`
 
-Select the next slice with the product owner.
+**Status:** Built, verified with `make health`, and ready for the privileged hardening batch.
+
+**What now works:**
+- `qwen-fast` is the default assistant with `function_calling: native`, local tools (`read_file`, `run_safe_command`, `get_status`), web search / code interpreter toggleable-but-off.
+- `qwen-long`, `qwen-128k`, `qwen-balanced`, `qwen-think`, `qwen-quality`, `devstral-coding`, and `qwen-dsh-*` all have consistent prompts and tool access.
+- A new `get_status` tool on the local-tools server fetches `aios_core` `/system/state` so the assistant can answer "what's my system status?" in one call.
+- `make health` gives a single green/red status for the spine.
+- `make aios-up` / `make aios-down` start/stop the user-facing Docker + user-service stack.
+- The searchrouter container has been recreated to bind `127.0.0.1:8081` and no longer contains exposed paid search API keys (it uses DuckDuckGo fallback until fresh rotated keys are inserted into `~/.config/aios/searchrouter.env`).
+- Qdrant is started and its restart policy set to `always`.
+
+**What requires root and is batched in `scripts/hardening/batch_privileged.sh`:**
+- Set `AIOS_ADMIN_TOKEN` + `HORI_ADMIN_TOKEN` and `HORI_SERVICE_HOST=127.0.0.1` in `/etc/aios/secrets.env`.
+- Restart `llamacpp` and `aios_core` so they bind to `127.0.0.1` and pick up the admin token.
+- Disable/mask `ubuntu-insights-collect.timer` and `ubuntu-insights-upload.timer`.
+- Enable/start the whole-Ubuntu restic backup + prune timers.
+
+**Run with:** `sudo ./scripts/hardening/batch_privileged.sh`
+
+**Uncertainties / owner decisions needed:**
+- The existing Tavily and Exa keys were exposed in `docker inspect` output earlier in this session and in prior conversation output. They must be rotated in the provider dashboards. New keys should go into `~/.config/aios/searchrouter.env` (mode 0600).
+- Paid search API choice is still deferred to the product owner.
 
 ## Completed Slices
 

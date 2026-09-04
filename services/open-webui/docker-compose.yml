@@ -39,9 +39,13 @@ services:
       - OLLAMA_BASE_URL=
       - OPENAI_API_BASE_URL=http://127.0.0.1:8080/v1
       - OPENAI_API_KEY=not-needed
+      - ENABLE_ORJSON=true
+      - ENABLE_TOOL_PERMISSIONS=true
+      - ENABLE_OLLAMA_API=false
+      - ENABLE_IMAGE_GENERATION=false
       - DEFAULT_MODELS=qwen-fast
-      - DEFAULT_MODEL_METADATA={"capabilities":{"web_search":true,"knowledge":true,"memory":true,"builtin_tools":true,"code_interpreter":true,"time":true},"default_feature_ids":["knowledge","time","code_interpreter","memory"],"builtinTools":{"knowledge":true,"time":true,"code_interpreter":true,"web_search":true}}
-      - DEFAULT_MODEL_PARAMS={"function_calling":"legacy","max_tokens":4096,"temperature":0.7}
+      - DEFAULT_MODEL_METADATA={"capabilities":{"web_search":true,"knowledge":true,"memory":true,"builtin_tools":true,"code_interpreter":true,"time":true},"default_feature_ids":["knowledge","time","memory"],"builtinTools":{"knowledge":true,"time":true,"code_interpreter":true,"web_search":true}}
+      - DEFAULT_MODEL_PARAMS={"function_calling":"native","max_tokens":4096,"temperature":0.7}
       - RAG_TOP_K=5
       - RAG_CHUNK_SIZE=1000
       - RAG_RELEVANCE_THRESHOLD=0.0
