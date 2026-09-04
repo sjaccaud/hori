@@ -306,6 +306,9 @@ def main():
                 conn_cfg['config'] = conn_cfg.get('config', {})
                 conn_cfg['config']['enable'] = True
                 conn_cfg['config']['function_name_filter_list'] = 'read_file,run_safe_command'
+                conn_cfg['info'] = conn_cfg.get('info', {})
+                conn_cfg['info']['id'] = 'local-tools'
+                conn_cfg['info']['name'] = 'Local Tools'
         c.execute(
             "UPDATE config SET value=?, updated_at=? WHERE key=?",
             (json.dumps(conns, ensure_ascii=False), now(), 'tool_server.connections'),
@@ -440,13 +443,49 @@ def main():
     ]
     c.execute(
         "UPDATE config SET value = ?, updated_at = ? WHERE key = ?",
-        (",".join(pinned), now(), "ui.default_pinned_models"),
+        (json.dumps(pinned, ensure_ascii=False), now(), "ui.default_pinned_models"),
     )
     c.execute(
         "UPDATE config SET value = ?, updated_at = ? WHERE key = ?",
         (json.dumps(pinned, ensure_ascii=False), now(), "ui.model_order_list"),
     )
     print("updated ui.default_pinned_models and ui.model_order_list")
+
+    # 6. Normalize all config.value rows to valid JSON text. Open-WebUI's SQLAlchemy
+    # model expects the value column to be JSON; integer/real/CSV values cause a
+    # JSONDecodeError at startup. This is a defensive fix for config drift.
+    c.execute("SELECT key, value FROM config")
+    for key, val in c.fetchall():
+        if val is None:
+            continue
+        if isinstance(val, str):
+            if val == "":
+                new_val = json.dumps("")
+            else:
+                try:
+                    json.loads(val)
+                    continue
+                except json.JSONDecodeError:
+                    # If it looks like a comma-separated list, convert to a JSON array;
+                    # otherwise treat the whole string as a JSON string.
+                    if "," in val and "\n" not in val:
+                        new_val = json.dumps(
+                            [x.strip() for x in val.split(",") if x.strip()],
+                            ensure_ascii=False,
+                        )
+                    else:
+                        new_val = json.dumps(val, ensure_ascii=False)
+                c.execute(
+                    "UPDATE config SET value = ?, updated_at = ? WHERE key = ?",
+                    (new_val, now(), key),
+                )
+        else:
+            new_val = json.dumps(val, ensure_ascii=False)
+            c.execute(
+                "UPDATE config SET value = ?, updated_at = ? WHERE key = ?",
+                (new_val, now(), key),
+            )
+    print("normalized config.value JSON types")
 
     conn.commit()
     conn.close()

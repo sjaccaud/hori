@@ -1,0 +1,20 @@
+[Unit]
+Description=Local Tools OpenAPI server for Open-WebUI
+Documentation=https://127.0.0.1:8766/openapi.json
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/Projects/aios/venv/bin/python3 %h/Projects/aios/services/open-webui/local_tools_server.py
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=%h/Projects/aios
+
+# Keep the server lightweight and local-only.
+Environment=LOCAL_TOOLS_HOST=127.0.0.1
+Environment=LOCAL_TOOLS_PORT=8766
+Environment=LOCAL_TOOLS_MAX_OUTPUT=100000
+Environment=LOCAL_TOOLS_TIMEOUT=30
+
+[Install]
+WantedBy=default.target

@@ -18,6 +18,49 @@ Select the next slice with the product owner.
 
 ## Completed Slices
 
+### SLICE-DEVIN-CLI-OPENWEBUI-01: Restore Devin CLI diagnostic permissions and Open-WebUI `local-tools` server — COMPLETE
+
+**Branch:** `rebrand/hori` (repair work, no feature branch)
+
+**What was built:**
+- Replaced the 190-entry positive Devin CLI allowlist in `~/.config/devin/config.json`
+  with a concise negative-security policy: allow broad read-only diagnostics and
+  project writes, deny root/shells/package installs/destructive commands, and ask
+  for file-moving/git-pushing/system mutations. Backed up the old config to
+  `/tmp/devin_config_backup_20260904.json`.
+- Created `services/open-webui/local_tools_server.py`, an OpenAPI tool server
+  on `127.0.0.1:8766` exposing `read_file` and `run_safe_command` for Open-WebUI.
+- Added `services/open-webui/local-tools.service` and Makefile targets
+  `install-local-tools` and `check-local-tools`.
+- Added `services/open-webui/test_local_tools_server.py` with 15 tests
+  covering allowed/denied reads, shell metacharacters, package installers,
+  `find`/`xargs` injection, timeout, and output capping.
+
+**Verification:**
+- `make test-unit` — 432 passed, 2 skipped.
+- `systemctl --user status local-tools` shows active/running.
+- `http://127.0.0.1:8766/health` returns `{"status": "ok"}`.
+- `/read_file` and `/run_safe_command` (`inxi -F`, `find`, `lscpu`) return
+  expected output.
+
+**Surprises / notes:**
+- The existing `local-tools` OpenAPI server source and service were missing
+  from the repo; Open-WebUI's `fix_tooling.py` was pointing to a non-existent
+  process on `127.0.0.1:8766`.
+- The regex for shell-metacharacter detection took several iterations to escape
+  correctly; the lesson is to use explicit character checks over complex regex.
+- Devin CLI's cached permission policy means the new `~/.config/devin/config.json`
+  only takes effect in a **new Devin session** or after switching permission mode.
+
+**Deferred:**
+- New Devin session / permission-mode switch to activate the rewritten config.
+- `make open-webui-apply` to re-apply the Open-WebUI tool filter and DB entries
+  if the UI does not pick up the server automatically.
+- Adding a `env` parameter to `run_safe_command` for commands that need
+  `MESA_VK_DEVICE_SELECT` etc.
+- Deciding whether to move the server source into `services/open_webui/` once the
+  hyphen-vs-underscore package issue is addressed.
+
 ### SLICE-SYSTEM-ROOT-BROKER-05: Read-only GPU / Docker / firewall / fail2ban queries through the root broker — COMPLETE
 
 **Branch:** `slice/system-root-broker-05` (merged to `rebrand/hori`)
