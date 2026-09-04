@@ -5,34 +5,37 @@
 
 ## Current Slice
 
-### Current slice: SLICE-06-ON-THE-GO-ASSISTANT-HARDENING — Reconcile Open-WebUI config, make the default assistant useful on mobile, and close surface/privacy gaps.
-
-**Branch:** `slice/06-on-the-go-assistant-hardening`
-
-**Status:** Merged to `rebrand/hori`. Code built and verified with `make health`; the privileged hardening batch still needs to be run by the owner with `sudo`.
-
-**What now works:**
-- `qwen-fast` is the default assistant with `function_calling: native`, local tools (`read_file`, `run_safe_command`, `get_status`), web search / code interpreter toggleable-but-off.
-- `qwen-long`, `qwen-128k`, `qwen-balanced`, `qwen-think`, `qwen-quality`, `devstral-coding`, and `qwen-dsh-*` all have consistent prompts and tool access.
-- A new `get_status` tool on the local-tools server fetches `aios_core` `/system/state` so the assistant can answer "what's my system status?" in one call.
-- `make health` gives a single green/red status for the spine.
-- `make aios-up` / `make aios-down` start/stop the user-facing Docker + user-service stack.
-- The searchrouter container has been recreated to bind `127.0.0.1:8081` and no longer contains exposed paid search API keys (it uses DuckDuckGo fallback until fresh rotated keys are inserted into `~/.config/aios/searchrouter.env`).
-- Qdrant is started and its restart policy set to `always`.
-
-**What requires root and is batched in `scripts/hardening/batch_privileged.sh`:**
-- Set `AIOS_ADMIN_TOKEN` + `HORI_ADMIN_TOKEN` and `HORI_SERVICE_HOST=127.0.0.1` in `/etc/aios/secrets.env`.
-- Restart `llamacpp` and `aios_core` so they bind to `127.0.0.1` and pick up the admin token.
-- Disable/mask `ubuntu-insights-collect.timer` and `ubuntu-insights-upload.timer`.
-- Enable/start the whole-Ubuntu restic backup + prune timers.
-
-**Run with:** `sudo ./scripts/hardening/batch_privileged.sh`
-
-**Uncertainties / owner decisions needed:**
-- The existing Tavily and Exa keys were exposed in `docker inspect` output earlier in this session and in prior conversation output. They must be rotated in the provider dashboards. New keys should go into `~/.config/aios/searchrouter.env` (mode 0600).
-- Paid search API choice is still deferred to the product owner.
+### Current slice: COMPLETE — no active slice. Choose the next one.
 
 ## Completed Slices
+
+### SLICE-06-ON-THE-GO-ASSISTANT-HARDENING: Reconcile Open-WebUI config, make the default assistant useful on mobile, and close surface/privacy gaps. — COMPLETE
+
+**Branch:** `rebrand/hori` (merged)
+
+**What was built:**
+- `qwen-fast` is the default assistant with `function_calling: native`, local tools (`read_file`, `run_safe_command`, `get_status`), and web search / code interpreter toggleable-but-off.
+- All Qwen/Devstral/DSH models have consistent prompts, tool access, and context/max_tokens settings.
+- `get_status` tool added to the local-tools server so the assistant can answer "what's my system status?" in one call.
+- `make health` gives a single green/red status for the AIOS spine; `make aios-up` / `make aios-down` manage the stack.
+- Searchrouter recreated to bind `127.0.0.1:8081`; paid search keys moved to `~/.config/aios/searchrouter.env` and the old exposed keys removed from the container.
+- Qdrant started with `restart=always`.
+- `scripts/hardening/batch_privileged.sh` set `HORI_SERVICE_HOST=127.0.0.1`, restarted `llamacpp` and `aios_core`, and enabled the whole-Ubuntu restic backup timers.
+
+**Verification:**
+- `make test-unit` — 433 passed, 2 skipped.
+- `make health` — all critical services green.
+- `ss -tlnH` confirms all AI ports (`3000`, `8080`, `8081`, `8082`, `5680`, `6333`) are on `127.0.0.1`.
+- `systemctl list-timers restic-ubuntu-backup` shows the timer is active.
+
+**Surprises / notes:**
+- `docker inspect searchrouter_aios` printed the existing Tavily and Exa keys, so those keys are now exposed in conversation history. The old container was destroyed and the keys removed, but they still need to be rotated in the provider dashboards.
+- `yq` was not installed on the system, so `batch_privileged.sh` did not update `~/.config/hori/hori.yaml`. The env token is enough for `aios_core`; install `yq` if you want `hori.yaml` kept in sync.
+- The Ubuntu telemetry timers (`ubuntu-insights-collect.timer`, `ubuntu-insights-upload.timer`) were not present on this system, so the script skipped them.
+
+**Deferred:**
+- Rotate Tavily and Exa keys in their provider dashboards; add the new key(s) to `~/.config/aios/searchrouter.env` when you pick a paid search provider.
+- Paid search API comparison (Brave / Tavily / Exa) is still an open product decision.
 
 ### SLICE-DEVIN-CLI-OPENWEBUI-01: Restore Devin CLI diagnostic permissions and Open-WebUI `local-tools` server — COMPLETE
 
