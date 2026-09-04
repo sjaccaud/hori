@@ -9,7 +9,7 @@
 
 **Branch:** `slice/06-on-the-go-assistant-hardening`
 
-**Status:** Built, verified with `make health`, and ready for the privileged hardening batch.
+**Status:** Merged to `rebrand/hori`. Code built and verified with `make health`; the privileged hardening batch still needs to be run by the owner with `sudo`.
 
 **What now works:**
 - `qwen-fast` is the default assistant with `function_calling: native`, local tools (`read_file`, `run_safe_command`, `get_status`), web search / code interpreter toggleable-but-off.
