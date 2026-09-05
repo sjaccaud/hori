@@ -5,7 +5,25 @@
 
 ## Current Slice
 
-### Current slice: COMPLETE — no active slice. Choose the next one.
+### SLICE-09-SAFE-PROJECT-CREATION: Let the assistant safely create a new project under `~/Projects` with dry-run, explicit confirmation, confinement, audit, and rollback.
+
+**Branch:** `slice/09-safe-project-creation`
+
+**Goal:**
+- Add a `project_creation` module to `aios_core` that can propose and create a project skeleton.
+- Confine all writes to `~/Projects` (or a configured parent dir).
+- Generate a dry-run manifest for user review.
+- Require explicit confirmation before writing anything.
+- Keep an audit log and provide a short rollback window.
+- Wire the flow into `chat` and `/v1/chat/completions` so the assistant does not silently create files.
+
+**Demo criterion:**
+User says: "Create a new project in ~/Projects for a Python CLI todo app." Assistant replies with a manifest and asks "Create these files?" User says "yes" and the project is created, with an audit entry.
+
+**Safety notes:**
+- This stays out of the tool_daemon read-only safety spine. Project creation is an `aios_core` workflow, not a low-level tool.
+- Path validation uses `os.path.realpath` and refuses any path outside the allowed parent.
+- Destructive overwrite is blocked by default.
 
 ## Completed Slices
 
