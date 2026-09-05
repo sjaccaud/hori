@@ -13,19 +13,19 @@
 
 **Branch:** `rebrand/hori` (merged)
 
-**What it is:** A new project at `~/Projects/model-prepper` that curates a
+**What it is:** A new project at `~/Projects/model-archive` that curates a
 dream-team list of open-source, open-weight models for offline storage on
 `/mnt/4TB` and `/mnt/8TB`, with a downloader that respects the 64GB VRAM target
 and never writes to the 2TB system drive.
 
 **Built:**
-- `~/Projects/model-prepper` Python project (stdlib + huggingface_hub + pyyaml).
+- `~/Projects/model-archive` Python project (stdlib + huggingface_hub + pyyaml).
 - 48 seed models across general, coding, reasoning, long-context, medical,
   legal, uncensored, multilingual, MoE, SLM, VLM, TTS, STT, embedding.
 - `manifest.yml` auto-generated with VRAM, size, priority, source tier, license,
   topology path, and rationale.
 - `TOPOLOGY.md` with directory layout, 32GB/64GB VRAM strategy, and trust tiers.
-- `model-prepper` CLI: `generate-manifest`, `list`, `plan`, `download`, `verify`.
+- `model-archive` CLI: `generate-manifest`, `list`, `plan`, `download`, `verify`.
 - `download` supports dry-run, priority/VRAM/tag/`--id` filters, disk-space
   guard, resume, and `HF_TOKEN`.
 - 14 tests passed; one real download verified (`BAAI/bge-base-en-v1.5` to
@@ -36,11 +36,11 @@ and never writes to the 2TB system drive.
 - `/mnt/4TB` has 3.2 TB free; `/mnt/8TB` has 5.5 TB free.
 
 **Demo:**
-- `model-prepper list --priority 1` shows the must-have list.
-- `model-prepper plan` shows the full download plan.
-- `model-prepper download --id bge-base-en-v1-5` fetched the model into the
+- `model-archive list --priority 1` shows the must-have list.
+- `model-archive plan` shows the full download plan.
+- `model-archive download --id bge-base-en-v1-5` fetched the model into the
   correct topology directory.
-- `model-prepper verify` shows `bge-base-en-v1-5` present and the rest missing.
+- `model-archive verify` shows `bge-base-en-v1-5` present and the rest missing.
 
 ### SLICE-10-PROJECT-CREATION-POLISH: Streaming, better templates, and Open-WebUI integration for safe project creation. — COMPLETE
 
