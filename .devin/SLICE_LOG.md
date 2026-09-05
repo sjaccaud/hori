@@ -5,25 +5,29 @@
 
 ## Current Slice
 
-### SLICE-09-SAFE-PROJECT-CREATION: Let the assistant safely create a new project under `~/Projects` with dry-run, explicit confirmation, confinement, audit, and rollback.
+### Current slice: COMPLETE — no active slice. Choose the next one.
 
-**Branch:** `slice/09-safe-project-creation`
+## Completed Slices
 
-**Goal:**
-- Add a `project_creation` module to `aios_core` that can propose and create a project skeleton.
-- Confine all writes to `~/Projects` (or a configured parent dir).
-- Generate a dry-run manifest for user review.
-- Require explicit confirmation before writing anything.
-- Keep an audit log and provide a short rollback window.
-- Wire the flow into `chat` and `/v1/chat/completions` so the assistant does not silently create files.
+### SLICE-09-SAFE-PROJECT-CREATION: Let the assistant safely create a new project under `~/Projects` with dry-run, explicit confirmation, confinement, audit, and rollback. — COMPLETE
 
-**Demo criterion:**
-User says: "Create a new project in ~/Projects for a Python CLI todo app." Assistant replies with a manifest and asks "Create these files?" User says "yes" and the project is created, with an audit entry.
+**Branch:** `rebrand/hori` (merged)
 
-**Safety notes:**
-- This stays out of the tool_daemon read-only safety spine. Project creation is an `aios_core` workflow, not a low-level tool.
-- Path validation uses `os.path.realpath` and refuses any path outside the allowed parent.
-- Destructive overwrite is blocked by default.
+**What was built:**
+- `services/aios_core/project_creation.py` with `propose_project`, `create_project`, and `rollback_project`.
+- Confinement to `~/Projects` (or `AIOS_PROJECTS_DIR`), dry-run manifest, explicit confirmation token, audit log at `~/.local/share/aios/project_creation_audit.jsonl`, and 5-minute rollback window.
+- Templates: `empty`, `python-cli`, `python-package`.
+- Keyword-based intent detection for "create a new project" and confirmation.
+- `/chat` short-circuits to the project-creation workflow so the assistant never silently creates files.
+- `services/aios_core/test_project_creation.py` and updates to `test_main.py`.
+
+**Verification:**
+- `make test-unit` — 439 passed, 2 skipped.
+- `make health` — all green.
+- Live `POST /chat`: "Create a new project in ~/Projects for a Python CLI todo app" → dry-run manifest + token.
+- Live confirmation "yes" → created `~/Projects/python-cli-todo-app`.
+- Rollback via audit token → removed the project.
+- Pre-commit hook correctly blocked a test path containing PII; fixed to use generic `/home/user/Projects`.
 
 ## Completed Slices
 
