@@ -9,6 +9,46 @@
 
 ## Completed Slices
 
+### SLICE-12-PROJECT-OFFLOAD: Back up non-daily `~/Projects` to private GitHub repos and optionally free local 2TB space. — COMPLETE
+
+**Branch:** `rebrand/hori` (merged)
+
+**What it is:** A tool in `~/Projects/project-offload` that walks `~/Projects`,
+compares each to a `keep` list, creates private GitHub repos for candidates,
+pushes them, and optionally deletes local copies. It protects required projects
+(`aios`, `model-archive`, etc.) from accidental deletion.
+
+**Built:**
+- `~/Projects/project-offload` Python project with `scan`, `plan`, `push`, `clean`.
+- `src/project_offload/scanner.py` with keep/candidate/protected tags and sizes.
+- `src/project_offload/pusher.py` using `gh repo create`, HTTPS remotes, and `gh auth`.
+- `src/project_offload/cleaner.py` requiring `--project` and `--confirmed`.
+- `src/project_offload/cli.py` with dry-run support and `--extra-keep`/`--drop-keep`.
+- 7 tests passed.
+
+**Initial keep list:**
+- `aios` (HORI core)
+- `model-archive` (offline model manifest)
+- `krill_harvester` (autonomous trading daemon)
+- `consensus_protocol` (book/OaK IP)
+- `book_forge` (local LLM book editor)
+- `covenant` (sociocratic M2M protocol)
+- `oak-bench` (OaK knowledge harness)
+- `project-offload` (this tool)
+
+**Demo:**
+- `scan` showed 18 projects, 6.33 GB total, 1.10 GB candidates.
+- `push --project passive_stack` created a private `passive_stack` GitHub repo and pushed.
+- `clean --project passive_stack --confirmed` removed the local copy.
+
+**Safety:**
+- No protected or keep-listed projects were deleted.
+- No token was exposed in code or conversation.
+- `passive_stack` was private on GitHub after push.
+
+**Numbers:**
+- `~/Projects`: 18 remaining (5.22 GB keep/protected, 1.10 GB candidates left to offload).
+
 ### SLICE-11-MODEL-PREPPER: Build an offline open-weight model dream-team manifest and downloader. — COMPLETE
 
 **Branch:** `rebrand/hori` (merged)
