@@ -83,6 +83,17 @@ install-local-tools:
 check-local-tools:
 	@./venv/bin/python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8766/health').read().decode())"
 
+# Generate a SearXNG secret for the local search container if one doesn't exist.
+search-secret:
+	@if [ ! -f services/searchrouter/.env ]; then \
+		mkdir -p services/searchrouter; \
+		python3 -c "import secrets; print('SEARXNG_SECRET=' + secrets.token_hex(32))" > services/searchrouter/.env; \
+		chmod 600 services/searchrouter/.env; \
+		echo "Generated services/searchrouter/.env"; \
+	else \
+		echo "services/searchrouter/.env already exists."; \
+	fi
+
 # Non-sudo health check for the whole AIOS spine.
 health:
 	@./venv/bin/python3 scripts/health.py
@@ -94,6 +105,8 @@ health:
 aios-up:
 	@echo "Starting local-tools user service..."
 	@systemctl --user start local-tools
+	@echo "Ensuring SearXNG secret..."
+	@$(MAKE) -s search-secret
 	@echo "Starting searchrouter..."
 	@cd services/searchrouter && docker compose up -d
 	@echo "Starting Qdrant..."

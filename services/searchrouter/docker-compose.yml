@@ -1,40 +1,39 @@
-# Search router for Open-WebUI / HORI.
+# Self-hosted SearXNG for Open-WebUI / HORI.
 #
-# This container provides SearXNG-compatible search on 127.0.0.1:8081.
-# It uses paid search APIs only when keys are supplied; otherwise it falls
-# back to DuckDuckGo / SearXNG. Keys belong in ~/.config/aios/searchrouter.env
-# (mode 0600) and are never committed to the repo.
+# Provides a SearXNG-compatible JSON search endpoint on 127.0.0.1:8081.
+# No API keys are required: SearXNG is a metasearch engine that aggregates
+# public, no-key search engines (DuckDuckGo, Mojeek, Startpage, Bing,
+# Wikipedia, etc.).
+#
+# For future paid fallbacks (Brave/Tavily/Exa/Jina), put keys in
+# ~/.config/aios/searchrouter.env and wire them through the Open-WebUI
+# web-search settings or aios_core multi_search.py; SearXNG itself does not
+# consume those keys.
 #
 # Run: docker compose -f services/searchrouter/docker-compose.yml up -d
+# Secret: the first time, run `make search-secret` or set SEARXNG_SECRET.
+
 services:
   searchrouter:
-    image: open-webui-searchrouter:latest
+    image: searxng/searxng:latest
     container_name: searchrouter_aios
-    network_mode: host
-    restart: always
-    # The image's default command hard-codes --host 0.0.0.0, so override it
-    # to bind only to localhost and avoid LAN exposure.
-    command: uvicorn main:app --host 127.0.0.1 --port 8081
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
+      - ./data:/var/cache/searxng
     environment:
-      - HOST=127.0.0.1
-      - PORT=8081
-      - SEARCH_RESULT_COUNT=3
-      - MAX_SNIPPET_LENGTH=1500
-      - REQUEST_TIMEOUT=10.0
-      - SEARCH_MODE=priority
-      - SEARCH_DEFAULT_SOURCE=all
-      - SEARXNG_FALLBACK_URL=
-      # Leave paid keys empty unless you put them in searchrouter.env.
-      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
-      - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY:-}
-      - EXA_API_KEY=${EXA_API_KEY:-}
+      - SEARXNG_BIND_ADDRESS=0.0.0.0
+      - SEARXNG_PORT=8080
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-aios-local-search-generate-secret}
     env_file:
-      - ${HOME}/.config/aios/searchrouter.env
+      - ./.env
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+    restart: unless-stopped
     deploy:
       resources:
         limits:

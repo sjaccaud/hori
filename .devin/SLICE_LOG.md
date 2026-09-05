@@ -5,7 +5,20 @@
 
 ## Current Slice
 
-### Current slice: COMPLETE — no active slice. Choose the next one.
+### Current slice: SLICE-07-NO-KEY-SEARCH — Stub out a zero-API-key search backbone (SearXNG + Jina Reader) and leave paid keys as a plug-and-play upgrade.
+
+**Branch:** `slice/07-no-key-search`
+
+**Goal:**
+- Replace the black-box `searchrouter` container with a self-hosted **SearXNG** instance that needs no API keys.
+- Add SearXNG as a source in `multi_search.py` so `aios_core` also gets no-key web search.
+- Use no-key **Jina Reader** (`r.jina.ai/URL`) to fetch page content when SearXNG snippets are too thin.
+- Keep `~/.config/aios/searchrouter.env` empty but documented for Brave/Tavily/Exa/Jina next week.
+
+**Why this is the right stub:**
+- SearXNG is metasearch, so it routes to the same free engines (DuckDuckGo, Bing, Mojeek, etc.) but gives a single SearXNG-compatible JSON endpoint that Open-WebUI already consumes.
+- Jina Reader works without an API key, so `aios_core` can enrich snippets without spending anything.
+- Paid providers can be dropped in later by simply adding keys, not redesigning the stack.
 
 ## Completed Slices
 

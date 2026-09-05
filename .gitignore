@@ -67,6 +67,8 @@ logs/
 **/qdrant/
 .coverage
 services/aios_core/certs/
+services/searchrouter/data/
+services/searchrouter/.env
 
 # --- Compiled binaries ---
 services/sherpa/sherpa

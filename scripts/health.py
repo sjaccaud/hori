@@ -24,7 +24,7 @@ ENDPOINTS = [
     ("llama-server", "http://127.0.0.1:8080/health", True),
     ("local-tools", "http://127.0.0.1:8766/health", True),
     ("open-webui", "http://127.0.0.1:3000/health", True),
-    ("searchrouter", "http://127.0.0.1:8081/", True),
+    ("searchrouter", "http://127.0.0.1:8081/search?q=health&format=json", True),
     ("embedding", "http://127.0.0.1:8082/", False),
     ("qdrant", "http://127.0.0.1:6333/", False),
 ]

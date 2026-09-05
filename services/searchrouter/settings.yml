@@ -1,0 +1,28 @@
+# SearXNG local configuration for the HORI assistant.
+# Loaded at /etc/searxng/settings.yml inside the container.
+# No API keys are required: this runs as a private metasearch instance that
+# aggregates public, no-key search engines (DuckDuckGo, Mojeek, Startpage,
+# Bing, Wikipedia, etc.).
+#
+# Paid-provider keys (Brave, Tavily, Exa, Jina) can be added to
+# ~/.config/aios/searchrouter.env later; they will not be used here because
+# SearXNG does not need them. This file is committed; secrets are not.
+
+use_default_settings: true
+
+search:
+  safe_search: 0
+  autocomplete: "duckduckgo"
+  formats:
+    - html
+    - json
+
+server:
+  # Overwritten at runtime by the SEARXNG_SECRET env var.
+  secret_key: ""
+  limiter: false
+  image_proxy: true
+  public_instance: false
+
+ui:
+  default_theme: simple
