@@ -5,11 +5,13 @@
 
 ## Current Slice
 
-### Current slice: SLICE-07-NO-KEY-SEARCH — Stub out a zero-API-key search backbone (SearXNG + Jina Reader) and leave paid keys as a plug-and-play upgrade.
+### Current slice: COMPLETE — no active slice. Choose the next one.
 
-**Branch:** `slice/07-no-key-search`
+## Completed Slices
 
-**Status:** Built and verified. `make health` green, `make test-unit` 436 passed / 2 skipped.
+### SLICE-07-NO-KEY-SEARCH: Stub out a zero-API-key search backbone (SearXNG + Jina Reader) and leave paid keys as a plug-and-play upgrade. — COMPLETE
+
+**Branch:** `rebrand/hori` (merged)
 
 **What was built:**
 - Replaced the black-box `open-webui-searchrouter:latest` container with `searxng/searxng:latest` on `127.0.0.1:8081`.
@@ -22,12 +24,19 @@
 - Updated `test_multi_search.py` with SearXNG tests, an enrichment test, and a safer `_patch_sources` that defaults unpatched sources to empty.
 - Left `~/.config/aios/searchrouter.env` empty but documented for future Brave/Tavily/Exa/Jina keys.
 
-**Why this is the right stub:**
-- SearXNG is metasearch, so it routes to the same free engines (DuckDuckGo, Bing, Mojeek, etc.) but gives a single SearXNG-compatible JSON endpoint that Open-WebUI already consumes.
-- Jina Reader works without an API key, so `aios_core` can enrich snippets without spending anything.
-- Paid providers can be dropped in later by simply adding keys, not redesigning the stack.
+**Verification:**
+- `make test-unit` — 436 passed, 2 skipped.
+- `make health` — all critical services green, SearXNG returns JSON results.
+- `PYTHONPATH=. venv/bin/python3` direct `multi_search('SearXNG 2026')` returned SearXNG + DDG results.
 
-## Completed Slices
+**Surprises / notes:**
+- SearXNG starts in a few seconds and already returns useful results on `127.0.0.1:8081/search?...&format=json`.
+- Jina Reader `r.jina.ai/URL` works without an API key, but page fetches can take several seconds. We wired it in as an optional enrichment, not the default, so the 3s web-search timeout isn't violated.
+- The old `searchrouter.env` is no longer consumed by the SearXNG container; it now serves only as a holding place for future paid keys.
+
+**Deferred:**
+- Add paid keys (Brave / Tavily / Exa / Jina) next week and optionally switch `aios_core` or Open-WebUI to a paid provider.
+- Decide whether to enable `multi_search(..., enrich=True)` by default once a paid/faster content-extraction backend is available.
 
 ### SLICE-06-ON-THE-GO-ASSISTANT-HARDENING: Reconcile Open-WebUI config, make the default assistant useful on mobile, and close surface/privacy gaps. — COMPLETE
 
