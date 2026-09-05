@@ -5,7 +5,24 @@
 
 ## Current Slice
 
-### Current slice: COMPLETE — no active slice. Choose the next one.
+### SLICE-10-PROJECT-CREATION-POLISH: Streaming, better templates, and Open-WebUI integration for safe project creation.
+
+**Branch:** `slice/10-project-creation-polish`
+
+**Goal:**
+- Wire project creation into the streaming voice/chat endpoints.
+- Add richer, more useful templates.
+- Expose `propose_create_project` / `confirm_create_project` as Open-WebUI tools via a dedicated `project-tools` server.
+- Keep the existing confirmation, confinement, audit, and rollback guarantees.
+
+**Demo criterion:**
+- In the voice app: "Create a Python CLI todo app project" → manifest streamed → "yes" → project created.
+- In Open-WebUI: the assistant can call the project-creation tools, show the manifest, and create after user confirmation.
+
+**Safety notes:**
+- The Open-WebUI tools are stateless wrappers over the same `aios_core.project_creation` module.
+- Any write still requires `confirmed=True` and a valid token.
+- Path confinement and audit log remain unchanged.
 
 ## Completed Slices
 
