@@ -1135,6 +1135,21 @@ async def chat(req: ChatRequest):
     system_prompt = _build_system_prompt(
         state_context, memory_context, tools_enabled=tools_available,
     )
+
+    # Web search: if the query needs current info, search and inject results.
+    # This mirrors the behavior of /v1/chat/completions so /chat never leaves
+    # the user hanging with a "let me search" reply.
+    web_search_context = await _maybe_web_search(req.text, memory_hits)
+    if web_search_context:
+        system_prompt += (
+            f"\n\n=== WEB SEARCH RESULTS (CURRENT - USE THIS) ===\n"
+            f"{web_search_context}\n"
+            f"=== END WEB SEARCH ===\n"
+            f"NOTE: The web search results above are current as of today. "
+            f"Use them to answer the question. Do not rely on older memory "
+            f"if it conflicts with these results."
+        )
+
     response_text = _call_llm(system_prompt, req.text)
 
     # PoC 16.1: Check for tool calls and execute if found

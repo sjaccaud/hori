@@ -651,6 +651,29 @@ def test_chat_strips_bare_json_artifacts(client):
         assert "Here is your answer." in data["response"]
 
 
+def test_chat_injects_web_search_context(client):
+    """If the query needs fresh web data, /chat should inject the search
+    context into the system prompt so the model answers instead of saying
+    'let me search'. Defends: reactive web search parity across endpoints."""
+    with patch("services.aios_core.main.parse_intent") as mock_intent, \
+         patch("services.aios_core.main.retrieve_memory") as mock_mem, \
+         patch("services.aios_core.main._call_llm") as mock_llm, \
+         patch("services.aios_core.main._persist_turn"), \
+         patch("services.aios_core.main._maybe_web_search",
+               new=AsyncMock(return_value="[1] Web: SearXNG runs local.")):
+        mock_intent.return_value = {"type": "chat", "id": None, "description": "test"}
+        mock_mem.return_value = []
+        mock_llm.return_value = "You can run SearXNG on 127.0.0.1:8081."
+
+        response = client.post("/chat", json={"text": "What is the latest SearXNG release?"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "127.0.0.1:8081" in data["response"]
+        prompt = mock_llm.call_args[0][0]
+        assert "=== WEB SEARCH RESULTS (CURRENT - USE THIS) ===" in prompt
+
+
 # --- Elastic Context Window (docs/operations.md) ---
 
 
