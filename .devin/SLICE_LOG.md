@@ -9,6 +9,19 @@
 
 ## Completed Slices
 
+### SLICE-08-CHAT-WEB-SEARCH: Patch /chat to inject web search context so it never leaves the user hanging. — COMPLETE
+
+**Branch:** `rebrand/hori` (merged)
+
+**What was built:**
+- `services/aios_core/main.py` `/chat` endpoint now awaits `_maybe_web_search` and appends the results to `system_prompt`, mirroring `/v1/chat/completions`.
+- Added `test_chat_injects_web_search_context` in `services/aios_core/test_main.py`.
+
+**Verification:**
+- `make test-unit` — 437 passed, 2 skipped.
+- `make health` — all green.
+- Live `POST /chat` with `What is the best local LLM for coding in 2026?` now returns a real, cited answer instead of 'Let me see what I can find.'
+
 ### SLICE-07-NO-KEY-SEARCH: Stub out a zero-API-key search backbone (SearXNG + Jina Reader) and leave paid keys as a plug-and-play upgrade. — COMPLETE
 
 **Branch:** `rebrand/hori` (merged)
