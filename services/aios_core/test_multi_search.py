@@ -21,6 +21,7 @@ from services.aios_core.multi_search import (
     _search_reddit,
     _search_hackernews,
     _search_semantic_scholar,
+    _search_searxng,
     SOURCE_WEIGHTS,
     SOURCES,
 )
@@ -32,20 +33,32 @@ def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
-def _patch_sources(ddg=None, arxiv=None, github=None, reddit=None, hn=None, ss=None):
-    """Patch the SOURCES dict with mock fetchers. Returns a context manager."""
+async def _empty_source(query, client):
+    """Return no results; used to silence sources a test does not care about."""
+    return []
+
+
+def _patch_sources(ddg=None, arxiv=None, github=None, reddit=None, hn=None, ss=None, searxng=None):
+    """Patch the SOURCES dict with mock fetchers. Returns a context manager.
+
+    Any source not explicitly patched is replaced with an empty fetcher so a
+    test cannot accidentally hit the real local SearXNG or external APIs.
+    """
     from contextlib import contextmanager
     import services.aios_core.multi_search as mod
 
     @contextmanager
     def ctx():
         original = dict(mod.SOURCES)
-        if ddg is not None: mod.SOURCES["ddg"] = ddg
-        if arxiv is not None: mod.SOURCES["arxiv"] = arxiv
-        if github is not None: mod.SOURCES["github"] = github
-        if reddit is not None: mod.SOURCES["reddit"] = reddit
-        if hn is not None: mod.SOURCES["hackernews"] = hn
-        if ss is not None: mod.SOURCES["semantic_scholar"] = ss
+        mod.SOURCES = {
+            "ddg": ddg if ddg is not None else _empty_source,
+            "arxiv": arxiv if arxiv is not None else _empty_source,
+            "github": github if github is not None else _empty_source,
+            "reddit": reddit if reddit is not None else _empty_source,
+            "hackernews": hn if hn is not None else _empty_source,
+            "semantic_scholar": ss if ss is not None else _empty_source,
+            "searxng": searxng if searxng is not None else _empty_source,
+        }
         try:
             yield
         finally:
@@ -199,13 +212,41 @@ class TestSourceFetchers:
         assert "Attention Is All You Need" in results[0].title
         assert "90000" in results[0].snippet
 
+    def test_searxng_returns_empty_on_error(self):
+        """SearXNG errors must not propagate."""
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=Exception("connection refused"))
+        results = _run(_search_searxng("test query", client))
+        assert results == []
+
+    def test_searxng_parses_valid_response(self):
+        """SearXNG returns a JSON results array — verify parsing."""
+        json_response = {
+            "results": [
+                {
+                    "title": "SearXNG is a free internet metasearch engine",
+                    "url": "https://github.com/searxng/searxng",
+                    "content": "SearXNG is a metasearch engine. Users are neither tracked nor profiled.",
+                }
+            ]
+        }
+        client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = json_response
+        mock_resp.raise_for_status = MagicMock()
+        client.get = AsyncMock(return_value=mock_resp)
+        results = _run(_search_searxng("searxng", client))
+        assert len(results) == 1
+        assert "SearXNG" in results[0].title
+        assert "github.com" in results[0].url
+
 
 class TestSourceRegistry:
-    """The source registry must have all 6 sources."""
+    """The source registry must have all 7 sources."""
 
     def test_all_sources_registered(self):
         assert set(SOURCES.keys()) == {
-            "ddg", "arxiv", "github", "reddit", "hackernews", "semantic_scholar"
+            "ddg", "searxng", "arxiv", "github", "reddit", "hackernews", "semantic_scholar"
         }
 
     def test_all_sources_have_weights(self):
@@ -273,6 +314,22 @@ class TestMultiSearchMerge:
             sources = {r.source for r in results}
             assert "ddg" in sources
             assert "arxiv" in sources
+
+    def test_enrich_fetches_content(self):
+        """When enrich=True, _enrich_with_jina populates result content."""
+        async def mock_ddg(q, c):
+            return [SearchResult(title="Example", url="http://example.com", snippet="snip")]
+
+        async def fake_enrich(results, client, count=None):
+            for r in results:
+                r.content = "enriched content"
+
+        with patch("services.aios_core.multi_search._enrich_with_jina", new_callable=AsyncMock) as mock_enrich:
+            mock_enrich.side_effect = fake_enrich
+            with _patch_sources(ddg=mock_ddg):
+                results = _run(multi_search("test", max_results=3, enrich=True))
+                assert len(results) == 1
+                assert results[0].content == "enriched content"
 
 
 class TestFormatResults:

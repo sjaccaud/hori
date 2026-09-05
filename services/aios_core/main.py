@@ -2197,7 +2197,9 @@ async def _maybe_web_search(user_text: str, memory_hits: list, conversation_hist
 
         logger.info(f"Multi-source search triggered for: {user_text[:80]} (query: {search_query[:80]})")
 
-        # Fan out to all 6 sources in parallel
+        # Fan out to all 7 sources in parallel. Jina Reader enrichment is
+        # available via multi_search(..., enrich=True) but left off by default
+        # because the 3s web-search timeout can't reliably fit page fetching.
         results = await multi_search(search_query, max_results=8)
         if not results:
             logger.info("Multi-search returned no results from any source")

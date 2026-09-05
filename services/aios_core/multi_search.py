@@ -32,7 +32,7 @@ import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import List
-from urllib.parse import quote_plus, urlencode
+from urllib.parse import quote, quote_plus, urlencode
 
 import httpx
 
@@ -44,6 +44,13 @@ logger = logging.getLogger(__name__)
 # we drop it and keep the rest. 5s is generous — most sources respond in <1s.
 SOURCE_TIMEOUT = 5.0
 
+# No-key Jina Reader settings for enriching thin snippets.
+# `r.jina.ai/http://example.com` converts a page to Markdown without an API key.
+JINA_READER_BASE = "https://r.jina.ai/"
+JINA_READER_TIMEOUT = 8.0
+JINA_READER_MAX_CONTENT = 2500
+JINA_READER_ENRICH_COUNT = 2  # top N results to fetch full text for
+
 # Source authority weights for relevance scoring.
 # Higher = results from this source are ranked higher in the merged list.
 # These are heuristic — academic papers and code repos are generally more
@@ -52,6 +59,7 @@ SOURCE_WEIGHTS = {
     "arxiv": 1.3,
     "semantic_scholar": 1.3,
     "github": 1.2,
+    "searxng": 1.1,
     "hackernews": 1.0,
     "reddit": 0.9,
     "ddg": 1.0,
@@ -82,6 +90,36 @@ async def _search_ddg(query: str, client: httpx.AsyncClient) -> List[SearchResul
         return results
     except Exception as e:
         logger.debug(f"DDG search failed: {e}")
+        return []
+
+
+async def _search_searxng(query: str, client: httpx.AsyncClient) -> List[SearchResult]:
+    """Local SearXNG metasearch on 127.0.0.1:8081 (no API key).
+
+    SearXNG aggregates public, no-key search engines. This is the primary
+    search source when no paid API keys are available.
+    """
+    try:
+        params = {"q": query, "format": "json", "language": "en"}
+        resp = await client.get(
+            "http://127.0.0.1:8081/search",
+            params=params,
+            timeout=SOURCE_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results = []
+        for item in data.get("results", [])[:5]:
+            title = " ".join(item.get("title", "").split())
+            url = item.get("url", "").strip()
+            snippet = " ".join(item.get("content", "").split())[:300]
+            if not url:
+                continue
+            results.append(SearchResult(title=title, url=url, snippet=snippet))
+        logger.info(f"SearXNG search '{query[:40]}': {len(results)} results")
+        return results
+    except Exception as e:
+        logger.debug(f"SearXNG search failed: {e}")
         return []
 
 
@@ -249,6 +287,7 @@ async def _search_semantic_scholar(query: str, client: httpx.AsyncClient) -> Lis
 # Source registry: maps source name to fetcher function
 SOURCES = {
     "ddg": _search_ddg,
+    "searxng": _search_searxng,
     "arxiv": _search_arxiv,
     "github": _search_github,
     "reddit": _search_reddit,
@@ -258,19 +297,19 @@ SOURCES = {
 
 
 # --- Source selection ---
-# Not every query needs all 6 sources. Querying arXiv for motherboard
-# recommendations or GitHub for news wastes 4 HTTP requests and adds
+# Not every query needs all 7 sources. Querying arXiv for motherboard
+# recommendations or GitHub for news wastes HTTP requests and adds
 # latency for zero benefit. This classifier picks the right sources
 # based on simple keyword matching.
 #
 # Source sets:
 #   ALL_SOURCES: everything (default for tech/academic queries)
-#   GENERAL_SOURCES: DDG + Reddit + HN (product, news, opinion, how-to)
-#   ACADEMIC_SOURCES: DDG + arXiv + Semantic Scholar (papers, research)
+#   GENERAL_SOURCES: SearXNG + DDG + Reddit + HN (product, news, opinion, how-to)
+#   ACADEMIC_SOURCES: SearXNG + DDG + arXiv + Semantic Scholar (papers, research)
 
 ALL_SOURCES = frozenset(SOURCES.keys())
-GENERAL_SOURCES = frozenset({"ddg", "reddit", "hackernews"})
-ACADEMIC_SOURCES = frozenset({"ddg", "arxiv", "semantic_scholar"})
+GENERAL_SOURCES = frozenset({"searxng", "ddg", "reddit", "hackernews"})
+ACADEMIC_SOURCES = frozenset({"searxng", "ddg", "arxiv", "semantic_scholar"})
 
 # Keywords that indicate a product/recommendation/news query — skip
 # academic and code sources for these.
@@ -305,22 +344,56 @@ def _select_sources(query: str) -> frozenset:
     return ALL_SOURCES
 
 
-async def multi_search(query: str, max_results: int = 10) -> List[MultiSearchResult]:
+async def _enrich_with_jina(
+    results: List[MultiSearchResult],
+    client: httpx.AsyncClient,
+    count: int = JINA_READER_ENRICH_COUNT,
+) -> None:
+    """Fetch full-page Markdown for the top N results via no-key Jina Reader.
+
+    Updates each result's `content` field in place. Network or parsing
+    failures are swallowed so the result still has its snippet.
+    """
+    for r in results[:count]:
+        try:
+            reader_url = f"{JINA_READER_BASE}{quote(r.url, safe='')}"
+            resp = await client.get(
+                reader_url,
+                headers={"Accept": "text/markdown"},
+                timeout=JINA_READER_TIMEOUT,
+                follow_redirects=True,
+            )
+            if resp.status_code != 200:
+                continue
+            text = " ".join(resp.text.split())
+            r.content = text[:JINA_READER_MAX_CONTENT]
+        except Exception as e:
+            logger.debug(f"Jina Reader fetch failed for {r.url}: {e}")
+
+
+async def multi_search(
+    query: str,
+    max_results: int = 10,
+    enrich: bool = False,
+) -> List[MultiSearchResult]:
     """Search multiple sources in parallel and merge results.
 
-    Fans out to all 6 sources concurrently, deduplicates by URL, scores by
+    Fans out to all 7 sources concurrently, deduplicates by URL, scores by
     keyword relevance + source authority weight, and returns the top N.
+    Optionally fetches full-page Markdown for the top results via no-key
+    Jina Reader when `enrich=True`.
 
     Args:
         query: The search query
         max_results: Maximum number of results to return
+        enrich: If True, fetch full content for the top results via Jina Reader
 
     Returns:
         List of MultiSearchResult sorted by relevance score (descending)
     """
     start = time.time()
 
-    # Select sources based on query type — not every query needs all 6.
+    # Select sources based on query type — not every query needs all 7.
     selected = _select_sources(query)
     if selected != ALL_SOURCES:
         logger.info(f"Source selection: {sorted(selected)} (query: {query[:60]!r})")
@@ -346,38 +419,42 @@ async def multi_search(query: str, max_results: int = 10) -> List[MultiSearchRes
             except Exception as e:
                 logger.debug(f"Source '{name}' failed: {e}")
 
-    # Merge into MultiSearchResult list
-    merged = []
-    seen_urls = set()
-    query_lower = query.lower()
-    query_terms = set(re.findall(r"\w+", query_lower)) - {"the", "a", "an", "is", "of", "to", "in", "for", "and", "or", "what", "how", "why", "with"}
+        # Merge into MultiSearchResult list
+        merged = []
+        seen_urls = set()
+        query_lower = query.lower()
+        query_terms = set(re.findall(r"\w+", query_lower)) - {"the", "a", "an", "is", "of", "to", "in", "for", "and", "or", "what", "how", "why", "with"}
 
-    for source_name, results in results_by_source.items():
-        weight = SOURCE_WEIGHTS.get(source_name, 1.0)
-        for r in results:
-            # Deduplicate by URL
-            if r.url in seen_urls:
-                continue
-            seen_urls.add(r.url)
+        for source_name, results in results_by_source.items():
+            weight = SOURCE_WEIGHTS.get(source_name, 1.0)
+            for r in results:
+                # Deduplicate by URL
+                if r.url in seen_urls:
+                    continue
+                seen_urls.add(r.url)
 
-            # Score: keyword match in title + snippet, weighted by source authority
-            title_lower = r.title.lower()
-            snippet_lower = r.snippet.lower()
-            title_matches = sum(1 for t in query_terms if t in title_lower)
-            snippet_matches = sum(1 for t in query_terms if t in snippet_lower)
-            score = (title_matches * 2.0 + snippet_matches * 0.5) * weight
+                # Score: keyword match in title + snippet, weighted by source authority
+                title_lower = r.title.lower()
+                snippet_lower = r.snippet.lower()
+                title_matches = sum(1 for t in query_terms if t in title_lower)
+                snippet_matches = sum(1 for t in query_terms if t in snippet_lower)
+                score = (title_matches * 2.0 + snippet_matches * 0.5) * weight
 
-            merged.append(MultiSearchResult(
-                title=r.title,
-                url=r.url,
-                snippet=r.snippet,
-                source=source_name,
-                score=score,
-            ))
+                merged.append(MultiSearchResult(
+                    title=r.title,
+                    url=r.url,
+                    snippet=r.snippet,
+                    source=source_name,
+                    score=score,
+                ))
 
-    # Sort by score descending, take top N
-    merged.sort(key=lambda x: x.score, reverse=True)
-    result = merged[:max_results]
+        # Sort by score descending, take top N
+        merged.sort(key=lambda x: x.score, reverse=True)
+        result = merged[:max_results]
+
+        # Optional: no-key full-page extraction via Jina Reader
+        if enrich and result:
+            await _enrich_with_jina(result, client)
 
     elapsed = time.time() - start
     source_counts = {name: len(results) for name, results in results_by_source.items()}
@@ -393,6 +470,7 @@ def format_results_for_llm(results: List[MultiSearchResult]) -> str:
     """Format multi-search results into a context block for the LLM.
 
     Each result is numbered [1], [2], etc. with title, source, and snippet.
+    If `content` was fetched via Jina Reader, it is appended after the snippet.
     """
     if not results:
         return "No search results found."
@@ -400,15 +478,19 @@ def format_results_for_llm(results: List[MultiSearchResult]) -> str:
     for i, r in enumerate(results):
         source_label = {
             "ddg": "Web",
+            "searxng": "SearXNG",
             "arxiv": "arXiv",
             "github": "GitHub",
             "reddit": "Reddit",
             "hackernews": "Hacker News",
             "semantic_scholar": "Semantic Scholar",
         }.get(r.source, r.source)
+        body = f"    {r.snippet[:300]}"
+        if r.content:
+            body += f"\n    --- Full content ---\n    {r.content[:JINA_READER_MAX_CONTENT]}"
         parts.append(
             f"[{i+1}] ({source_label}) {r.title}\n"
-            f"    {r.snippet[:300]}\n"
+            f"{body}\n"
             f"    URL: {r.url}"
         )
     return "\n\n".join(parts)
