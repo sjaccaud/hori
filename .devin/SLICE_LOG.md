@@ -5,7 +5,48 @@
 
 ## Current Slice
 
-### Current slice: COMPLETE — no active slice. Choose the next one.
+### SLICE-11-MODEL-PREPPER: Build an offline open-weight model dream-team manifest and downloader. — IN PROGRESS
+
+**Branch:** `slice/11-model-prepper` off `rebrand/hori`
+
+**What it is:** A new project at `~/Projects/model-prepper` that curates a
+dream-team list of open-source, open-weight models for offline storage on
+`/mnt/4TB` and `/mnt/8TB`, with a downloader that respects the 64GB VRAM target
+and never writes to the 2TB system drive.
+
+**Built so far:**
+- `~/Projects/model-prepper` Python project (stdlib + huggingface_hub + pyyaml).
+- `src/model_prepper/catalog.py` with 48 seed models across:
+  - general, coding, reasoning, long-context, medical, legal, uncensored,
+    multilingual, MoE, SLM, VLM, TTS, STT, embedding.
+- `manifest.yml` auto-generated with VRAM, size, priority, source tier, license,
+  topology path, and rationale.
+- `TOPOLOGY.md` with directory layout, 32GB/64GB VRAM strategy, and trust tiers.
+- `src/model_prepper/cli.py` with `generate-manifest`, `list`, `plan`,
+  `download`, `verify` commands.
+- `src/model_prepper/downloader.py` with dry-run, priority/VRAM/tag filters,
+  disk-space guard, resume, and `HF_TOKEN` support.
+- Tests for catalog, manifest, and downloader (14 passed).
+- `README.md`, `AGENTS.md`, `pyproject.toml`.
+
+**Numbers:**
+- 48 models, ~447 GB estimated total, ~125 GB priority 1.
+- Target storage: `/mnt/4TB/models/prepper` (3.2 TB free).
+- Archive storage: `/mnt/8TB/models/prepper` (5.5 TB free).
+
+**Demo criterion:**
+- `model-prepper list --priority 1` shows the must-have list.
+- `model-prepper plan` shows what would be downloaded.
+- `model-prepper download --priority 1 --dry-run` confirms paths and sizes.
+- A small real download (e.g., `bge-base-en-v1.5` or `Kokoro-82M`) lands in the
+  correct topology directory on `/mnt/4TB`.
+
+**Uncertainties / next steps:**
+- Need to verify a real download of at least one small model.
+- Attestation beyond `huggingface_hub` cache verification is not yet built.
+- Some repo/file names in the catalog are best-effort and should be confirmed
+  before bulk download (e.g., medical/legal/uncensored specific filenames).
+- Should the downloader auto-route priority 3 to `/mnt/8TB`?
 
 ## Completed Slices
 
