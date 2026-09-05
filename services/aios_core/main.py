@@ -1086,6 +1086,20 @@ async def chat(req: ChatRequest):
     # 1. Parse intent
     work_order = parse_intent(req.text, req.context)
 
+    # 1.5 Safe project creation: short-circuit if the user is creating or
+    # confirming a project. This stays outside the LLM tool path to keep
+    # writes explicit, confined, and auditable.
+    project_response = await _maybe_create_project(req.text, conv_id)
+    if project_response:
+        _persist_turn(req, conv_id, project_response, work_order)
+        return ChatResponse(
+            response=project_response,
+            work_order=work_order,
+            red_team_report=None,
+            memory_used=[],
+            conversation_id=conv_id,
+        )
+
     # 2. Retrieve memory from all tiers (working for recent context, project/longterm for durable)
     memory_hits = []
     try:
@@ -2178,6 +2192,60 @@ def _run_red_team(action: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Red team invocation failed: {e}")
         return {"verdict": "ERROR", "alternatives": [], "error": str(e)}
+
+
+async def _maybe_create_project(user_text: str, conv_id: str) -> Optional[str]:
+    """If the user wants to create a project, or is confirming one, handle
+    the safe project-creation workflow and return a response string.
+
+    This keeps the LLM out of the write path: the workflow validates the
+    parent directory, generates a manifest, and requires explicit user
+    confirmation before any files are created.
+    """
+    from .project_creation import (
+        propose_project,
+        create_project,
+        detect_creation_intent,
+        detect_confirmation,
+        _load_pending,
+    )
+
+    if detect_confirmation(user_text):
+        pending = _load_pending()
+        if pending:
+            latest = max(pending.values(), key=lambda p: p["created_at"])
+            result = create_project(latest["token"], confirmed=True)
+            if result.get("created"):
+                return (
+                    f"Created project '{result['name']}' at {result['project_root']}. "
+                    f"{len(result['created_files'])} files/directories created."
+                )
+            if result.get("error"):
+                return f"I couldn't create the project: {result['error']}"
+        return "I don't see a pending project to confirm."
+
+    intent = detect_creation_intent(user_text)
+    if not intent:
+        return None
+
+    result = propose_project(
+        name=intent["name"],
+        description=intent["description"],
+        parent_dir=intent.get("parent_dir"),
+        template=intent["template"],
+    )
+    if result.get("error"):
+        return f"I can't propose a project there: {result['error']}"
+
+    manifest_lines = "\n".join(
+        f"  {'[dir] ' if f['is_dir'] else ''}{f['path']}"
+        for f in result["manifest"]
+    )
+    return (
+        f"I can create project '{result['name']}' at {result['project_root']}.\n\n"
+        f"Files to create:\n{manifest_lines}\n\n"
+        f"Reply 'yes' to create it (token: {result['token']})."
+    )
 
 
 async def _maybe_web_search(user_text: str, memory_hits: list, conversation_history: list = None, force: bool = False) -> str:

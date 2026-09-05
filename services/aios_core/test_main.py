@@ -674,6 +674,67 @@ def test_chat_injects_web_search_context(client):
         assert "=== WEB SEARCH RESULTS (CURRENT - USE THIS) ===" in prompt
 
 
+def test_chat_short_circuits_for_project_creation(client):
+    """If the user asks to create a project, /chat should return the dry-run
+    manifest and a confirmation prompt without calling the LLM."""
+    with patch("services.aios_core.project_creation.propose_project") as mock_propose, \
+         patch("services.aios_core.main._call_llm") as mock_llm, \
+         patch("services.aios_core.main._persist_turn"):
+        mock_propose.return_value = {
+            "token": "abc123",
+            "name": "cli-todo-app",
+            "project_root": "/home/user/Projects/cli-todo-app",
+            "manifest": [
+                {"path": "README.md", "content": "# CLI Todo App\n", "is_dir": False},
+            ],
+            "dry_run": True,
+            "requires_confirmation": True,
+        }
+
+        response = client.post("/chat", json={"text": "Create a new project for a Python CLI todo app"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "cli-todo-app" in data["response"]
+        assert "Reply 'yes'" in data["response"]
+        mock_llm.assert_not_called()
+        mock_propose.assert_called_once()
+
+
+def test_chat_creates_project_on_confirmation(client):
+    """A 'yes' with a pending project proposal should call create_project."""
+    import time as _time
+    with patch("services.aios_core.project_creation._load_pending") as mock_pending, \
+         patch("services.aios_core.project_creation.create_project") as mock_create, \
+         patch("services.aios_core.main._call_llm") as mock_llm, \
+         patch("services.aios_core.main._persist_turn"):
+        mock_pending.return_value = {
+            "abc123": {
+                "token": "abc123",
+                "name": "cli-todo-app",
+                "parent_dir": "/home/user/Projects",
+                "description": "desc",
+                "template": "python-cli",
+                "manifest": [],
+                "created_at": _time.time(),
+            }
+        }
+        mock_create.return_value = {
+            "created": True,
+            "name": "cli-todo-app",
+            "project_root": "/home/user/Projects/cli-todo-app",
+            "created_files": ["README.md"],
+        }
+
+        response = client.post("/chat", json={"text": "yes"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "Created project" in data["response"]
+        mock_create.assert_called_once_with("abc123", confirmed=True)
+        mock_llm.assert_not_called()
+
+
 # --- Elastic Context Window (docs/operations.md) ---
 
 
