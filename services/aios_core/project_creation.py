@@ -139,7 +139,7 @@ def _generate_manifest(name: str, description: str, template: str) -> List[Proje
         manifest = [
             ProjectFile(path="README.md", content=_readme(name, description)),
             ProjectFile(path=".gitignore", content=_gitignore()),
-            ProjectFile(path="pyproject.toml", content=_pyproject_toml(name, pkg, description)),
+            ProjectFile(path="pyproject.toml", content=_pyproject_toml(name, pkg, description, scripts=f'{name} = "{pkg}.cli:main"')),
             ProjectFile(path=f"src/{pkg}/__init__.py", content="""__version__ = "0.1.0"\n"""),
             ProjectFile(path=f"src/{pkg}/cli.py", content=_python_cli(pkg)),
             ProjectFile(path="tests/__init__.py", content=""),
@@ -151,11 +151,54 @@ def _generate_manifest(name: str, description: str, template: str) -> List[Proje
         manifest = [
             ProjectFile(path="README.md", content=_readme(name, description)),
             ProjectFile(path=".gitignore", content=_gitignore()),
-            ProjectFile(path="pyproject.toml", content=_pyproject_toml(name, pkg, description)),
+            ProjectFile(path="pyproject.toml", content=_pyproject_toml(name, pkg, description, deps="")),
             ProjectFile(path=f"src/{pkg}/__init__.py", content="""__version__ = "0.1.0"\n"""),
-            ProjectFile(path=f"src/{pkg}/core.py", content="""# Core module for {pkg}\n"""),
+            ProjectFile(path=f"src/{pkg}/core.py", content=f"""# Core module for {pkg}\n"""),
             ProjectFile(path="tests/__init__.py", content=""),
             ProjectFile(path="tests/test_basic.py", content=_python_test(pkg)),
+        ]
+
+    elif template == "fastapi-app":
+        pkg = name.replace("-", "_")
+        manifest = [
+            ProjectFile(path="README.md", content=_readme(name, description)),
+            ProjectFile(path=".gitignore", content=_gitignore()),
+            ProjectFile(path="pyproject.toml", content=_pyproject_toml(
+                name, pkg, description,
+                deps='\ndependencies = ["fastapi>=0.115", "uvicorn[standard]>=0.32"]',
+            )),
+            ProjectFile(path=f"src/{pkg}/__init__.py", content="""__version__ = "0.1.0"\n"""),
+            ProjectFile(path=f"src/{pkg}/main.py", content=_fastapi_main(pkg)),
+            ProjectFile(path=f"src/{pkg}/routers/__init__.py", content=""),
+            ProjectFile(path=f"src/{pkg}/routers/items.py", content=_fastapi_router(pkg)),
+            ProjectFile(path="tests/__init__.py", content=""),
+            ProjectFile(path="tests/test_main.py", content=_fastapi_test(pkg)),
+        ]
+
+    elif template == "data-science":
+        pkg = name.replace("-", "_")
+        manifest = [
+            ProjectFile(path="README.md", content=_readme(name, description)),
+            ProjectFile(path=".gitignore", content=_gitignore() + "\n# Data\ndata/\n*.csv\n*.parquet\n"),
+            ProjectFile(path="pyproject.toml", content=_pyproject_toml(
+                name, pkg, description,
+                deps='\ndependencies = ["pandas>=2.2", "matplotlib>=3.9", "jupyter>=1.1"]',
+            )),
+            ProjectFile(path=f"src/{pkg}/__init__.py", content="""__version__ = "0.1.0"\n"""),
+            ProjectFile(path=f"src/{pkg}/data.py", content=f"""# Data loading and cleaning for {pkg}\n"""),
+            ProjectFile(path="notebooks/explore.ipynb", content=_jupyter_notebook()),
+            ProjectFile(path="data/.gitkeep", content=""),
+            ProjectFile(path="tests/__init__.py", content=""),
+            ProjectFile(path="tests/test_basic.py", content=_python_test(pkg)),
+        ]
+
+    elif template == "static-site":
+        manifest = [
+            ProjectFile(path="README.md", content=_readme(name, description)),
+            ProjectFile(path=".gitignore", content=""),
+            ProjectFile(path="index.html", content=_static_index(name, description)),
+            ProjectFile(path="styles.css", content=_static_css()),
+            ProjectFile(path="script.js", content=_static_js(name)),
         ]
 
     else:
@@ -203,18 +246,15 @@ Thumbs.db
 """
 
 
-def _pyproject_toml(name: str, pkg: str, description: str) -> str:
+def _pyproject_toml(name: str, pkg: str, description: str, deps: str = "", scripts: str = "") -> str:
+    scripts_section = f"\n[project.scripts]\n{scripts}\n" if scripts else "\n"
     return f"""[project]
 name = "{name}"
 description = "{description}"
 version = "0.1.0"
 readme = "README.md"
-requires-python = ">=3.10"
-
-[project.scripts]
-{name} = "{pkg}.cli:main"
-
-[build-system]
+requires-python = ">=3.10"{deps}
+{scripts_section}[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 """
@@ -244,6 +284,116 @@ def _python_test(pkg: str) -> str:
 
 def test_main_smoke():
     assert main() == 0
+"""
+
+
+def _fastapi_main(pkg: str) -> str:
+    return f"""from fastapi import FastAPI
+from {pkg}.routers import items
+
+app = FastAPI()
+app.include_router(items.router, prefix="/items", tags=["items"])
+
+
+@app.get("/")
+def read_root():
+    return {{"message": "Hello from {pkg}"}}
+"""
+
+
+def _fastapi_router(pkg: str) -> str:
+    return f"""from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/")
+def list_items():
+    return [{{"id": 1, "name": "item"}}]
+"""
+
+
+def _fastapi_test(pkg: str) -> str:
+    return f"""from fastapi.testclient import TestClient
+from {pkg}.main import app
+
+
+def test_root():
+    with TestClient(app) as client:
+        response = client.get("/")
+        assert response.status_code == 200
+        assert response.json()["message"].startswith("Hello")
+"""
+
+
+def _jupyter_notebook() -> str:
+    return """{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print('Hello, data science!')"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.10.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
+"""
+
+
+def _static_index(name: str, description: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{name}</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>{name}</h1>
+    <p>{description}</p>
+    <button id="greet">Greet</button>
+    <script src="script.js"></script>
+</body>
+</html>
+"""
+
+
+def _static_css() -> str:
+    return """body {
+    font-family: system-ui, sans-serif;
+    max-width: 600px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+button {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+}
+"""
+
+
+def _static_js(name: str) -> str:
+    return f"""document.getElementById('greet').addEventListener('click', () => {{
+    alert('Hello from {name}!');
+}});
 """
 
 
@@ -488,10 +638,17 @@ def detect_creation_intent(text: str) -> dict | None:
     if the message looks like a project creation request, otherwise None.
     """
     lower = text.lower()
-    if not any(phrase in lower for phrase in [
+    # Trigger: the user wants to create/start/make a new project, app, or
+    # service. We accept a few noun types to avoid forcing the word "project".
+    has_creation_verb = any(v in lower for v in ["create", "start", "make", "init", "initialize"])
+    has_project_noun = any(n in lower for n in [
+        "project", "app", "application", "service", "website", "web site", "site", "api",
+    ])
+    has_explicit_phrase = any(p in lower for p in [
         "create a new project", "create project", "start a new project",
-        "start project", "new project",
-    ]):
+        "start project", "new project", "make a project", "make project",
+    ])
+    if not (has_creation_verb and has_project_noun) and not has_explicit_phrase:
         return None
 
     # Try to extract a project name from quotes, then from "for a/an ...",
@@ -527,7 +684,13 @@ def detect_creation_intent(text: str) -> dict | None:
 
     # Template detection
     template = "empty"
-    if "python cli" in lower or "command-line" in lower or "cli" in lower:
+    if any(k in lower for k in ["fastapi", "web api", "web app", "web service", "api"]):
+        template = "fastapi-app"
+    elif any(k in lower for k in ["data science", "jupyter", "notebook", "pandas", "ml model"]):
+        template = "data-science"
+    elif any(k in lower for k in ["static site", "static web", "html", "css", "javascript", "frontend"]):
+        template = "static-site"
+    elif "python cli" in lower or "command-line" in lower or ("cli" in lower and "python" in lower):
         template = "python-cli"
     elif "python" in lower or "package" in lower:
         template = "python-package"

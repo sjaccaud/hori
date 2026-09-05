@@ -80,7 +80,27 @@ def test_detect_creation_intent_python_cli():
     intent = pc.detect_creation_intent(text)
     assert intent is not None
     assert intent["template"] == "python-cli"
-    assert "python-cli" in intent["template"]
+
+
+def test_detect_creation_intent_fastapi():
+    text = 'Create a FastAPI web API in ~/Projects for a todo service'
+    intent = pc.detect_creation_intent(text)
+    assert intent is not None
+    assert intent["template"] == "fastapi-app"
+
+
+def test_detect_creation_intent_data_science():
+    text = 'Start a data science project for customer churn prediction'
+    intent = pc.detect_creation_intent(text)
+    assert intent is not None
+    assert intent["template"] == "data-science"
+
+
+def test_detect_creation_intent_static_site():
+    text = 'Create a static site in ~/Projects for my portfolio'
+    intent = pc.detect_creation_intent(text)
+    assert intent is not None
+    assert intent["template"] == "static-site"
 
 
 def test_detect_creation_intent_no_match():

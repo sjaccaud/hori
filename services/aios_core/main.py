@@ -1234,6 +1234,35 @@ async def openai_chat_completions(req: OAIChatRequest):
     conv_id = req.conversation_id or str(uuid.uuid4())
     logger.info(f"OpenAI-compat chat (conv={conv_id}): {user_text[:80]}")
 
+    # Project creation short-circuit: works for both streaming and non-streaming.
+    project_response = await _maybe_create_project(user_text, conv_id)
+    if project_response:
+        if req.stream:
+            async def _oai_stream_project():
+                text_chunks = [project_response[i:i+80] for i in range(0, len(project_response), 80)]
+                for i, chunk in enumerate(text_chunks):
+                    delta = {
+                        "id": f"chatcmpl-{conv_id}",
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": req.model,
+                        "choices": [{"index": 0, "delta": {"role": "assistant" if i == 0 else None, "content": chunk}, "finish_reason": None}],
+                    }
+                    yield f"data: {json.dumps(delta)}\n\n"
+                final = {
+                    "id": f"chatcmpl-{conv_id}",
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": req.model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                }
+                yield f"data: {json.dumps(final)}\n\n"
+                yield "data: [DONE]\n\n"
+                asyncio.create_task(_persist_raw_async(user_text, project_response, conv_id, None))
+            return StreamingResponse(_oai_stream_project(), media_type="text/event-stream")
+        asyncio.create_task(_persist_raw_async(user_text, project_response, conv_id, None))
+        return _oai_response(project_response, req.model, conv_id)
+
     # Fast path: skip memory retrieval for very short messages (greetings, acknowledgements)
     is_trivial = len(user_text) < 15 and not any(c in user_text for c in "?@/\\")
     memory_hits = []
@@ -1599,7 +1628,14 @@ async def voice_chat(req: VoiceChatRequest):
     messages.append(OAIMessage(role="user", content=req.text))
 
     conv_id = str(uuid.uuid4())
-    response_text = await _call_llm_with_messages(system_prompt, messages)
+
+    # Project creation short-circuit for non-streaming voice.
+    project_response = await _maybe_create_project(req.text, conv_id)
+    if project_response:
+        response_text = project_response
+        _persist_raw_async(req.text, response_text, conv_id, None)
+    else:
+        response_text = await _call_llm_with_messages(system_prompt, messages)
 
     # PoC 16.1: Check for tool calls and execute if found
     if tools_available:
@@ -1697,6 +1733,16 @@ async def voice_chat_stream(req: VoiceChatRequest):
     messages.append(OAIMessage(role="user", content=req.text))
 
     conv_id = str(uuid.uuid4())
+
+    # 1.5 Project creation: voice endpoint short-circuits to the safe workflow
+    # so the user hears/reads the manifest and confirms before any files are
+    # written, without waiting for the LLM.
+    project_response = await _maybe_create_project(req.text, conv_id)
+    if project_response:
+        return StreamingResponse(
+            _stream_project_creation_response(req.text, conv_id, project_response),
+            media_type="text/event-stream",
+        )
 
     # 2. Stream LLM, collect sentences, synthesize as they complete
     from .tts import synthesize_speech
@@ -2246,6 +2292,42 @@ async def _maybe_create_project(user_text: str, conv_id: str) -> Optional[str]:
         f"Files to create:\n{manifest_lines}\n\n"
         f"Reply 'yes' to create it (token: {result['token']})."
     )
+
+
+async def _stream_project_creation_response(user_text: str, conv_id: str, project_response: str):
+    """Stream a project-creation response as SSE for voice/stream endpoints.
+
+    Yields text, audio (short summary), and done events. This keeps the
+    voice UI responsive and shows the full manifest as text while only
+    speaking a summary.
+    """
+    from .tts import synthesize_speech
+    import base64 as b64mod
+    import json as jsonmod
+    import asyncio
+
+    response = project_response
+    if not response:
+        return
+
+    # Speak only the first sentence; the client can read the full manifest.
+    first_line = response.split("\n")[0]
+    if len(first_line) > 140:
+        first_line = first_line[:137] + "..."
+    spoken = _strip_markdown_for_tts(first_line)
+    try:
+        wav = synthesize_speech(spoken, "af_heart")
+        if wav:
+            audio_b64 = b64mod.b64encode(wav).decode("utf-8")
+            yield (
+                f"event: audio\ndata: {jsonmod.dumps({'audio': audio_b64, 'index': 0})}\n\n"
+            )
+    except Exception as e:
+        logger.warning(f"TTS for project creation failed: {e}")
+
+    yield f"event: text\ndata: {jsonmod.dumps({'text': response})}\n\n"
+    asyncio.create_task(_persist_raw_async(user_text, response, conv_id, None))
+    yield f"event: done\ndata: {jsonmod.dumps({'conversation_id': conv_id, 'text': response})}\n\n"
 
 
 async def _maybe_web_search(user_text: str, memory_hits: list, conversation_history: list = None, force: bool = False) -> str:

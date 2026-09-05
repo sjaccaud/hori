@@ -22,7 +22,7 @@ test-stress-safety:
 # Run unit tests
 test-unit:
 	@echo "🧪 Running unit tests..."
-	PYTHONPATH=. ./venv/bin/python3 -m pytest services/red_teaming/test_engine.py services/aios_core/test_main.py services/aios_core/test_intent_graph.py services/aios_core/test_web_search.py services/aios_core/test_multi_search.py services/aios_core/test_tts.py services/aios_core/test_safety_events.py services/aios_core/test_autolisten.py services/aios_core/test_chat_surface.py services/aios_core/test_presence.py services/proactive_agent/test_landscape_survey.py services/proactive_agent/test_notifier.py services/tool_daemon/test_schema.py services/tool_daemon/test_registry.py services/tool_daemon/test_validation.py services/tool_daemon/test_output_parser.py services/tool_daemon/test_tools.py services/tool_daemon/test_audit.py services/tool_daemon/test_fail_closed.py services/tool_daemon/test_server.py services/tool_daemon/test_rate_limiter.py services/tool_daemon/test_guard_rails.py services/tool_daemon/test_response_verification.py services/open_webui/test_system_state_sync.py services/open-webui/test_local_tools_server.py hori/test_detect.py hori/test_sqlite_memory.py hori/test_init.py hori/test_persona.py services/broker/test_broker.py
+	PYTHONPATH=. ./venv/bin/python3 -m pytest services/red_teaming/test_engine.py services/aios_core/test_main.py services/aios_core/test_intent_graph.py services/aios_core/test_web_search.py services/aios_core/test_multi_search.py services/aios_core/test_tts.py services/aios_core/test_safety_events.py services/aios_core/test_autolisten.py services/aios_core/test_chat_surface.py services/aios_core/test_presence.py services/proactive_agent/test_landscape_survey.py services/proactive_agent/test_notifier.py services/tool_daemon/test_schema.py services/tool_daemon/test_registry.py services/tool_daemon/test_validation.py services/tool_daemon/test_output_parser.py services/tool_daemon/test_tools.py services/tool_daemon/test_audit.py services/tool_daemon/test_fail_closed.py services/tool_daemon/test_server.py services/tool_daemon/test_rate_limiter.py services/tool_daemon/test_guard_rails.py services/tool_daemon/test_response_verification.py services/open_webui/test_system_state_sync.py services/open-webui/test_local_tools_server.py services/open-webui/test_project_tools_server.py hori/test_detect.py hori/test_sqlite_memory.py hori/test_init.py hori/test_persona.py services/broker/test_broker.py
 
 # Run integration tests
 test-integration:
@@ -83,6 +83,18 @@ install-local-tools:
 check-local-tools:
 	@./venv/bin/python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8766/health').read().decode())"
 
+# Install and start the project-creation tools server on 127.0.0.1:8769.
+install-project-tools:
+	@echo "🔗 Installing project-tools systemd user service..."
+	@mkdir -p "$${HOME}/.config/systemd/user"
+	@cp ./services/open-webui/project-tools.service "$${HOME}/.config/systemd/user/project-tools.service"
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now project-tools
+
+# Quick health check for the project-tools server.
+check-project-tools:
+	@./venv/bin/python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8769/health').read().decode())"
+
 # Generate a SearXNG secret for the local search container if one doesn't exist.
 search-secret:
 	@if [ ! -f services/searchrouter/.env ]; then \
@@ -105,6 +117,8 @@ health:
 aios-up:
 	@echo "Starting local-tools user service..."
 	@systemctl --user start local-tools
+	@echo "Starting project-tools user service..."
+	@systemctl --user start project-tools
 	@echo "Ensuring SearXNG secret..."
 	@$(MAKE) -s search-secret
 	@echo "Starting searchrouter..."
@@ -125,3 +139,5 @@ aios-down:
 	@docker stop qdrant_aios >/dev/null 2>&1 || true
 	@echo "Stopping local-tools user service..."
 	@systemctl --user stop local-tools
+	@echo "Stopping project-tools user service..."
+	@systemctl --user stop project-tools

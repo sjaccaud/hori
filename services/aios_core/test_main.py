@@ -1314,3 +1314,34 @@ def test_oai_chat_completions_uses_elastic_when_flagged(client):
     mock_elastic.assert_called_once()
 
 
+def test_openai_chat_short_circuits_project_creation(client):
+    """If the user asks to create a project via /v1/chat/completions, the
+    endpoint should return the dry-run manifest instead of calling the LLM."""
+    with patch("services.aios_core.project_creation.propose_project") as mock_propose:
+        mock_propose.return_value = {
+            "token": "tok123",
+            "name": "cli-todo-app",
+            "project_root": "/home/user/Projects/cli-todo-app",
+            "manifest": [
+                {"path": "README.md", "content": "# CLI Todo App\n", "is_dir": False},
+            ],
+            "dry_run": True,
+            "requires_confirmation": True,
+        }
+
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "aios-core",
+                "messages": [{"role": "user", "content": "Create a Python CLI todo app project"}],
+                "stream": False,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        assert "cli-todo-app" in content
+        mock_propose.assert_called_once()
+
+

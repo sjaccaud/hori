@@ -215,9 +215,9 @@ class Filter:
             default="qwen-fast,qwen-long,qwen-think,qwen-balanced,qwen-quality,devstral-coding,qwen-128k,qwen-256k-batch",
             description="Comma-separated model ids to inject the local tool server into.",
         )
-        server_tool_id: str = Field(
+        server_tool_ids: str = Field(
             default="server:local-tools",
-            description="Tool ID used by Open-WebUI to resolve the server via get_tools() (server-side execution).",
+            description="Comma-separated tool IDs to inject (server-side execution).",
         )
 
     async def inlet(self, body: dict, __metadata__: dict = None, __request__=None, __user__: dict = None) -> dict:
@@ -238,14 +238,15 @@ class Filter:
             if not isinstance(existing, list):
                 existing = [existing]
 
-            server_tool_id = (
-                self.valves.server_tool_id
-                if self.valves and self.valves.server_tool_id
+            server_tool_ids = (
+                self.valves.server_tool_ids
+                if self.valves and self.valves.server_tool_ids
                 else "server:local-tools"
             )
 
-            if server_tool_id not in existing:
-                existing.append(server_tool_id)
+            for tool_id in {t.strip() for t in server_tool_ids.split(",") if t.strip()}:
+                if tool_id not in existing:
+                    existing.append(tool_id)
 
             metadata["tool_ids"] = existing
             body["metadata"] = metadata
@@ -254,7 +255,7 @@ class Filter:
 
             log.info(
                 "TOOL_SERVER_FILTER: injected %r for %r (tool_ids=%r)",
-                server_tool_id,
+                server_tool_ids,
                 model_id,
                 existing,
             )
@@ -326,9 +327,21 @@ def main():
             print(f"model {target} already exists")
 
     # 1. Update tool_server connection function_name_filter_list
+    project_tools_conn = {
+        "url": "http://127.0.0.1:8769",
+        "config": {
+            "enable": True,
+            "function_name_filter_list": "propose_create_project,confirm_create_project,rollback_project",
+        },
+        "info": {"id": "project-tools", "name": "Project Tools"},
+    }
     row = c.execute("SELECT value FROM config WHERE key='tool_server.connections'").fetchone()
     if row:
         conns = json.loads(row[0])
+        # Ensure project-tools is present and local-tools is clean.
+        urls = {conn_cfg.get('url', '') for conn_cfg in conns}
+        if project_tools_conn['url'] not in urls:
+            conns.append(project_tools_conn)
         for conn_cfg in conns:
             url = conn_cfg.get('url', '')
             if url == 'http://127.0.0.1:8766':
@@ -338,6 +351,13 @@ def main():
                 conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info']['id'] = 'local-tools'
                 conn_cfg['info']['name'] = 'Local Tools'
+            elif url == 'http://127.0.0.1:8769':
+                conn_cfg['config'] = conn_cfg.get('config', {})
+                conn_cfg['config']['enable'] = True
+                conn_cfg['config']['function_name_filter_list'] = 'propose_create_project,confirm_create_project,rollback_project'
+                conn_cfg['info'] = conn_cfg.get('info', {})
+                conn_cfg['info']['id'] = 'project-tools'
+                conn_cfg['info']['name'] = 'Project Tools'
             elif url in ('http://127.0.0.1:8767', 'http://127.0.0.1:8768'):
                 # OaK tool servers are not running; keep them disabled to reduce bloat.
                 conn_cfg.setdefault('config', {})['enable'] = False
@@ -347,6 +367,30 @@ def main():
             (json.dumps(conns, ensure_ascii=False), now(), 'tool_server.connections'),
         )
         print('updated tool_server.connections')
+    else:
+        # Bootstrap tool_server.connections with the two active servers.
+        c.execute(
+            "INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?)",
+            (
+                'tool_server.connections',
+                json.dumps(
+                    [
+                        {
+                            "url": "http://127.0.0.1:8766",
+                            "config": {
+                                "enable": True,
+                                "function_name_filter_list": "read_file,run_safe_command,get_status",
+                            },
+                            "info": {"id": "local-tools", "name": "Local Tools"},
+                        },
+                        project_tools_conn,
+                    ],
+                    ensure_ascii=False,
+                ),
+                now(),
+            ),
+        )
+        print('created tool_server.connections')
 
     # 1. Update per-model params + meta
     for mid in ALL_QWEN_DEVSTRAL:
@@ -422,7 +466,7 @@ def main():
             json.dumps(
                 {
                     "models": ",".join(ALL_QWEN_DEVSTRAL),
-                    "server_tool_id": server_tool_id,
+                    "server_tool_ids": "server:local-tools,server:project-tools",
                 },
                 ensure_ascii=False,
             ),

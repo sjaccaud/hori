@@ -23,6 +23,7 @@ ENDPOINTS = [
     ("aios-core", "http://127.0.0.1:5680/health", True),
     ("llama-server", "http://127.0.0.1:8080/health", True),
     ("local-tools", "http://127.0.0.1:8766/health", True),
+    ("project-tools", "http://127.0.0.1:8769/health", True),
     ("open-webui", "http://127.0.0.1:3000/health", True),
     ("searchrouter", "http://127.0.0.1:8081/search?q=health&format=json", True),
     ("embedding", "http://127.0.0.1:8082/", False),
@@ -35,6 +36,7 @@ SERVICES = [
     ("aios-sherpa", True),
     ("aios-tool-daemon", True),
     ("local-tools", True, "--user"),
+    ("project-tools", True, "--user"),
 ]
 
 

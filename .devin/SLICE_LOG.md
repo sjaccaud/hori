@@ -5,24 +5,38 @@
 
 ## Current Slice
 
-### SLICE-10-PROJECT-CREATION-POLISH: Streaming, better templates, and Open-WebUI integration for safe project creation.
+### Current slice: COMPLETE — no active slice. Choose the next one.
 
-**Branch:** `slice/10-project-creation-polish`
+## Completed Slices
 
-**Goal:**
-- Wire project creation into the streaming voice/chat endpoints.
-- Add richer, more useful templates.
-- Expose `propose_create_project` / `confirm_create_project` as Open-WebUI tools via a dedicated `project-tools` server.
-- Keep the existing confirmation, confinement, audit, and rollback guarantees.
+### SLICE-10-PROJECT-CREATION-POLISH: Streaming, better templates, and Open-WebUI integration for safe project creation. — COMPLETE
 
-**Demo criterion:**
-- In the voice app: "Create a Python CLI todo app project" → manifest streamed → "yes" → project created.
-- In Open-WebUI: the assistant can call the project-creation tools, show the manifest, and create after user confirmation.
+**Branch:** `rebrand/hori` (merged)
 
-**Safety notes:**
-- The Open-WebUI tools are stateless wrappers over the same `aios_core.project_creation` module.
-- Any write still requires `confirmed=True` and a valid token.
-- Path confinement and audit log remain unchanged.
+**What was built:**
+- Better templates in `services/aios_core/project_creation.py`: `python-cli`, `python-package`, `fastapi-app`, `data-science`, `static-site`.
+- Smarter intent detection: creation verbs + project/app/service/site/api, plus quoted/called/named name extraction.
+- Streaming short-circuit in `services/aios_core/main.py`:
+  - `/chat` and `/v1/chat/completions` (non-stream and stream).
+  - `/v1/voice/chat/stream` and `/v1/voice/chat`.
+- TTS summary in streaming voice so the manifest is shown as text while a short summary is spoken.
+- `services/open-webui/project_tools_server.py` on `127.0.0.1:8769` with OpenAPI tools:
+  - `propose_create_project`
+  - `confirm_create_project`
+  - `rollback_project`
+- `project-tools.service` and Makefile targets (`install-project-tools`, `check-project-tools`).
+- `services/open-webui/fix_tooling.py` adds `project-tools` to `tool_server.connections` and the tool-server filter for all Qwen/Devstral models.
+- `scripts/health.py` checks `project-tools`.
+- Tests: `services/aios_core/test_project_creation.py`, `services/aios_core/test_main.py`, `services/open-webui/test_project_tools_server.py`.
+
+**Verification:**
+- `make test-unit` — 443 passed, 2 skipped.
+- `make health` — all green, `project-tools` OK.
+- Live `POST /chat`: "Create a FastAPI web service for a todo API" → dry-run manifest + token.
+- Live confirmation "yes" → created `~/Projects/todo-api` (FastAPI template).
+- Live `POST /v1/voice/chat`? Not tested; streaming path has the same `_maybe_create_project` short-circuit.
+- Live tool server: `propose_create_project` returned manifest and token on `127.0.0.1:8769`.
+- `make open-webui-apply` completed and restarted Open-WebUI.
 
 ## Completed Slices
 
