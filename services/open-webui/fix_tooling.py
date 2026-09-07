@@ -370,6 +370,18 @@ class Filter:
             if __metadata__ is not None:
                 __metadata__["tool_ids"] = existing
 
+            # Open-WebUI rebuilds metadata['tool_ids'] from the TOP-LEVEL
+            # 'tool_ids' key (form_data.pop + metadata.update), stomping
+            # metadata-level injection — so inject at top level too, merging
+            # any caller-selected tools.
+            top_level = body.get("tool_ids") or []
+            if not isinstance(top_level, list):
+                top_level = [top_level]
+            for tool_id in {t.strip() for t in server_tool_ids.split(",") if t.strip()}:
+                if tool_id not in top_level:
+                    top_level.append(tool_id)
+            body["tool_ids"] = top_level
+
             log.info(
                 "TOOL_SERVER_FILTER: injected %r for %r (tool_ids=%r)",
                 server_tool_ids,
