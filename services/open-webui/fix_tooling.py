@@ -32,9 +32,13 @@ TOOL_USAGE = (
     "- kb_exec is disabled; do not use it.\n"
     "- get_status ({USER_NAME} Local Tools) is the right tool for 'what is my system status?', 'are my services running?', or quick GPU/VRAM/disk summaries.\n"
     "- read_file and run_safe_command ({USER_NAME} Local Tools) are the right tools for inspecting the host filesystem and reading exact file content.\n"
-    "- For project/directory surveys, 'list my projects', or questions that need current filesystem state, prefer run_safe_command (ls, tree, find, etc.) and read_file. "
-    "Only call query_knowledge_files for conceptual/historical questions that are likely covered in the attached knowledge collections.\n"
-    "- For small known files, you may call read_file up to 4 times in parallel. For large outputs or exploration, issue one focused call, read the result, then decide the next step."
+    "- For project/directory surveys, 'list my projects', or questions that need current filesystem state, prefer run_safe_command (ls, tree, find, du, etc.) and read_file. "
+    "Only call query_knowledge_files for conceptual/historical questions that are likely covered in the attached knowledge collections; do NOT call query_knowledge_files, view_knowledge_file, search_memories, search_chats, or search_notes for status questions.\n"
+    "- For small known files, you may call read_file up to 4 times in parallel. For large outputs or exploration, issue one focused call, read the result, then decide the next step.\n"
+    "- For questions about the CURRENT state of the system — downloads, files on disk, running services/processes, disk usage, or which models exist — you MUST call run_safe_command, read_file, or get_status BEFORE answering. "
+    "Never answer current-state questions from attached knowledge or memory alone, even when it looks relevant; it may be stale.\n"
+    "- The offline model archive lives at /mnt/4TB/model-archive (categories: llm/, vlm/, stt/, slm/, tts/, embedding/). For 'haul', 'stash', 'the downloads', or similar, check /mnt/4TB/model-archive and /opt/ai-models with run_safe_command (ls/find/du) first.\n"
+    "- Do not use web_search or fetch_url for local status questions, and do not ask the user to clarify when a tool call can resolve the ambiguity. Check first, then report what you found."
 )
 
 PLANNING_PROMPT = ((
@@ -122,6 +126,22 @@ CODING_PROMPT = ((
     "Do not preface answers with meta-commentary about sources unless the user asks."
 ) + TOOL_USAGE).format(USER_NAME=USER_NAME)
 
+# Use-case-focused display names shown in the Open-WebUI model selector
+# (enriched into /api/v1/models by patch_openai_model_names.py).
+MODEL_NAMES = {
+    "qwen-fast": "Everyday Chat & Planning (fast)",
+    "qwen-long": "Long Document Analysis (65k ctx)",
+    "qwen-128k": "Deep Planning & Backlogs (128k ctx)",
+    "qwen-256k-batch": "Batch Ingestion Only (256k, non-interactive)",
+    "qwen-think": "Step-by-Step Reasoning (shows thinking)",
+    "qwen-balanced": "Balanced Coding & Research (Q6_K)",
+    "qwen-quality": "High-Stakes Coding (Q8_0 best quality)",
+    "devstral-coding": "Devstral Coding & Commands (32k)",
+    "qwen-dsh-fast": "Agentic Coding - No Thinking (fastest)",
+    "qwen-dsh-low": "Agentic Coding - Light Reasoning (best output)",
+    "qwen-dsh-medium": "Agentic Coding - Medium Reasoning (fastest with thinking)",
+}
+
 # function_calling: Qwen3.8-27B (with --jinja) emits OpenAI-compatible tool_calls,
 # so use native for all Qwen aliases. devstral-coding also uses native.
 FUNCTION_CALLING_BY_MODEL = {
@@ -188,17 +208,63 @@ META_CAPABILITIES = {
     "time": True,
 }
 
+# Vision: these router aliases load the Qwen3.8 mmproj encoder (2026-09-06), so
+# expose the image-attach UI. qwen-quality has no mmproj (Q8_0 + q8_0 KV leaves
+# too little VRAM headroom); devstral-coding is text-only.
+VISION_MODELS = {
+    "qwen-fast",
+    "qwen-long",
+    "qwen-128k",
+    "qwen-256k-batch",
+    "qwen-think",
+    "qwen-balanced",
+    "qwen-dsh-fast",
+    "qwen-dsh-low",
+    "qwen-dsh-medium",
+}
+
 # Default feature toggles for auto-discovered / fallback models.
 # Web search and code interpreter are OFF by default; the user toggles them when needed.
 META_DEFAULT_FEATURES = ["knowledge", "time", "memory"]
 
+# Builtin tool categories: Open-WebUI defaults EVERY unlisted category to True,
+# so anything not explicitly disabled is injected into the tool list. Keep the
+# useful read/knowledge tools; disable the workspace/social categories that only
+# serve as tool-misfire bait on small local models (e.g. update_task loops).
+# web_search is also OFF by default; the user toggles it when they want fresh
+# external results. On local models it tends to hallucinate URLs and fail.
 META_BUILTINTOOLS = {
     "knowledge": True,
     "time": True,
     "code_interpreter": True,
-    "web_search": True,
+    "web_search": False,
+    "memory": True,
+    "files": True,
+    "chats": True,
+    "user_input": False,
+    "subagents": False,
+    "image_generation": False,
+    "notes": False,
+    "channels": False,
+    "skills": False,
+    "tasks": False,
+    "automations": False,
+    "calendar": False,
+    "notifications": False,
 }
 
+# Attaches local tool servers via metadata['tool_ids'] using 'server:<id>' ids.
+#
+# Two distinct mechanisms in Open-WebUI 0.11.x:
+#   - metadata['tool_ids'] + 'server:<id>'  -> get_tools() resolves against
+#     app.state.TOOL_SERVERS and builds SERVER-SIDE callables (type='external',
+#     direct=False) executed via HTTP to the tool server. THIS is what we want.
+#   - metadata['tool_servers'] (server objects) -> registered as 'direct': True
+#     tools executed over the browser websocket ('execute:tool' event). Direct
+#     tools are for browser-side servers only; a server-side tool attached this
+#     way fails at runtime with 'Tool Server Not Found'.
+#
+# So: always inject 'server:<id>' into tool_ids, never tool_servers.
 TOOL_SERVER_FILTER_SOURCE = '''
 from pydantic import BaseModel, Field
 import logging
@@ -213,12 +279,24 @@ class Filter:
     class Valves(BaseModel):
         models: str = Field(
             default="qwen-fast,qwen-long,qwen-think,qwen-balanced,qwen-quality,devstral-coding,qwen-128k,qwen-256k-batch",
-            description="Comma-separated model ids to inject the local tool server into.",
+            description="Comma-separated model ids to attach local tool servers to.",
         )
         server_tool_ids: str = Field(
-            default="server:local-tools",
-            description="Comma-separated tool IDs to inject (server-side execution).",
+            default="server:local-tools,server:project-tools",
+            description="Comma-separated 'server:<id>' tool_ids to attach (server-side execution).",
         )
+        debug: bool = Field(
+            default=True,
+            description="Write debug lines to /app/backend/data/tool_server_filter_debug.log",
+        )
+
+    def _dbg(self, msg: str) -> None:
+        try:
+            import time as _time
+            with open("/app/backend/data/tool_server_filter_debug.log", "a") as f:
+                f.write(str(int(_time.time())) + " " + msg + chr(10))
+        except Exception:
+            pass
 
     async def inlet(self, body: dict, __metadata__: dict = None, __request__=None, __user__: dict = None) -> dict:
         if not body:
@@ -226,10 +304,30 @@ class Filter:
 
         model_id = body.get("model")
         if not model_id:
+            if self.valves and getattr(self.valves, "debug", False):
+                self._dbg("no model in body; keys=" + ",".join(body.keys()))
             return body
+
+        if self.valves and getattr(self.valves, "debug", False):
+            # Diagnostic: show what builtinTools the running model object actually has.
+            btm = "n/a"
+            try:
+                models = getattr(__request__.app.state, "MODELS", {}) if __request__ else {}
+                model_info = models.get(model_id, {}) if hasattr(models, "get") else {}
+                if isinstance(model_info, dict):
+                    info = model_info.get("info", {})
+                    meta = info.get("meta", {}) if isinstance(info, dict) else {}
+                    btm = meta.get("builtinTools", {})
+                    self._dbg(f"diagnostic model={model_id} builtinTools={btm}")
+                else:
+                    self._dbg(f"diagnostic model={model_id} type={type(model_info).__name__}")
+            except Exception as e:
+                self._dbg(f"diagnostic model={model_id} err={e}")
 
         allowed = {m.strip() for m in (self.valves.models or "").split(",") if m.strip()}
         if not allowed or model_id not in allowed:
+            if self.valves and getattr(self.valves, "debug", False):
+                self._dbg(f"skip model={model_id} (not in allowed)")
             return body
 
         try:
@@ -259,8 +357,15 @@ class Filter:
                 model_id,
                 existing,
             )
+            if self.valves and getattr(self.valves, "debug", False):
+                meta_keys = ",".join(sorted(metadata.keys()))
+                self._dbg(
+                    f"inject model={model_id} tool_ids={existing} meta_keys={meta_keys}"
+                )
         except Exception as e:
             log.exception("TOOL_SERVER_FILTER: error %s", e)
+            if self.valves and getattr(self.valves, "debug", False):
+                self._dbg(f"ERROR model={model_id} {e}")
 
         return body
 '''
@@ -287,7 +392,11 @@ def _clone_qwen_long(c, source_id: str, target_id: str, description: str):
     params["max_tokens"] = 4096
 
     meta["description"] = description
-    meta["capabilities"] = {**meta.get("capabilities", {}), **META_CAPABILITIES}
+    meta["capabilities"] = {
+        **meta.get("capabilities", {}),
+        **META_CAPABILITIES,
+        **({"vision": True} if target_id in VISION_MODELS else {}),
+    }
     meta["default_feature_ids"] = MODEL_DEFAULT_FEATURES.get(
         target_id, ["knowledge", "time", "web_search", "memory"]
     )
@@ -299,8 +408,8 @@ def _clone_qwen_long(c, source_id: str, target_id: str, description: str):
         (
             target_id,
             user_id,
-            target_id,
-            target_id,
+            None,  # NULL: workspace id matches the base router alias, so override it
+            MODEL_NAMES.get(target_id, target_id),
             json.dumps(params, ensure_ascii=False),
             json.dumps(meta, ensure_ascii=False),
             now(),
@@ -316,8 +425,8 @@ def main():
 
     # 0. Ensure the long-context Qwen aliases exist before tooling fix runs.
     for target, desc in [
-        ("qwen-128k", "Planning/long-doc analysis — Qwen3.8-27B-IQ4_NL, 128k context, q4_0 KV, draft-mtp"),
-        ("qwen-256k-batch", "Batch ingestion only — Qwen3.8-27B-IQ4_NL, 256k context, q4_0 KV, no speculative decode"),
+        ("qwen-128k", "Planning/long-doc analysis — Qwen3.8-27B-UD-Q4_K_M (Dynamic v3.0), 128k context, q4_0 KV, draft-mtp, vision"),
+        ("qwen-256k-batch", "Batch ingestion only — Qwen3.8-27B-UD-Q4_K_M (Dynamic v3.0), 256k context, q4_0 KV, no speculative decode, vision"),
     ]:
         exists = c.execute("SELECT 1 FROM model WHERE id = ?", (target,)).fetchone()
         if not exists:
@@ -412,7 +521,11 @@ def main():
         params["tool_approval_mode"] = "full"
 
         # Apply meta overrides
-        meta["capabilities"] = {**meta.get("capabilities", {}), **META_CAPABILITIES}
+        meta["capabilities"] = {
+            **meta.get("capabilities", {}),
+            **META_CAPABILITIES,
+            **({"vision": True} if mid in VISION_MODELS else {}),
+        }
         meta["default_feature_ids"] = MODEL_DEFAULT_FEATURES.get(
             mid, ["knowledge", "time", "memory"]
         )
@@ -428,8 +541,9 @@ def main():
                 meta["description"] = f"Local model {mid}"
 
         c.execute(
-            "UPDATE model SET params = ?, meta = ?, updated_at = ? WHERE id = ?",
+            "UPDATE model SET name = ?, params = ?, meta = ?, updated_at = ? WHERE id = ?",
             (
+                MODEL_NAMES.get(mid, mid),
                 json.dumps(params, ensure_ascii=False),
                 json.dumps(meta, ensure_ascii=False),
                 now(),

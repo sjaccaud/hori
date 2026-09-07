@@ -12,7 +12,7 @@ def now():
     return int(time.time())
 
 contexts = {
-    'qwen-fast': 16384,
+    'qwen-fast': 32768,
     'qwen-think': 16384,
     'qwen-balanced': 16384,
     'qwen-quality': 16384,
