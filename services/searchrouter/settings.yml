@@ -17,6 +17,15 @@ search:
     - html
     - json
 
+# 2026-09-07: DuckDuckGo and Startpage consistently return CAPTCHA/suspension
+# errors on this host (upstream blocking, not a local fault). Disabled to cut
+# per-request latency and log noise; brave/google-cse/mojeek carry results.
+engines:
+  - name: duckduckgo
+    disabled: true
+  - name: startpage
+    disabled: true
+
 server:
   # Overwritten at runtime by the SEARXNG_SECRET env var.
   secret_key: ""

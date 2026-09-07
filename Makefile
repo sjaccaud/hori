@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools
+.PHONY: test test-unit test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-llama-nano check-llama-nano
 
 # Default target
 test: test-all
@@ -95,6 +95,19 @@ install-project-tools:
 check-project-tools:
 	@./venv/bin/python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8769/health').read().decode())"
 
+# Install and start the nano SLM server (Llama-3.2-3B) on 127.0.0.1:8090.
+# Registered in Open-WebUI as a second OpenAI base URL; shows as "Nano Chat".
+install-llama-nano:
+	@echo "🔗 Installing llama-nano systemd user service..."
+	@mkdir -p "$${HOME}/.config/systemd/user"
+	@cp ./services/open-webui/llama-nano.service "$${HOME}/.config/systemd/user/llama-nano.service"
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now llama-nano
+
+# Quick health check for the nano server.
+check-llama-nano:
+	@./venv/bin/python3 -c "import urllib.request, json; print(json.load(urllib.request.urlopen('http://127.0.0.1:8090/v1/models')))"
+
 # Generate a SearXNG secret for the local search container if one doesn't exist.
 search-secret:
 	@if [ ! -f services/searchrouter/.env ]; then \
@@ -119,6 +132,8 @@ aios-up:
 	@systemctl --user start local-tools
 	@echo "Starting project-tools user service..."
 	@systemctl --user start project-tools
+	@echo "Starting llama-nano user service..."
+	@systemctl --user start llama-nano 2>/dev/null || echo "  (not installed — run 'make install-llama-nano')"
 	@echo "Ensuring SearXNG secret..."
 	@$(MAKE) -s search-secret
 	@echo "Starting searchrouter..."
@@ -141,3 +156,5 @@ aios-down:
 	@systemctl --user stop local-tools
 	@echo "Stopping project-tools user service..."
 	@systemctl --user stop project-tools
+	@echo "Stopping llama-nano user service..."
+	@systemctl --user stop llama-nano 2>/dev/null || true

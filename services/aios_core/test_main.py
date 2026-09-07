@@ -346,6 +346,33 @@ def test_system_state_endpoint(client):
         assert data["loaded_model"] == "Qwen3.6-27B"
 
 
+def test_system_state_covers_full_stack(client):
+    """/system/state must report every service in the local stack — the newer
+    pieces (searxng, local/project tool servers, nano) were invisible during
+    the Sept 2026 incidents (llamacpp silently down, an eval process hogging
+    19GB VRAM). Each entry keeps the {port, up} shape admin.html renders."""
+    with patch("services.aios_core.main.subprocess") as mock_subprocess, \
+         patch("services.aios_core.main.httpx.get") as mock_httpx, \
+         patch("services.aios_core.main.shutil.disk_usage") as mock_disk:
+        mock_subprocess.run.return_value = MagicMock(returncode=0, stdout="")
+        mock_httpx.return_value = MagicMock(
+            status_code=200, json=lambda: {"data": [{"id": "x"}]}
+        )
+        mock_disk.return_value = MagicMock(total=1.8e12, used=3.4e11, free=1.4e12)
+        data = client.get("/system/state").json()
+
+    expected = {
+        "llama-server", "llama-nano", "aios-core", "embedding-server",
+        "qdrant", "open-webui", "searxng", "local-tools", "project-tools",
+    }
+    missing = expected - set(data["services"])
+    assert not missing, f"services missing from /system/state: {missing}"
+    for name, svc in data["services"].items():
+        assert "port" in svc, name
+        assert isinstance(svc["up"], bool), name
+    assert data["status"] in ("healthy", "degraded")
+
+
 def test_incident_reporting(client):
     """Test incident report and retrieval endpoints."""
     # Clear any existing incidents

@@ -158,12 +158,14 @@ MODEL_NAMES = {
     "qwen-dsh-fast": "Agentic Fast",
     "qwen-dsh-low": "Agentic Best",
     "qwen-dsh-medium": "Agentic Mid",
+    "nano": "Nano Chat",
 }
 
 # Canonical selector order (ui.model_order_list): everyday chat first,
 # then reasoning, long-context docs/planning, quality tiers, coding,
 # agentic variants, and the non-interactive batch preset last.
 MODEL_ORDER = [
+    "nano",
     "qwen-fast",
     "qwen-think",
     "qwen-long",
@@ -191,6 +193,7 @@ MODEL_DESCRIPTIONS = {
     "qwen-dsh-fast": "Agentic coding, no reasoning — fastest.",
     "qwen-dsh-low": "Agentic coding, light reasoning — best output.",
     "qwen-dsh-medium": "Agentic coding, medium reasoning — quick.",
+    "nano": "Tiny 3B on a dedicated server — instant answers, no tools.",
 }
 
 # function_calling: Qwen3.8-27B (with --jinja) emits OpenAI-compatible tool_calls,
@@ -247,6 +250,14 @@ MODEL_PROMPTS = {
     "qwen-dsh-low": CODING_PROMPT,
     "qwen-dsh-medium": CODING_PROMPT,
 }
+
+# Minimal prompt for the nano SLM — no tools, no search; just fast answers.
+NANO_PROMPT = (
+    "You are Nano, a tiny local assistant (Llama-3.2-3B) on Jacko's machine.\n\n"
+    "Keep answers short and direct — you exist for quick questions. You have no "
+    "tools, no web search, and no file access; if a task needs them, say so and "
+    "suggest switching to a bigger model."
+)
 
 # Per-model default features:
 # - Web search and code interpreter are available (capabilities/builtinTools) but OFF by default
@@ -749,28 +760,75 @@ def main():
     )
     print("reset audio.tts.engine to default (Web Speech API)")
 
-    # 5. Keep the UI model list and pinned list current.
-    # Pin the everyday models; DSH variants are available but collapsed to reduce UI clutter.
-    pinned = [
-        "qwen-fast",
-        "qwen-long",
-        "qwen-128k",
-        "qwen-think",
-        "qwen-balanced",
-        "qwen-quality",
-        "devstral-coding",
-        "qwen-dsh-medium",
-        "qwen-256k-batch",
-    ]
+    # 5. Canonical config values: the live DB is the source of truth (it overrides
+    # env vars), so write them here to keep `apply` idempotent and prevent drift.
+    #   - task.model.default: cheap title/tag/query tasks belong on the resident
+    #     27B, not the 24B devstral (slower + extra VRAM swap).
+    #   - ui.default_pinned_models: canonical JSON array (was a CSV string from
+    #     an older write path).
+    #   - web.search.result_count/concurrent_requests: match docker-compose.
+    canonical_config = {
+        "task.model.default": "qwen-fast",
+        "ui.default_pinned_models": MODEL_ORDER,
+        "ui.model_order_list": MODEL_ORDER,
+        "web.search.result_count": 5,
+        "web.search.concurrent_requests": 3,
+        "web.search.searxng_query_url": "http://127.0.0.1:8081/search?q=<query>",
+        # Nano server (llama-nano.service) registered as a second OpenAI base
+        # URL so `nano` shows up alongside the router presets.
+        "openai.api_base_urls": [
+            "http://127.0.0.1:8080/v1",
+            "http://127.0.0.1:8090/v1",
+        ],
+    }
+    for key, val in canonical_config.items():
+        c.execute(
+            "INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            (key, json.dumps(val, ensure_ascii=False), now()),
+        )
+    print("updated canonical config keys:", ", ".join(canonical_config))
+
+    # 5b. Nano: tiny always-on SLM served by a dedicated llama-server on :8090
+    # (llama-nano.service, user unit) and registered as a second OpenAI base
+    # URL. Deliberately minimal: no builtin tools, no web search, no local
+    # tools (it is not in the tool-server filter's models allowlist) — a 3B
+    # cannot carry reliable tool calls; its job is instant replies.
+    nano_meta = {
+        "description": MODEL_DESCRIPTIONS["nano"],
+        "capabilities": {
+            "builtin_tools": False,
+            "web_search": False,
+            "code_interpreter": False,
+            "image_generation": False,
+            "vision": False,
+            "citations": False,
+            "status_updates": False,
+            "file_context": True,
+        },
+        "default_feature_ids": ["memory"],
+    }
     c.execute(
-        "UPDATE config SET value = ?, updated_at = ? WHERE key = ?",
-        (json.dumps(pinned, ensure_ascii=False), now(), "ui.default_pinned_models"),
+        "INSERT OR REPLACE INTO model (id, user_id, base_model_id, name, params, meta, updated_at, created_at, is_active) "
+        "VALUES (?, ?, NULL, ?, ?, ?, ?, COALESCE((SELECT created_at FROM model WHERE id = 'nano'), ?), 1)",
+        (
+            "nano",
+            "db2358ef-3324-4bf9-95b1-0e2c8a714fad",
+            MODEL_NAMES["nano"],
+            json.dumps(
+                {
+                    "system": NANO_PROMPT,
+                    "function_calling": "native",
+                    "max_tokens": 2048,
+                    "temperature": 0.6,
+                }
+            ),
+            json.dumps(nano_meta),
+            now(),
+            now(),
+        ),
     )
-    c.execute(
-        "UPDATE config SET value = ?, updated_at = ? WHERE key = ?",
-        (json.dumps(MODEL_ORDER, ensure_ascii=False), now(), "ui.model_order_list"),
-    )
-    print("updated ui.default_pinned_models and ui.model_order_list")
+    print("ensured nano workspace model")
 
     # 6. Normalize all config.value rows to valid JSON text. Open-WebUI's SQLAlchemy
     # model expects the value column to be JSON; integer/real/CSV values cause a

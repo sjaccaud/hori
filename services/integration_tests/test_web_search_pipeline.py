@@ -232,10 +232,10 @@ class TestStaticConfig:
         mod = _load_fix_tooling()
         order = mod.MODEL_ORDER
         assert len(order) == len(set(order)), "MODEL_ORDER has duplicates"
-        assert set(order) == set(mod.ALL_QWEN_DEVSTRAL), (
-            "MODEL_ORDER must cover every preset exactly once"
+        assert set(order) == set(mod.MODEL_NAMES), (
+            "MODEL_ORDER must cover every named model exactly once"
         )
-        for mid in mod.ALL_QWEN_DEVSTRAL:
+        for mid in mod.MODEL_NAMES:
             desc = mod.MODEL_DESCRIPTIONS.get(mid, "")
             assert desc, f"{mid}: missing description"
             assert len(desc) <= 80, f"{mid}: description too long ({len(desc)})"
@@ -270,6 +270,30 @@ class TestLiveServices:
         )
         assert status == 200
         assert body.get("results"), "SearXNG returned no results"
+
+    def test_nano_server_live(self):
+        """The dedicated nano SLM server (llama-nano.service, :8090) must
+        expose the nano alias and answer quickly — it exists for instant
+        replies."""
+        try:
+            import requests as _rq
+            r = _rq.get("http://127.0.0.1:8090/v1/models", timeout=5)
+        except Exception:
+            pytest.skip("llama-nano.service not running on :8090")
+        assert r.status_code == 200
+        ids = [m["id"] for m in r.json().get("data", [])]
+        assert "nano" in ids, f"nano alias missing: {ids}"
+        import time as _t
+        t0 = _t.time()
+        r = _rq.post(
+            "http://127.0.0.1:8090/v1/chat/completions",
+            json={"model": "nano",
+                  "messages": [{"role": "user", "content": "Reply with: ok"}],
+                  "max_tokens": 8},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        assert _t.time() - t0 < 10, "nano should be near-instant"
 
     def test_owui_health(self):
         status, _ = _http_json("GET", f"{OWUI_BASE}/health")

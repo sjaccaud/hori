@@ -974,6 +974,16 @@ async def system_state():
             s.settimeout(2)
             return s.connect_ex(("127.0.0.1", port)) == 0
 
+    def _check_http(port: int, path: str = "/health") -> bool:
+        """HTTP health probe — a listening socket is not proof the app is
+        healthy (e.g. a hung handler still accepts TCP). Any non-5xx
+        response counts as up; connection failure means down."""
+        try:
+            resp = httpx.get(f"http://127.0.0.1:{port}{path}", timeout=3)
+            return resp.status_code < 500
+        except Exception:
+            return _check_port(port)
+
     def _get_vram():
         try:
             result = subprocess.run(
@@ -1043,12 +1053,20 @@ async def system_state():
         except Exception:
             return "unknown"
 
+    # Full local stack — every service the chat path can silently depend on.
+    # TCP check is only kept for qdrant (no /health); everything else gets a
+    # real HTTP probe. Added searxng/local-tools/project-tools/llama-nano
+    # 2026-09-07 after they were invisible during a "service down" incident.
     services = {
-        "llama-server": {"port": 8080, "up": _check_port(8080)},
-        "aios-core": {"port": 5680, "up": _check_port(5680)},
-        "embedding-server": {"port": 8082, "up": _check_port(8082)},
+        "llama-server": {"port": 8080, "up": _check_http(8080)},
+        "llama-nano": {"port": 8090, "up": _check_http(8090)},
+        "aios-core": {"port": 5680, "up": _check_http(5680)},
+        "embedding-server": {"port": 8082, "up": _check_http(8082)},
         "qdrant": {"port": 6333, "up": _check_port(6333)},
-        "open-webui": {"port": 3000, "up": _check_port(3000)},
+        "open-webui": {"port": 3000, "up": _check_http(3000)},
+        "searxng": {"port": 8081, "up": _check_http(8081, "/")},
+        "local-tools": {"port": 8766, "up": _check_http(8766)},
+        "project-tools": {"port": 8769, "up": _check_http(8769)},
     }
 
     all_up = all(s["up"] for s in services.values())
