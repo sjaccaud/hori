@@ -158,6 +158,25 @@ FUNCTION_CALLING_BY_MODEL = {
     "qwen-dsh-medium": "native",
 }
 
+# Anti-loop sampling: Qwen3.8's recommended presence_penalty for non-thinking
+# mode is 1.5 (prevents the "I'll check..." narration loop where the model
+# repeats intent text instead of emitting tool_calls). Coding aliases get 1.0
+# (gentler on legitimately repetitive syntax); thinking models stay at 0.0 —
+# penalizing already-seen tokens degrades long chain-of-thought. devstral and
+# the oak-* models are left alone.
+PRESENCE_PENALTY_BY_MODEL = {
+    "qwen-fast": 1.5,
+    "qwen-long": 1.5,
+    "qwen-128k": 1.5,
+    "qwen-256k-batch": 1.5,
+    "qwen-quality": 1.0,
+    "qwen-balanced": 1.0,
+    "qwen-dsh-fast": 1.0,
+    "qwen-think": 0.0,
+    "qwen-dsh-low": 0.0,
+    "qwen-dsh-medium": 0.0,
+}
+
 # Per-model prompts align with AGENTS.md usage:
 # - qwen-fast: planning/chat
 # - qwen-long/qwen-128k/qwen-256k-batch: long-document analysis
@@ -390,6 +409,8 @@ def _clone_qwen_long(c, source_id: str, target_id: str, description: str):
     params["system"] = MODEL_PROMPTS.get(target_id, LONG_PROMPT)
     params["function_calling"] = FUNCTION_CALLING_BY_MODEL.get(target_id, "native")
     params["max_tokens"] = 4096
+    if target_id in PRESENCE_PENALTY_BY_MODEL:
+        params["presence_penalty"] = PRESENCE_PENALTY_BY_MODEL[target_id]
 
     meta["description"] = description
     meta["capabilities"] = {
@@ -519,6 +540,8 @@ def main():
         # without a per-call prompt, but web search and code interpreter still need the
         # user to toggle them on per chat.
         params["tool_approval_mode"] = "full"
+        if mid in PRESENCE_PENALTY_BY_MODEL:
+            params["presence_penalty"] = PRESENCE_PENALTY_BY_MODEL[mid]
 
         # Apply meta overrides
         meta["capabilities"] = {
