@@ -620,7 +620,8 @@
       "kind": "script",
       "runnable": false,
       "sudo": true,
-      "notes": "Requires the 8TB drive mounted; run manually with sudo.",
+      "probe": {"type": "timer", "unit": "open-webui-backup.timer", "scope": "user"},
+      "notes": "Timer-driven (user timer open-webui-backup.timer, daily 03:00); status column shows schedule.",
       "tags": [
         "backup",
         "owui",
