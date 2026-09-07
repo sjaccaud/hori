@@ -1,15 +1,15 @@
 # Handoff — SLICE-13 Remote MCP Tools + Tailnet Hardening
 
-> Resume point for the next Devin session. Read this first, then
-> `.devin/SLICE_LOG.md`, then `scripts/devin_resume.sh`.
+> **This slice is COMPLETE.** This file is kept as a tombstone; the canonical
+> state lives in `.devin/SLICE_LOG.md` and `core/state/proposed_work_orders/60b7e3e7-f9b6-404b-9848-8c5c87750700.json`.
 
 ## Branch
 
-`rebrand/hori`
+`rebrand/hori` (merged to rebrand/hori; main merge deferred to final rebrand integration)
 
 ## What was done
 
-- Wrote `.devin/prd/remote-mcp-tools.md` + `core/state/proposed_work_orders/60b7e3e7-f9b6-404b-9848-8c5c87750700.json`.
+- Wrote `.devin/prd/remote-mcp-tools.md` + `core/state/proposed_work_orders/60b7e3e7-f9b6-404b-9848-8c5c87750700.json` (now `complete`).
 - Implemented `services/aios_core/mcp_server.py`: admin-token-gated MCP-over-SSE with 7 tools.
 - Wired `/mcp/sse` and `/mcp/messages` in `services/aios_core/main.py`.
 - Added unit tests (`services/aios_core/test_mcp_server.py`) and adversarial test (`tests/adversarial/test_mcp_unauthorized.py`).
@@ -32,13 +32,5 @@
 
 ## What is still open
 
-- None. aios_core was restarted via `sudo systemctl restart aios_core` by the user.
+- None. aios_core is active and was restarted by the user.
 - The `AIOS_ADMIN_TOKEN` rotation decision was left as-is per the user.
-
-## Resume command for next session
-
-Start a new chat and say:
-
-> Continue from `.devin/HANDOFF.md` and `.devin/SLICE_LOG.md` — finish SLICE-13 (systemd restart and token rotation).
-
-Or run `scripts/devin_resume.sh` and read those two files first.

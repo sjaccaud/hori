@@ -5,50 +5,40 @@
 
 ## Current Slice
 
-### SLICE-13-REMOTE-MCP-TOOLS: Expose remote tools over Tailnet via MCP, harden Tailscale Serve, and add nano endpoint. — HANDOFF
+### (none — ready for next slice planning)
 
-**Branch:** `rebrand/hori` (to be merged after demo)
-
-**What it is:** A Tailnet-only MCP-over-SSE server on aios_core that lets
-remote clients call `get_status`, `read_file`, `run_safe_command`,
-`search_web`, `fetch_url`, `memory_search`, and `memory_store` with the same
-admin token used for `/admin/api`. Tailscale Serve is hardened to a
-port-aware allowlist, `nano` is exposed on `:8444`, and the audit/harden
-scripts are updated to reflect the new remote surface.
-
-**Demo criterion:**
-- `tailscale serve status` shows only intended ports/paths; `audit_funnel.sh`
-  passes.
-- From a remote client (or local `curl` over Tailnet), a valid admin token opens an
-  SSE session at `https://<tailnet>/mcp/sse`, lists the 7 tools,
-  and successfully calls `get_status` or `read_file`.
-- `https://<tailnet>:8444/v1/models` returns `nano`.
-- Full relevant test suite passes.
-
-**Status:**
-- PRD, work order, unit, integration, regression, and adversarial tests passing.
-- Code committed to `rebrand/hori`.
-- `services/integration_tests/test_remote_mcp.py` added and passes when `AIOS_ADMIN_TOKEN` is set.
-- `docs/operations.md` and `.devin/AGENTS.md` updated with MCP and nano endpoints.
-- `.devin/ubiquitous_language.md` updated with `MCP-over-SSE` and `Nano Chat` terms.
-- `audit_funnel.sh` passes; Tailscale Serve exposes 443, 3443, 8443, 8444 with intended paths.
-- Live `/mcp/sse` verified over Tailnet (returns `event: endpoint` with session_id; 401 without token).
-- `https://<tailnet>:8444/v1/models` verified from Tailnet and returns `nano`.
-- aios_core restarted via `sudo systemctl restart aios_core` by the user.
-
-**Remaining before merge:**
-- None. aios_core was restarted via `sudo systemctl restart aios_core` by the user. The `AIOS_ADMIN_TOKEN` rotation decision was left as-is per the user.
-
-**PRD:** `.devin/prd/remote-mcp-tools.md`
-**Work order:** `core/state/proposed_work_orders/60b7e3e7-f9b6-404b-9848-8c5c87750700.json`
-
-**Open product/safety decisions made:**
-- Harden first, then add explicit paths.
-- Core 4 tools + memory search/store for the first slice.
-- No public Funnel; Tailnet mesh only.
-- Restart was done manually because `sudo systemctl` requires a TTY; the canonical systemd path is `sudo systemctl restart aios_core`.
 
 ## Completed Slices
+
+### SLICE-13-REMOTE-MCP-TOOLS: Expose remote tools over Tailnet via MCP, harden Tailscale Serve, and add nano endpoint. — COMPLETE
+
+**Branch:** `rebrand/hori` (merged to rebrand/hori; main merge deferred to final rebrand integration)
+
+**What was built:**
+- `services/aios_core/mcp_server.py`: admin-token-gated MCP-over-SSE server with 7 tools (`get_status`, `read_file`, `run_safe_command`, `search_web`, `fetch_url`, `memory_search`, `memory_store`).
+- `services/aios_core/main.py`: wired `/mcp/sse` and `/mcp/messages` ASGI routes.
+- `services/aios_core/test_mcp_server.py` (unit) and `tests/adversarial/test_mcp_unauthorized.py` (adversarial).
+- `services/integration_tests/test_remote_mcp.py` (integration).
+- `scripts/hardening/harden_funnel.sh` and `scripts/hardening/audit_funnel.sh` updated for port-aware allowlist and the new `:8444` nano port.
+- `Makefile` `test-mcp` target.
+- `docs/operations.md`, `.devin/AGENTS.md`, `.devin/ubiquitous_language.md` updated with MCP and nano endpoints.
+
+**Verification:**
+- `tailscale serve status` shows 443, 3443, 8443, 8444 with intended paths; `audit_funnel.sh` passes.
+- `systemctl is-active aios_core` returns `active`.
+- Unauthenticated `GET /mcp/sse` returns 401; authenticated live Tailnet session returns `event: endpoint` with a `session_id`.
+- `https://<tailnet>:8444/v1/models` returns `nano`.
+- `make test-mcp` passes (8 tests).
+- `make test` passes: 451 unit, 43 integration, 26 regression, 148 adversarial (MCP integration test runs when `AIOS_ADMIN_TOKEN` is exported; otherwise skipped).
+
+**Surprises / notes:**
+- The `AIOS_ADMIN_TOKEN` rotation decision was left as-is per the user; no token rotation in this slice.
+- `docs/model-archive.md` was also committed during close-out (offline model inventory for `/mnt/4TB`).
+- The canonical systemd restart path is `sudo systemctl restart aios_core`; `systemctl` requires a TTY, so it was run by the user.
+
+**Deferred:**
+- `AIOS_ADMIN_TOKEN` rotation can be revisited later; all remote clients currently share the admin token.
+- macOS/Cline stdio↔SSE bridge (`surfaces/macos/mcp_bridge.py`) is deferred until Cline or Claude Desktop usage justifies it.
 
 ### [2026-09-07] Local web search: SearXNG verified + model-decided `search_web` pilot on `qwen-dsh-low`
 
