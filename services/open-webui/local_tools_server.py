@@ -21,6 +21,7 @@ companion, while the safety spine stays untouched.
 from __future__ import annotations
 
 import fnmatch
+import glob
 import json
 import logging
 import os
@@ -141,6 +142,34 @@ FORBIDDEN_ARGS = frozenset(
 )
 
 _SHELL_METACHAR_RE = re.compile(r"[;&|`$\n\r\x00<>\"'\\]|\$\(")
+_GLOB_CHARS_RE = re.compile(r"[*?\[\]]")
+_GLOB_EXPANSION_LIMIT = 256
+
+
+def _expand_glob_args(argv: list[str]) -> tuple[list[str] | None, str]:
+    """Expand args containing glob metachars (* ? [ ]) against the filesystem.
+
+    Shell-free expansion; unmatched patterns return an error so the caller can
+    adapt instead of the command failing on a literal '*'.
+    """
+    out: list[str] = []
+    for arg in argv:
+        if _GLOB_CHARS_RE.search(arg):
+            matches = sorted(glob.glob(arg))
+            if not matches:
+                return None, (
+                    f"glob pattern matched no files: {arg} "
+                    "(use find -name or an explicit path)"
+                )
+            out.extend(matches)
+            if len(out) > _GLOB_EXPANSION_LIMIT:
+                return None, (
+                    f"glob expansion too large (>{_GLOB_EXPANSION_LIMIT} "
+                    f"results): {arg}"
+                )
+        else:
+            out.append(arg)
+    return out, ""
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -255,7 +284,11 @@ def _validate_command(cmd: list[str]) -> tuple[bool, str]:
 
     for arg in cmd[1:]:
         if _has_shell_meta(arg):
-            return False, f"shell metacharacter in argument: {arg}"
+            return False, (
+                f"shell metacharacter in argument: {arg} — there is no shell "
+                "here: no pipes |, chaining ; &&, or $(); glob chars * ? [ ] "
+                "are expanded automatically"
+            )
         if arg in FORBIDDEN_ARGS:
             return False, f"forbidden argument: {arg}"
 
@@ -309,7 +342,14 @@ def tool_run_safe_command(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": "missing or invalid 'command'"}
 
     if _has_shell_meta(command):
-        return {"ok": False, "error": "shell metacharacter in command"}
+        return {
+            "ok": False,
+            "error": (
+                "shell metacharacter in command — there is no shell here: "
+                "no pipes |, chaining ; &&, or $(); pass a plain command and "
+                "args (glob chars * ? [ ] are expanded automatically)"
+            ),
+        }
 
     try:
         cmd = shlex.split(command)
@@ -323,6 +363,10 @@ def tool_run_safe_command(args: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(a, str) or _has_shell_meta(a):
                 return {"ok": False, "error": f"invalid arg: {a}"}
         cmd.extend(extra_args)
+
+    cmd, glob_err = _expand_glob_args(cmd)
+    if glob_err:
+        return {"ok": False, "error": glob_err}
 
     ok, reason = _validate_command(cmd)
     if not ok:
@@ -461,7 +505,12 @@ OPENAPI_SPEC: dict[str, Any] = {
         "/run_safe_command": {
             "post": {
                 "operationId": "run_safe_command",
-                "summary": "Run a safe, read-only diagnostic command.",
+                "summary": (
+                    "Run a safe, read-only diagnostic command. Shell-free "
+                    "runner: no pipes |, chaining ; &&, $(), or find -exec; "
+                    "glob chars (* ? [ ]) in arguments are expanded "
+                    "automatically. Use find -name/-maxdepth or explicit paths."
+                ),
                 "requestBody": {
                     "required": True,
                     "content": {
