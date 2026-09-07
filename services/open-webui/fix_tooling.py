@@ -625,6 +625,16 @@ def main():
     )
     print("updated models.default_metadata and models.default_params")
 
+    # The standalone TTS server on :8765 was removed 2026-09-06; leave the
+    # engine unset so Open-WebUI uses the browser Web Speech API instead of
+    # probing a dead OpenAI-compatible endpoint (recurring "Server Connection
+    # Error" toasts).
+    c.execute(
+        "UPDATE config SET value = ?, updated_at = ? WHERE key = ?",
+        (json.dumps(""), now(), "audio.tts.engine"),
+    )
+    print("reset audio.tts.engine to default (Web Speech API)")
+
     # 5. Keep the UI model list and pinned list current.
     # Pin the everyday models; DSH variants are available but collapsed to reduce UI clutter.
     pinned = [
