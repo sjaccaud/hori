@@ -351,6 +351,14 @@ def catalog_with_status() -> dict:
     return {"categories": cat.get("categories", {}), "scripts": entries, "note": cat.get("note", "")}
 
 
+def catalog_fresh() -> dict:
+    """Manual refresh path: bypass the probe-status cache so a clicked
+    'refresh' actually re-checks service/timer state."""
+    with _status_lock:
+        _status_cache["ts"] = 0.0
+    return catalog_with_status()
+
+
 INDEX_HTML = r"""<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -384,6 +392,8 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover td{background:#17171b}
 .kv div:nth-child(odd){color:var(--dim)}
 pre{background:#0c0c0e;border:1px solid var(--border);border-radius:6px;padding:10px;font-size:11.5px;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#17171a;border:1px solid var(--border);padding:8px 16px;border-radius:8px;font-size:12px;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin .7s linear infinite}
 tr.missing td{opacity:.45}
 </style></head><body>
 <h1>Script Panel</h1>
@@ -392,6 +402,7 @@ tr.missing td{opacity:.45}
   <input type="search" id="q" placeholder="filter…">
   <span id="chips"></span>
   <span style="flex:1"></span>
+  <span id="refreshed" style="color:var(--dim);font-size:11px"></span>
   <button class="chip" id="refresh">↻ refresh</button>
 </div>
 <table><thead><tr>
@@ -403,11 +414,17 @@ tr.missing td{opacity:.45}
 <script>
 let DATA=[], CAT={}, sortKey='category', sortDir=1, filterCat=null, onlyRunnable=false, search='';
 const stateOrder={online:0,offline:1,unknown:2,'n/a':3};
-async function load(){
-  const r=await fetch('/api/catalog'); const d=await r.json();
-  DATA=d.scripts; CAT=d.categories||{};
-  document.getElementById('subnote').textContent=d.note||'';
-  renderChips(); renderRows();
+async function load(bust){
+  const btn=document.getElementById('refresh'), stamp=document.getElementById('refreshed');
+  btn.disabled=true; btn.classList.add('on'); btn.innerHTML='<span class="spin">⟳</span> refreshing…';
+  try{
+    const r=await fetch('/api/catalog'+(bust?'?bust=1':'')); const d=await r.json();
+    DATA=d.scripts; CAT=d.categories||{};
+    document.getElementById('subnote').textContent=d.note||'';
+    renderChips(); renderRows();
+    stamp.textContent='updated '+new Date().toLocaleTimeString()+' · '+DATA.length+' entries';
+  }catch(e){stamp.textContent='refresh failed: '+e;}
+  finally{btn.disabled=false;btn.classList.remove('on');btn.innerHTML='↻ refresh';}
 }
 function renderChips(){
   const c=document.getElementById('chips'); c.innerHTML='';
@@ -496,7 +513,7 @@ async function openDrawer(s){
 }
 function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',4000);}
 document.getElementById('q').oninput=e=>{search=e.target.value.toLowerCase();renderRows()};
-document.getElementById('refresh').onclick=load;
+document.getElementById('refresh').onclick=()=>load(true);
 document.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{
   const k=th.dataset.k; sortDir=sortKey===k?-sortDir:1; sortKey=k; renderRows();});
 load();
@@ -527,7 +544,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             self._html(INDEX_HTML)
         elif self.path.startswith("/api/catalog"):
-            self._json(catalog_with_status())
+            self._json(catalog_fresh() if "bust" in self.path else catalog_with_status())
         elif self.path.startswith("/api/runs"):
             runs = load_runs()
             if "id=" in self.path:
