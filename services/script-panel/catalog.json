@@ -245,7 +245,8 @@
       "tags": [
         "memory",
         "timer"
-      ]
+      ],
+      "schedule": "nightly ~03:02"
     },
     {
       "id": "qdrant-ingest",
@@ -568,7 +569,8 @@
         "restic",
         "backup",
         "sudo"
-      ]
+      ],
+      "schedule": "daily 02:00"
     },
     {
       "id": "whole-ubuntu-prune",
@@ -590,7 +592,8 @@
         "restic",
         "backup",
         "sudo"
-      ]
+      ],
+      "schedule": "weekly Sun 04:00"
     },
     {
       "id": "install-whole-ubuntu-backup",
@@ -620,13 +623,18 @@
       "kind": "script",
       "runnable": false,
       "sudo": true,
-      "probe": {"type": "timer", "unit": "open-webui-backup.timer", "scope": "user"},
+      "probe": {
+        "type": "timer",
+        "unit": "open-webui-backup.timer",
+        "scope": "user"
+      },
       "notes": "Timer-driven (user timer open-webui-backup.timer, daily 03:00); status column shows schedule.",
       "tags": [
         "backup",
         "owui",
         "sudo"
-      ]
+      ],
+      "schedule": "daily 03:00"
     },
     {
       "id": "fresh-start-4tb",

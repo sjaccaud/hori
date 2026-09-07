@@ -93,7 +93,11 @@ def probe_status(probe: dict | None) -> dict:
             # Inactive timers show '-' for NEXT; a schedule means armed.
             if line[0].split()[0] == "-":
                 return {"state": "offline", "detail": f"{unit}: loaded but INACTIVE — not scheduled"}
-            return {"state": "online", "detail": parts[:140]}
+            # NEXT column is e.g. 'Tue 2026-09-08 02:00:00 EDT' — keep the
+            # sortable tail (date+time) for the Scheduled column.
+            toks = line[0].split()
+            next_run = " ".join(toks[1:4]) if len(toks) >= 4 else ""
+            return {"state": "online", "detail": parts[:140], "next": next_run}
         enabled = _run_probe(cmd + ["is-enabled", unit]).stdout.strip()
         if enabled:
             return {"state": "offline", "detail": f"{unit}: {enabled}, not in timer list"}
@@ -235,6 +239,7 @@ def catalog_with_status() -> dict:
             **e,
             "exists": Path(expand(e["path"])).exists() if "/" in e.get("path", "") or e.get("path", "").startswith("~") else None,
             "status": cache[eid],
+            "next_run": cache[eid].get("next", ""),
             "last_run": {
                 "ts": lr["ts"], "exit": lr["exit"], "duration_s": lr["duration_s"],
             } if lr else None,
@@ -288,11 +293,11 @@ tr.missing td{opacity:.45}
 <table><thead><tr>
 <th data-k="status">●</th><th data-k="name">Script</th><th data-k="category">Category</th>
 <th data-k="what">What</th><th data-k="why">Why</th><th data-k="created">Created</th>
-<th data-k="last_run">Last run</th><th></th>
+<th data-k="schedule">Scheduled</th><th data-k="last_run">Last run</th><th></th>
 </tr></thead><tbody id="rows"></tbody></table>
 <div id="drawer"></div><div id="toast"></div>
 <script>
-let DATA=[], CAT={}, sortKey='category', sortDir=1, filterCat=null, search='';
+let DATA=[], CAT={}, sortKey='category', sortDir=1, filterCat=null, onlyRunnable=false, search='';
 const stateOrder={online:0,offline:1,unknown:2,'n/a':3};
 async function load(){
   const r=await fetch('/api/catalog'); const d=await r.json();
@@ -303,6 +308,10 @@ async function load(){
 function renderChips(){
   const c=document.getElementById('chips'); c.innerHTML='';
   const cats=[...new Set(DATA.map(s=>s.category))];
+  const nr=DATA.filter(s=>s.runnable).length;
+  const rb=document.createElement('button'); rb.className='chip'+(onlyRunnable?' on':'');
+  rb.textContent='▶ runnable ('+nr+')';
+  rb.onclick=()=>{onlyRunnable=!onlyRunnable;renderChips();renderRows()}; c.appendChild(rb);
   const all=document.createElement('button'); all.className='chip'+(filterCat?'':' on');
   all.textContent='all ('+DATA.length+')'; all.onclick=()=>{filterCat=null;renderChips();renderRows()}; c.appendChild(all);
   for(const k of cats){const b=document.createElement('button');b.className='chip'+(filterCat===k?' on':'');
@@ -313,12 +322,13 @@ function fmtTs(ts){if(!ts)return '—';const d=new Date(ts*1000);return d.toLoca
 function val(s,k){
   if(k==='status')return stateOrder[s.status?.state??'n/a']??9;
   if(k==='last_run')return s.last_run?s.last_run.ts:0;
+  if(k==='schedule')return s.next_run||s.schedule||'';
   if(k==='category')return s.category;
   return (s[k]||'').toLowerCase();
 }
 function renderRows(){
   const tb=document.getElementById('rows'); tb.innerHTML='';
-  let rows=DATA.filter(s=>(!filterCat||s.category===filterCat)&&
+  let rows=DATA.filter(s=>(!filterCat||s.category===filterCat)&&(!onlyRunnable||s.runnable)&&
     (!search||JSON.stringify(s).toLowerCase().includes(search)));
   rows.sort((a,b)=>{const x=val(a,sortKey),y=val(b,sortKey);return (x<y?-1:x>y?1:0)*sortDir;});
   for(const s of rows){
@@ -332,6 +342,7 @@ function renderRows(){
       <td class="desc">${esc(s.what)}</td>
       <td class="why">${esc(s.why||'')}</td>
       <td style="white-space:nowrap;color:var(--dim)">${esc(s.created||'—')}</td>
+      <td style="white-space:nowrap">${s.schedule?esc(s.schedule)+(s.next_run?'<div class="alias">next '+esc(s.next_run)+'</div>':''):'<span class="norun">—</span>'}</td>
       <td style="white-space:nowrap;color:var(--dim)">${lr?fmtTs(lr.ts)+(lr.exit!=null?' · exit '+lr.exit:''):'—'}</td>
       <td></td>`;
     const td=tr.lastElementChild;
@@ -361,6 +372,7 @@ async function openDrawer(s){
     <div>what</div><div>${esc(s.what)}</div>
     <div>why</div><div>${esc(s.why||'—')}</div>
     <div>created</div><div>${esc(s.created||'—')}</div>
+    ${s.schedule?`<div>schedule</div><div>${esc(s.schedule)}${s.next_run?' · next '+esc(s.next_run):''}</div>`:''}
     <div>status</div><div>${esc(st.detail||st.state||'n/a')}</div>
     <div>runnable</div><div>${s.runnable?'yes':'no'}${s.sudo?' · sudo (never via panel)':''}</div>
     ${s.notes?`<div>notes</div><div>${esc(s.notes)}</div>`:''}
