@@ -226,6 +226,40 @@ class TestStaticConfig:
             words = len(name.split())
             assert words <= 3, f"{mid}: '{name}' is {words} words"
 
+    def test_model_order_and_descriptions(self):
+        """The selector order must be canonical and every model must carry
+        a short use-case description (selector subtitle / admin list)."""
+        mod = _load_fix_tooling()
+        order = mod.MODEL_ORDER
+        assert len(order) == len(set(order)), "MODEL_ORDER has duplicates"
+        assert set(order) == set(mod.ALL_QWEN_DEVSTRAL), (
+            "MODEL_ORDER must cover every preset exactly once"
+        )
+        for mid in mod.ALL_QWEN_DEVSTRAL:
+            desc = mod.MODEL_DESCRIPTIONS.get(mid, "")
+            assert desc, f"{mid}: missing description"
+            assert len(desc) <= 80, f"{mid}: description too long ({len(desc)})"
+
+    def test_db_model_order_matches_canonical(self):
+        """Live ui.model_order_list must equal MODEL_ORDER (apply runs
+        persist it; drift means the UI shows a stale order)."""
+        if not _docker_running(OWUI_CONTAINER):
+            pytest.skip(f"container {OWUI_CONTAINER} not running")
+        mod = _load_fix_tooling()
+        out = subprocess.run(
+            [
+                "docker", "exec", OWUI_CONTAINER, "python3", "-c",
+                "import sqlite3, json;"
+                "con=sqlite3.connect('/app/backend/data/webui.db');"
+                "row=con.execute(\"SELECT value FROM config WHERE key='ui.model_order_list'\").fetchone();"
+                "print(json.dumps(json.loads(row[0]) if row else None))",
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert out.returncode == 0, out.stderr[-400:]
+        live = json.loads(out.stdout.strip().splitlines()[-1])
+        assert live == mod.MODEL_ORDER, f"order drift: {live}"
+
 
 # --- 2. Live service tests ------------------------------------------------
 
@@ -282,7 +316,8 @@ class TestModelMetadata:
             assert "web_search" in feats, f"{mid}: not in default_feature_ids"
 
     def test_display_names_in_db_are_short(self):
-        """Live model.name values match the short names in fix_tooling."""
+        """Live model.name values match the short names in fix_tooling,
+        and every armed model carries its canonical use-case description."""
         if not _docker_running(OWUI_CONTAINER):
             pytest.skip(f"container {OWUI_CONTAINER} not running")
         mod = _load_fix_tooling()
@@ -291,15 +326,20 @@ class TestModelMetadata:
                 "docker", "exec", OWUI_CONTAINER, "python3", "-c",
                 "import sqlite3, json;"
                 "con=sqlite3.connect('/app/backend/data/webui.db');"
-                "print(json.dumps(dict(con.execute('SELECT id, name FROM model').fetchall())))",
+                "rows=con.execute(\"SELECT id, name, json_extract(meta, '$.description') FROM model\");"
+                "print(json.dumps({r[0]: {'name': r[1], 'desc': r[2]} for r in rows}))",
             ],
             capture_output=True, text=True, timeout=30,
         )
         assert out.returncode == 0, out.stderr[-400:]
-        names = json.loads(out.stdout.strip().splitlines()[-1])
+        live = json.loads(out.stdout.strip().splitlines()[-1])
         for mid, expected in mod.MODEL_NAMES.items():
-            assert names.get(mid) == expected, (
-                f"{mid}: db has '{names.get(mid)}', want '{expected}'"
+            assert live.get(mid, {}).get("name") == expected, (
+                f"{mid}: db has '{live.get(mid, {}).get('name')}', want '{expected}'"
+            )
+            desc = live.get(mid, {}).get("desc") or ""
+            assert desc == mod.MODEL_DESCRIPTIONS.get(mid), (
+                f"{mid}: description drift: {desc!r}"
             )
 
 

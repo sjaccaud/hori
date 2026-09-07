@@ -160,6 +160,39 @@ MODEL_NAMES = {
     "qwen-dsh-medium": "Agentic Mid",
 }
 
+# Canonical selector order (ui.model_order_list): everyday chat first,
+# then reasoning, long-context docs/planning, quality tiers, coding,
+# agentic variants, and the non-interactive batch preset last.
+MODEL_ORDER = [
+    "qwen-fast",
+    "qwen-think",
+    "qwen-long",
+    "qwen-128k",
+    "qwen-balanced",
+    "qwen-quality",
+    "devstral-coding",
+    "qwen-dsh-fast",
+    "qwen-dsh-medium",
+    "qwen-dsh-low",
+    "qwen-256k-batch",
+]
+
+# Short use-case hints shown as selector subtitles / in Admin -> Models.
+# Kept canonical here so `apply-model-config` restores them.
+MODEL_DESCRIPTIONS = {
+    "qwen-fast": "Everyday chat and quick planning — the fast default.",
+    "qwen-long": "Long documents and deep analysis (65k ctx).",
+    "qwen-128k": "Big planning, roadmaps, and audits (128k ctx).",
+    "qwen-256k-batch": "Bulk ingestion only — not interactive.",
+    "qwen-think": "Shows explicit step-by-step reasoning.",
+    "qwen-balanced": "Quality/VRAM balance for code and research.",
+    "qwen-quality": "Highest accuracy for high-stakes code (Q8_0).",
+    "devstral-coding": "Coding and command execution (Devstral 24B).",
+    "qwen-dsh-fast": "Agentic coding, no reasoning — fastest.",
+    "qwen-dsh-low": "Agentic coding, light reasoning — best output.",
+    "qwen-dsh-medium": "Agentic coding, medium reasoning — quick.",
+}
+
 # function_calling: Qwen3.8-27B (with --jinja) emits OpenAI-compatible tool_calls,
 # so use native for all Qwen aliases. devstral-coding also uses native.
 FUNCTION_CALLING_BY_MODEL = {
@@ -616,14 +649,10 @@ def main():
         meta["default_feature_ids"] = default_features_for(mid)
         meta["builtinTools"] = {**meta.get("builtinTools", {}), **builtin_tools_for(mid)}
 
-        # Preserve description if present, add generic if missing
-        if "description" not in meta:
-            if mid == "devstral-coding":
-                meta["description"] = "Coding assistant — Devstral-Small-2-24B, 32k ctx, ngram-mod"
-            elif mid == "qwen-quality":
-                meta["description"] = "Highest-quality Qwen3.8-27B — Q8_0, 16k ctx, draft-mtp"
-            else:
-                meta["description"] = f"Local model {mid}"
+        # Canonical use-case descriptions (selector subtitle / admin list)
+        meta["description"] = MODEL_DESCRIPTIONS.get(mid) or meta.get(
+            "description", f"Local model {mid}"
+        )
 
         c.execute(
             "UPDATE model SET name = ?, params = ?, meta = ?, updated_at = ? WHERE id = ?",
@@ -739,7 +768,7 @@ def main():
     )
     c.execute(
         "UPDATE config SET value = ?, updated_at = ? WHERE key = ?",
-        (json.dumps(pinned, ensure_ascii=False), now(), "ui.model_order_list"),
+        (json.dumps(MODEL_ORDER, ensure_ascii=False), now(), "ui.model_order_list"),
     )
     print("updated ui.default_pinned_models and ui.model_order_list")
 

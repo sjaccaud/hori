@@ -97,6 +97,15 @@ in normal chat: `read_file`/`run_safe_command` already reach
 OWUI memory now points future chats at the kernel paths — no bespoke UI
 needed. Verified: `/api/models` shows only the 11 short-named presets.
 
+**Selector polish (same day):** canonical dropdown order
+(`MODEL_ORDER` in fix_tooling → `ui.model_order_list`): Fast Chat →
+Think Mode → Long Docs → Deep Plan → Balanced → Max Quality →
+Devstral Code → Agentic Fast → Agentic Mid → Agentic Best → Batch Only.
+Short use-case `MODEL_DESCRIPTIONS` written to `meta.description`
+(selector subtitle / admin list). New contracts: order == MODEL_ORDER,
+descriptions canonical, both asserted live against webui.db.
+Gotcha: `docker exec` heredocs need `-i` or stdin is dropped silently.
+
 ### SLICE-12-PROJECT-OFFLOAD: Back up non-daily `~/Projects` to private GitHub repos and optionally free local 2TB space. — COMPLETE
 
 **Branch:** `rebrand/hori` (merged)
