@@ -5,12 +5,12 @@
 
 ## Current Slice
 
-### SLICE-13-REMOTE-MCP-TOOLS: Expose Jacko tools over Tailnet via MCP, harden Tailscale Serve, and add nano endpoint. — IN PROGRESS
+### SLICE-13-REMOTE-MCP-TOOLS: Expose remote tools over Tailnet via MCP, harden Tailscale Serve, and add nano endpoint. — HANDOFF
 
 **Branch:** `rebrand/hori` (to be merged after demo)
 
 **What it is:** A Tailnet-only MCP-over-SSE server on aios_core that lets
-Cline/Claude on a MacBook call `get_status`, `read_file`, `run_safe_command`,
+remote clients call `get_status`, `read_file`, `run_safe_command`,
 `search_web`, `fetch_url`, `memory_search`, and `memory_store` with the same
 admin token used for `/admin/api`. Tailscale Serve is hardened to a
 port-aware allowlist, `nano` is exposed on `:8444`, and the audit/harden
@@ -19,11 +19,24 @@ scripts are updated to reflect the new remote surface.
 **Demo criterion:**
 - `tailscale serve status` shows only intended ports/paths; `audit_funnel.sh`
   passes.
-- From a MacBook (or local `curl` over Tailnet), a valid admin token opens an
+- From a remote client (or local `curl` over Tailnet), a valid admin token opens an
   SSE session at `https://<tailnet>/mcp/sse`, lists the 7 tools,
   and successfully calls `get_status` or `read_file`.
 - `https://<tailnet>:8444/v1/models` returns `nano`.
 - Full relevant test suite passes.
+
+**Status:**
+- PRD, work order, unit tests, and adversarial tests written and passing.
+- Code committed to `rebrand/hori` (commit `6956d00`).
+- `audit_funnel.sh` passes; Tailscale Serve exposes 443, 3443, 8443, 8444 with intended paths.
+- Live `/mcp/sse` verified over Tailnet (returns `event: endpoint` with session_id; 401 without token).
+- `https://<tailnet>:8444/v1/models` not yet verified from a remote client, but the route is live.
+
+**Remaining before merge:**
+- Add `services/integration_tests/test_remote_mcp.py` for the full SSE+POST round-trip.
+- Run `make test` and `make test-integration` to confirm no regressions.
+- Update `docs/operations.md` and `AGENTS.md` with the new endpoint + client setup.
+- Restart aios_core via `sudo systemctl restart aios_core` once the user is ready (currently a manually restarted process is running).
 
 **PRD:** `.devin/prd/remote-mcp-tools.md`
 **Work order:** `core/state/proposed_work_orders/60b7e3e7-f9b6-404b-9848-8c5c87750700.json`
@@ -32,6 +45,7 @@ scripts are updated to reflect the new remote surface.
 - Harden first, then add explicit paths.
 - Core 4 tools + memory search/store for the first slice.
 - No public Funnel; Tailnet mesh only.
+- Restart was done manually because `sudo systemctl` requires a TTY; the canonical systemd path is `sudo systemctl restart aios_core`.
 
 ## Completed Slices
 
