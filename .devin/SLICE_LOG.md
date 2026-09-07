@@ -5,7 +5,33 @@
 
 ## Current Slice
 
-### Current slice: COMPLETE — no active slice. Choose the next one.
+### SLICE-13-REMOTE-MCP-TOOLS: Expose Jacko tools over Tailnet via MCP, harden Tailscale Serve, and add nano endpoint. — IN PROGRESS
+
+**Branch:** `rebrand/hori` (to be merged after demo)
+
+**What it is:** A Tailnet-only MCP-over-SSE server on aios_core that lets
+Cline/Claude on a MacBook call `get_status`, `read_file`, `run_safe_command`,
+`search_web`, `fetch_url`, `memory_search`, and `memory_store` with the same
+admin token used for `/admin/api`. Tailscale Serve is hardened to a
+port-aware allowlist, `nano` is exposed on `:8444`, and the audit/harden
+scripts are updated to reflect the new remote surface.
+
+**Demo criterion:**
+- `tailscale serve status` shows only intended ports/paths; `audit_funnel.sh`
+  passes.
+- From a MacBook (or local `curl` over Tailnet), a valid admin token opens an
+  SSE session at `https://<tailnet>/mcp/sse`, lists the 7 tools,
+  and successfully calls `get_status` or `read_file`.
+- `https://<tailnet>:8444/v1/models` returns `nano`.
+- Full relevant test suite passes.
+
+**PRD:** `.devin/prd/remote-mcp-tools.md`
+**Work order:** `core/state/proposed_work_orders/60b7e3e7-f9b6-404b-9848-8c5c87750700.json`
+
+**Open product/safety decisions made:**
+- Harden first, then add explicit paths.
+- Core 4 tools + memory search/store for the first slice.
+- No public Funnel; Tailnet mesh only.
 
 ## Completed Slices
 

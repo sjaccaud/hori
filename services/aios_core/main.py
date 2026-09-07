@@ -62,6 +62,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# --- MCP remote surface (Tailnet-only, admin-token gated) ---
+# See .devin/prd/remote-mcp-tools.md for the interface contract.
+from .mcp_server import mcp_messages_endpoint, mcp_sse_endpoint
+app.add_api_route("/mcp/sse", mcp_sse_endpoint, methods=["GET"])
+app.add_api_route("/mcp/messages", mcp_messages_endpoint, methods=["POST"])
+
 # Mount static files for voice web app
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path as PathLib
