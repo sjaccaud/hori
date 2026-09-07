@@ -27,15 +27,17 @@ scripts are updated to reflect the new remote surface.
 
 **Status:**
 - PRD, work order, unit, integration, regression, and adversarial tests passing.
-- Code committed to `rebrand/hori` (commits `6956d00` and `b32aa5e`).
+- Code committed to `rebrand/hori`.
+- `services/integration_tests/test_remote_mcp.py` added and passes when `AIOS_ADMIN_TOKEN` is set.
+- `docs/operations.md` and `.devin/AGENTS.md` updated with MCP and nano endpoints.
+- `.devin/ubiquitous_language.md` updated with `MCP-over-SSE` and `Nano Chat` terms.
 - `audit_funnel.sh` passes; Tailscale Serve exposes 443, 3443, 8443, 8444 with intended paths.
 - Live `/mcp/sse` verified over Tailnet (returns `event: endpoint` with session_id; 401 without token).
 - `https://<tailnet>:8444/v1/models` verified from Tailnet and returns `nano`.
 
 **Remaining before merge:**
-- Add `services/integration_tests/test_remote_mcp.py` for the full SSE+POST round-trip.
-- Update `docs/operations.md` and `AGENTS.md` with the new endpoint + client setup.
 - Restart aios_core via `sudo systemctl restart aios_core` once the user is ready (currently a manually restarted process is running).
+- Decide whether to rotate `AIOS_ADMIN_TOKEN` (it appeared in local live-testing output).
 
 **PRD:** `.devin/prd/remote-mcp-tools.md`
 **Work order:** `core/state/proposed_work_orders/60b7e3e7-f9b6-404b-9848-8c5c87750700.json`

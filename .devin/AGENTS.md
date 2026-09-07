@@ -192,14 +192,26 @@ everything private. Verify with `./scripts/hardening/audit_funnel.sh`.
   `/etc/hori/secrets.env`). Fail-closed: if the token is not set, the
   admin API returns 403. The setup script generates the token
   automatically; restart aios_core after running it.)
+- **MCP remote surface:** `https://<your-tailnet>.ts.net/mcp/sse` and
+  `https://<your-tailnet>.ts.net/mcp/messages?session_id=<id>` (MCP-over-SSE,
+  Tailnet-only, same `HORI_ADMIN_TOKEN` bearer as the admin panel). Exposes
+  `get_status`, `read_file`, `run_safe_command`, `search_web`, `fetch_url`,
+  `memory_search`, and `memory_store` to remote clients. See
+  `docs/operations.md` for the client setup contract.
+- **Nano model:** `https://<your-tailnet>.ts.net:8444/v1` (Llama 3.2 3B
+  dedicated llama-server on :8090, exposed on port 8444).
 - Apple Shortcut setup at `docs/apple_shortcut_setup.md` (streaming deep-link with `?autolisten=1`, or non-streaming WAV fallback)
 - Default voice: af_heart (Kokoro-82M TTS, #1 TTS Arena, 24kHz, CPU, American English)
 
 **Tailscale Serve paths** must be explicitly proxied. Current paths:
 `/voice`, `/chat`, `/admin`, `/admin/api`, `/health`, `/static`,
+`/mcp`, `/mcp/sse`, `/mcp/messages`,
 `/v1/voice/chat`, `/v1/voice/chat/audio`, `/v1/voice/chat/stream`,
 `/v1/chat/completions`, `/v1/presence`, `/v1/wake`,
-`/v1/audio/voices`, `/v1/audio/speech`. Add new paths with:
+`/v1/audio/voices`, `/v1/audio/speech`,
+`/v1/models` (port 8444, dedicated `nano` llama-server).
+
+Add new aios-core paths with:
 `tailscale serve --bg --set-path /path http://localhost:5680/path`
 
 ## Working Agreement

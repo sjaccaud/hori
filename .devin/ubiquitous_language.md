@@ -5,8 +5,8 @@
 > canonical glossary for HORI. When code and docs diverge on a term's meaning,
 > that is a bug — fix one or the other immediately (Pillar VII).
 >
-> **Last Updated:** 2026-08-07
-> **Version:** 1.0
+> **Last Updated:** 2026-09-07
+> **Version:** 1.1
 
 ---
 
@@ -54,14 +54,14 @@
 
 | Term | Definition | Source of Truth | Aliases | Pillar |
 |------|------------|-----------------|---------|--------|
-| **Low Entropy Protocol (LEP)** | A hierarchical, agentic approach to intent management supported by high-fidelity technical foundation (I-Quants and KV Caches) to maintain cognitive clarity during long-context operations. | docs/architecture_analysis.md | LEP | VI |
-| **Temporal Layers of Truth** | A tiered hierarchy of intent: Level 0 (Manifesto - The Anchor), Level 1 (Project Charter - The Law), Level 2 (Work Order - The Current). | docs/architecture_analysis.md | intent layers | VI |
-| **Alignment Engine** | An active "Red Team" of agentic personas that monitor the delta between intent layers: Strategist, Architect, Guardian. | docs/architecture_analysis.md | red team | VI |
-| **Strategist** | Red-team persona that monitors alignment between the Work Order and the Project Charter. | docs/architecture_analysis.md | persona | VI |
-| **Architect** | Red-team persona that monitors alignment between the Work Order and Technical Constraints in the Charter. | docs/architecture_analysis.md | persona | VI |
-| **Guardian** | Red-team persona that monitors alignment with the Manifesto and resource constraints. | docs/architecture_analysis.md | persona | VI |
-| **Yes, AND Mechanism** | When a significant Delta (divergence) is detected, HORI triggers Intentional Friction: Detection -> Intervention (presents conflict using "Yes, AND" framework) -> Resolution. | docs/architecture_analysis.md | yes-and | VI |
-| **Alignment Score** | A real-time telemetry-based "Check Engine" light for the project's entropy levels (0-100%). | docs/architecture_analysis.md | alignment telemetry | VI |
+| **Low Entropy Protocol (LEP)** | A hierarchical, agentic approach to intent management supported by high-fidelity technical foundation (I-Quants and KV Caches) to maintain cognitive clarity during long-context operations. | docs/archive/architecture_analysis.md | LEP | VI |
+| **Temporal Layers of Truth** | A tiered hierarchy of intent: Level 0 (Manifesto - The Anchor), Level 1 (Project Charter - The Law), Level 2 (Work Order - The Current). | docs/archive/architecture_analysis.md | intent layers | VI |
+| **Alignment Engine** | An active "Red Team" of agentic personas that monitor the delta between intent layers: Strategist, Architect, Guardian. | docs/archive/architecture_analysis.md | red team | VI |
+| **Strategist** | Red-team persona that monitors alignment between the Work Order and the Project Charter. | docs/archive/architecture_analysis.md | persona | VI |
+| **Architect** | Red-team persona that monitors alignment between the Work Order and Technical Constraints in the Charter. | docs/archive/architecture_analysis.md | persona | VI |
+| **Guardian** | Red-team persona that monitors alignment with the Manifesto and resource constraints. | docs/archive/architecture_analysis.md | persona | VI |
+| **Yes, AND Mechanism** | When a significant Delta (divergence) is detected, HORI triggers Intentional Friction: Detection -> Intervention (presents conflict using "Yes, AND" framework) -> Resolution. | docs/archive/architecture_analysis.md | yes-and | VI |
+| **Alignment Score** | A real-time telemetry-based "Check Engine" light for the project's entropy levels (0-100%). | docs/archive/architecture_analysis.md | alignment telemetry | VI |
 | **Manifesto** | The foundational, slow-moving "Constitution" of HORI. Defines core values and global constraints. | services/aios_core/intent.py (inline schema) | constitution, anchor | VI |
 | **Charter** | Project-specific mission, technical "DNA," and success criteria. The "Source of Truth" for any given project. | services/aios_core/intent.py (inline schema) | project charter, law | VI |
 | **Work Order** | The high-velocity, immediate session context. Where rapid iteration occurs. | services/aios_core/intent.py (inline schema) | current | VI |
@@ -168,6 +168,15 @@
 
 ---
 
+## Remote Surfaces
+
+| Term | Definition | Source of Truth | Aliases | Pillar |
+|------|------------|-----------------|---------|--------|
+| **MCP-over-SSE** | Admin-token-gated MCP server on aios_core exposing `get_status`, `read_file`, `run_safe_command`, `search_web`, `fetch_url`, `memory_search`, and `memory_store` to remote clients over SSE (Tailnet-only, port 443). JSON-RPC via `GET /mcp/sse` and `POST /mcp/messages?session_id=<id>`. | `services/aios_core/mcp_server.py`, `services/aios_core/main.py`, `.devin/prd/remote-mcp-tools.md` | MCP remote surface | II, IV, VII |
+| **Nano Chat** | The Llama 3.2 3B Open-WebUI preset and dedicated `nano` model served by `llama-nano.service` on `127.0.0.1:8090`, exposed at `https://<tailnet>:8444/v1`. Fast, low-VRAM, no tools. | `services/open-webui/llama-nano.service`, `docs/operations.md` | nano | I, IV |
+
+---
+
 ## Conflict Resolution Notes
 
 ### KV Cache Quantization
@@ -176,11 +185,11 @@
 - **Resolution:** Per docs/README.md hierarchy, docs/operations.md wins for technical configuration. turbo4 superseded the manifesto's philosophical preference. Glossary documents turbo4 as canonical.
 
 ### VRAM Capacity
-- **architecture_analysis.md (line 14):** "32GB VRAM" (historical, stale).
+- **docs/archive/architecture_analysis.md (line 14):** "32GB VRAM" (historical, stale).
 - **operations.md (line 33):** "~16GB VRAM (15GB model + ~1GB turbo4 KV cache at 16K context)" (current).
-- **Resolution:** operations.md is correct for current configuration. architecture_analysis.md is marked HISTORICAL. 32GB is installed capacity; ~16GB is current usage.
+- **Resolution:** operations.md is correct for current configuration. docs/archive/architecture_analysis.md is marked HISTORICAL. 32GB is installed capacity; ~16GB is current usage.
 
 ### Context Window Size
-- **architecture_analysis.md:** Implies large context windows (historical).
+- **docs/archive/architecture_analysis.md:** Implies large context windows (historical).
 - **elastic_context_window.md / operations.md:** 16384 (down from 65536) is current.
 - **Resolution:** 16K with turbo4 KV cache is canonical.

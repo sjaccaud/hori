@@ -241,11 +241,22 @@ PoC 13.1 (10,000-Turn Stress Test), PoC 13.7 (Deflection Mitigation).
 - **llama-server (OpenAI-compatible):** `http://<your-tailscale-ip>:8080/v1`
   - `GET /v1/models` for model listing
   - `POST /v1/chat/completions` for generation
+- **aios-core (OpenAI-compatible + MCP):** `http://<your-tailscale-ip>:5680/v1`
+  - Chat and models are also at `https://<your-tailnet>.ts.net/v1/chat/completions`
+  - MCP-over-SSE is at `https://<your-tailnet>.ts.net/mcp/sse`
+- **Nano model (OpenAI-compatible):** `https://<your-tailnet>.ts.net:8444/v1`
+  - `GET /v1/models` returns `nano` (Llama 3.2 3B)
+  - `POST /v1/chat/completions` for fast, low-VRAM casual chat
 - **Open WebUI:** `http://<your-tailscale-ip>:3000` (primary container `open_webui_aios`, host port `3000`)
 
 ## Ports
 
 - `8080/tcp` -> `llama-server` (must remain free)
+- `8090/tcp` -> `llama-nano` (Llama 3.2 3B dedicated server)
+- `8444/tcp` -> Tailscale Serve for `nano` (`http://localhost:8090`)
+- `5680/tcp` -> `aios_core`
+- `8766/tcp` -> local-tools server (Open-WebUI and MCP `read_file`/`run_safe_command`)
+- `8769/tcp` -> project-tools server
 - `3000/tcp` -> `open_webui_aios` Docker container
 - `6333/tcp`, `6334/tcp` -> `qdrant_aios`
 - `5678/tcp` -> `n8n_aios`
@@ -348,6 +359,23 @@ The shared intelligence layer. All surfaces (Open WebUI, future voice loop, futu
 - **Current date/time:** Injected into every system prompt so HORI knows what today is.
 - **Config:** Environment variables (`LLM_API_URL`, `LLM_MODEL`, `EMBED_URL`, `EMBED_MODEL`, `QDRANT_URL`)
 - **Current model:** `Qwen3.6-27B` (via llama-server)
+- **MCP-over-SSE remote surface:**
+  - `GET /mcp/sse` — Server-Sent Events endpoint. Requires the admin
+    bearer token (`HORI_ADMIN_TOKEN`) in the `Authorization` header.
+    Returns an initial `event: endpoint` with the message POST URL
+    including a fresh `session_id`, followed by `event: message` for each
+    JSON-RPC response.
+  - `POST /mcp/messages?session_id=<id>` — JSON-RPC message endpoint.
+    Accepts `initialize`, `ping`, `tools/list`, and `tools/call`. Returns
+    HTTP 202 immediately and queues the JSON-RPC response on the SSE
+    stream. Requires the same admin bearer token.
+  - **Exposed MCP tools:** `get_status`, `read_file`, `run_safe_command`,
+    `search_web`, `fetch_url`, `memory_search`, `memory_store`. `read_file`
+    and `run_safe_command` delegate to the local-tools server (:8766) and
+    inherit its allowlists and audit logging.
+  - **Tailnet-only reachability:** `/mcp` is proxied through Tailscale
+    Serve (port 443) and is NOT exposed via Funnel. Verify with
+    `scripts/hardening/audit_funnel.sh`.
 
 ## Proactive Opportunity Agent
 
@@ -522,6 +550,7 @@ Three collections for hierarchical memory (the anti-groundhog mechanism):
 - **OpenAI connections:**
   - `http://127.0.0.1:5680/v1` (aios-core, primary)
   - `http://127.0.0.1:8080/v1` (direct llama-server, for raw model access)
+  - `http://127.0.0.1:8090/v1` (`nano`, Llama 3.2 3B, fast/low-VRAM chat)
 - **Ollama:** Disabled (`ollama.enable: false`, `ollama.base_urls: []`)
 - **Background tasks disabled** (each was a separate LLM call competing for the single model slot):
   - `task.title.enable: false` (title generation)
