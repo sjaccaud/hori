@@ -45,10 +45,114 @@ STATE_DIR = Path(os.environ.get(
 RUNS_LOG = STATE_DIR / "runs.jsonl"
 STATUS_TTL = 20  # seconds; probes are cached this long
 
+# Directories scanned for auto-discovery. New .sh/.py files not already in
+# the catalog become 'inbox' stub entries (runnable=false — always safe).
+# Globs stay shallow on purpose: recursing into services/*/ or llama-builds/*
+# would sweep up package source and test files, not just ops scripts.
+# (root, origin label, glob patterns)
+# /opt/scripts is deliberately absent: it mirrors ~/scripts (deployed
+# copies), so scanning it would only produce duplicate stubs.
+SCAN_DIRS = [
+    ("~/scripts", "~/scripts", ("*.sh", "*.py")),
+    ("~/.local/bin", "~/.local/bin", ("*.sh", "*.py")),
+    ("~/Games/Heroic/Scripts", "Heroic scripts", ("*.sh", "*.py")),
+    ("~/llama-builds", "llama-builds", ("*/*.sh", "*/*.py")),
+    ("~/Projects/aios/scripts", "aios/scripts", ("*.sh", "*.py")),
+    ("~/Projects/aios/services", "aios services", ("*/*.sh", "*/*.py")),
+]
+SCAN_SKIP_PREFIXES = ("test_", "conftest")
+SCAN_SKIP_NAMES = {"__init__.py"}
+
+
+def _looks_like_script(f: Path) -> bool:
+    """Only count files that are actually invocable as scripts: *.sh always;
+    *.py only when executable or carrying a shebang — otherwise it's a
+    package module (config.py, intent.py), not an ops script."""
+    if f.suffix == ".sh":
+        return True
+    if f.suffix != ".py":
+        return False
+    try:
+        if f.stat().st_mode & 0o111:
+            return True
+        with open(f, "rb") as fh:
+            return fh.readline().startswith(b"#!")
+    except OSError:
+        return False
+
 
 def load_catalog() -> dict:
     with open(CATALOG_PATH) as f:
-        return json.load(f)
+        cat = json.load(f)
+    cat["scripts"] = cat.get("scripts", []) + discover_stubs(cat["scripts"])
+    return cat
+
+
+def _first_comment_lines(path: Path, max_lines: int = 2) -> str:
+    """Pull the leading comment/docstring lines as a one-line 'what' guess."""
+    out = []
+    try:
+        with open(path, errors="replace") as f:
+            for raw in f:
+                line = raw.strip()
+                if line.startswith("#!") or not line:
+                    continue
+                if line.startswith("#"):
+                    line = line.lstrip("#").strip()
+                elif line.startswith('"""') or line.startswith("'''"):
+                    line = line.strip("\"'").strip()
+                else:
+                    break
+                if line and not line.startswith("!"):
+                    out.append(line)
+                if len(out) >= max_lines:
+                    break
+    except OSError:
+        pass
+    return " ".join(out)[:200]
+
+
+def discover_stubs(existing: list[dict]) -> list[dict]:
+    """Find script files on disk that aren't cataloged yet; return stub
+    entries. Dedupes by expanded absolute path — a real catalog entry for
+    the same path always wins over the stub."""
+    known = {os.path.abspath(expand(e.get("path", ""))) for e in existing}
+    stubs = []
+    for root, origin, patterns in SCAN_DIRS:
+        root_p = Path(expand(root))
+        if not root_p.is_dir():
+            continue
+        files = set()
+        for pat in patterns:
+            files.update(f for f in root_p.glob(pat) if f.is_file())
+        for f in sorted(files):
+            if f.name.startswith(SCAN_SKIP_PREFIXES) or f.name in SCAN_SKIP_NAMES:
+                continue
+            if not _looks_like_script(f):
+                continue
+            ap = os.path.abspath(f)
+            if ap in known:
+                continue
+            sid = "auto-" + f.stem.lower().replace("_", "-")
+            if any(s["id"] == sid for s in existing) or any(s["id"] == sid for s in stubs):
+                continue
+            home = os.path.expanduser("~")
+            rel = "~" + ap[len(home):] if ap.startswith(home) else ap
+            stubs.append({
+                "id": sid,
+                "name": f.name,
+                "path": rel,
+                "category": "inbox",
+                "what": _first_comment_lines(f) or "(auto-discovered — no header comment)",
+                "why": "",
+                "created": time.strftime("%Y-%m-%d", time.localtime(f.stat().st_mtime)),
+                "kind": "script",
+                "runnable": False,
+                "auto": True,
+                "notes": f"Auto-discovered in {origin}; copy into catalog.json and enrich to curate.",
+                "tags": ["auto"],
+            })
+    return stubs
 
 
 # --------------------------------------------------------------------------
@@ -337,7 +441,7 @@ function renderRows(){
     const st=s.status||{state:'n/a'};
     const lr=s.last_run;
     tr.innerHTML=`<td title="${esc(st.detail||'')}"><span class="dot ${st.state==='n/a'?'na':st.state}"></span></td>
-      <td><div class="name">${esc(s.name)}</div><div class="alias">${esc(s.id)}${s.kind?' · '+s.kind:''}</div></td>
+      <td><div class="name">${esc(s.name)}${s.auto?' <span class="badge" style="border-color:var(--warn);color:var(--warn)">new</span>':''}</div><div class="alias">${esc(s.id)}${s.kind?' · '+s.kind:''}</div></td>
       <td><span class="badge">${esc(s.category)}</span></td>
       <td class="desc">${esc(s.what)}</td>
       <td class="why">${esc(s.why||'')}</td>

@@ -71,7 +71,8 @@
       "tags": [
         "benchmark",
         "inference"
-      ]
+      ],
+      "notes": "Deployed copy also at /opt/scripts/benchmark-llamacpp.sh."
     },
     {
       "id": "benchmark-port",
@@ -716,7 +717,7 @@
       "created": "2026-08-17",
       "kind": "script",
       "runnable": false,
-      "notes": "Dormant — single GPU currently installed.",
+      "notes": "Dormant — single GPU currently installed. Deployed copy also at /opt/scripts/switch-to-dual-gpu.sh.",
       "tags": [
         "gpu",
         "dormant"
@@ -802,6 +803,92 @@
       "tags": [
         "owui",
         "docker"
+      ]
+    },
+    {
+      "id": "fix-tooling",
+      "name": "fix_tooling.py",
+      "path": "~/Projects/aios/services/open-webui/fix_tooling.py",
+      "category": "ai-stack",
+      "what": "Canonical OWUI model-config writer: system prompts, params (temp/max_tokens/presence_penalty), display names, model order, web_search arming, tool-server connections.",
+      "why": "The OWUI DB is source of truth; this is the idempotent writer that keeps it in sync with code. New presets (deepdive/free) are defined here.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Run via apply-model-config.sh — it handles the safe DB copy dance. Never run against the live DB directly.",
+      "tags": [
+        "owui",
+        "config",
+        "canonical"
+      ]
+    },
+    {
+      "id": "set-context-lengths",
+      "name": "set_context_lengths.py",
+      "path": "~/Projects/aios/services/open-webui/set_context_lengths.py",
+      "category": "ai-stack",
+      "what": "Writes per-model context_length/num_ctx/max_tokens into the OWUI DB (mirrored by MAX_TOKENS in fix_tooling.py).",
+      "why": "OWUI needs to know each preset's real ctx or it silently truncates — the 4096-cap incident.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Run via apply-model-config.sh.",
+      "tags": [
+        "owui",
+        "config"
+      ]
+    },
+    {
+      "id": "make-models-workspace",
+      "name": "make_models_workspace.py",
+      "path": "~/Projects/aios/services/open-webui/make_models_workspace.py",
+      "category": "ai-stack",
+      "what": "Sets base_model_id=NULL on workspace models so OWUI overrides the base instead of skipping it.",
+      "why": "Without it the router-alias workspace models don't appear correctly.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Run via apply-model-config.sh.",
+      "tags": [
+        "owui",
+        "config"
+      ]
+    },
+    {
+      "id": "patch-model-names",
+      "name": "patch_openai_model_names.py",
+      "path": "~/Projects/aios/services/open-webui/patch_openai_model_names.py",
+      "category": "ai-stack",
+      "what": "Patches Open-WebUI's openai.py inside the container so /v1/models carries workspace display names.",
+      "why": "docker compose up -d recreates the container and wipes the patch — this is why model names revert after recreates.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Auto-run by apply-model-config.sh; must be re-applied after any container recreate.",
+      "tags": [
+        "owui",
+        "patch",
+        "container"
+      ]
+    },
+    {
+      "id": "script-panel",
+      "name": "script_panel.py (this panel)",
+      "path": "~/Projects/aios/services/script-panel/script_panel.py",
+      "category": "system",
+      "what": "The control panel itself — catalog server + UI + gated run API on 127.0.0.1:8770.",
+      "why": "Meta entry so the panel can report its own health.",
+      "created": "2026-09-07",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "script-panel.service",
+        "scope": "user"
+      },
+      "tags": [
+        "panel",
+        "systemd"
       ]
     }
   ]
