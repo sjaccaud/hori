@@ -26,15 +26,14 @@ scripts are updated to reflect the new remote surface.
 - Full relevant test suite passes.
 
 **Status:**
-- PRD, work order, unit tests, and adversarial tests written and passing.
-- Code committed to `rebrand/hori` (commit `6956d00`).
+- PRD, work order, unit, integration, regression, and adversarial tests passing.
+- Code committed to `rebrand/hori` (commits `6956d00` and `b32aa5e`).
 - `audit_funnel.sh` passes; Tailscale Serve exposes 443, 3443, 8443, 8444 with intended paths.
 - Live `/mcp/sse` verified over Tailnet (returns `event: endpoint` with session_id; 401 without token).
-- `https://<tailnet>:8444/v1/models` not yet verified from a remote client, but the route is live.
+- `https://<tailnet>:8444/v1/models` verified from Tailnet and returns `nano`.
 
 **Remaining before merge:**
 - Add `services/integration_tests/test_remote_mcp.py` for the full SSE+POST round-trip.
-- Run `make test` and `make test-integration` to confirm no regressions.
 - Update `docs/operations.md` and `AGENTS.md` with the new endpoint + client setup.
 - Restart aios_core via `sudo systemctl restart aios_core` once the user is ready (currently a manually restarted process is running).
 
