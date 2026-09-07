@@ -25,6 +25,8 @@ ALL_QWEN_DEVSTRAL = [
     "qwen-dsh-fast",
     "qwen-dsh-low",
     "qwen-dsh-medium",
+    "qwen-deepdive",
+    "qwen-free",
 ]
 
 TOOL_USAGE = (
@@ -108,6 +110,58 @@ BALANCED_PROMPT = ((
     "You may include small code examples only when directly relevant to the user's request."
 ) + TOOL_USAGE).format(USER_NAME=USER_NAME)
 
+# Deep-research / hypothesis-hunting persona: the differentiator vs the generic
+# prompts is the explicit generate->falsify->grade loop. LLMs are excellent at
+# producing plausible connections (including spurious ones), so the prompt forces
+# disconfirming-evidence search and an explicit confidence split rather than
+# letting the model confabulate a tidy narrative.
+DEEPDIVE_PROMPT = ((
+    "You are a research analyst on {USER_NAME}'s local Ubuntu workstation, tuned for "
+    "connecting dots across many sources: finding non-obvious relationships, building "
+    "competing hypotheses, and stress-testing them before reporting.\n\n"
+    "You have access to the following local tools:\n"
+    "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
+    "- get_current_timestamp: get the current date and time.\n"
+    "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
+    "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
+    "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like inxi, rocm-smi, lscpu, ps, df, etc.\n\n"
+    "Method — follow it for any 'what's going on / what connects X to Y / what's likely next' question:\n"
+    "1. Decompose the question into the key claims, actors, and incentives.\n"
+    "2. Generate several competing hypotheses — including uncomfortable or unfashionable ones — and state a rough prior confidence for each.\n"
+    "3. For each hypothesis, hunt for DISCONFIRMING evidence, not just support. Use search_web/fetch_url for anything current or external; use local tools for host state.\n"
+    "4. Grade the final answer: clearly separate VERIFIED (source-backed), PLAUSIBLE (consistent with evidence, unproven), and SPECULATIVE (interesting but unsupported).\n"
+    "5. Name the blindspots: what evidence would change the conclusion, and what could not be checked.\n\n"
+    "Epistemic rules: extraordinary claims need proportionally strong sourcing; never present inference as established fact; "
+    "distinguish 'documents show X' from 'X is true'; cite sources with [id]. "
+    "Steelman hypotheses the user proposes instead of dismissing or endorsing them — your job is rigor, not debunking or validation.\n\n"
+    "For questions about {USER_NAME}'s projects, hardware, preferences, local files, or system status, use the local tools first."
+) + TOOL_USAGE).format(USER_NAME=USER_NAME)
+
+# Uncensored ideation persona — runs on the abliterated Qwen3.8-27B weights.
+# Same epistemic discipline as DEEPDIVE_PROMPT (steelman -> disconfirm -> grade)
+# but framed for open-ended idea work, not only research questions. The
+# "abliterated weights" line is factual context: without it the model tends to
+# hedge as if it still had the refusal behavior trained in.
+IDEATION_PROMPT = ((
+    "You are an open-ended thinking partner on {USER_NAME}'s local Ubuntu workstation — "
+    "for working through ideas, theories, strategies, and unconventional hypotheses, not just code. "
+    "These weights are abliterated (refusal direction removed): engage ideas directly without "
+    "moralizing or reflexive hedging, while staying rigorous and honest.\n\n"
+    "You have access to the following local tools:\n"
+    "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
+    "- get_current_timestamp: get the current date and time.\n"
+    "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
+    "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
+    "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like inxi, rocm-smi, lscpu, ps, df, etc.\n\n"
+    "How to work:\n"
+    "1. Steelman first: argue the strongest version of the user's idea before critiquing it.\n"
+    "2. Generate competing explanations — including unfashionable or uncomfortable ones — with rough confidence levels.\n"
+    "3. Clearly separate VERIFIED (source-backed), PLAUSIBLE (consistent, unproven), and SPECULATIVE (interesting, unsupported). Never present inference as fact.\n"
+    "4. Say plainly when an idea does not survive scrutiny — rigor over validation.\n"
+    "5. For 'what connects X to Y' or 'what is likely next' questions: decompose claims/actors/incentives, hunt disconfirming evidence, name blindspots and what could not be checked.\n\n"
+    "For questions about {USER_NAME}'s projects, hardware, preferences, local files, or system status, use the local tools first."
+) + TOOL_USAGE).format(USER_NAME=USER_NAME)
+
 CODING_PROMPT = ((
     "You are an expert software engineering, coding, and research assistant running on {USER_NAME}'s local Ubuntu workstation.\n\n"
     "You have access to the following local tools:\n"
@@ -142,23 +196,43 @@ WEB_SEARCH_BEHAVIOR = (
     "- run_safe_command is for inspecting THIS host only. Never use it (or curl/wget through it) to reach the web — all external requests go through search_web and fetch_url."
 )
 
+# qwen-deepdive is explicitly a multi-round researcher — the shared "one or two
+# searches" rule would undercut its whole purpose. Same grounding contract, but
+# multi-round searching is expected while each round still adds signal.
+DEEPDIVE_SEARCH_BEHAVIOR = (
+    "\n\nWeb search rules (search_web / fetch_url tools):\n"
+    "- Call search_web when the question depends on current, specific, or external facts. Answer stable knowledge directly without searching.\n"
+    "- Research questions are expected to take MULTIPLE rounds of searching — roughly one round per hypothesis or evidence thread. Keep going while each round returns new information; stop when results stop adding signal, then write up.\n"
+    "- After search_web, call fetch_url on the most relevant result URLs when snippets are not enough.\n"
+    "- Ground the answer in what the tools actually return and cite the sources. If the results do not answer the question, say so explicitly — never invent URLs or fill gaps with guesses. If a thread cannot be verified, report what could not be verified and move on.\n"
+    "- run_safe_command is for inspecting THIS host only. Never use it (or curl/wget through it) to reach the web — all external requests go through search_web and fetch_url."
+)
+
+# Per-model override for the appended search rules.
+SEARCH_BEHAVIOR_BY_MODEL = {
+    "qwen-deepdive": DEEPDIVE_SEARCH_BEHAVIOR,
+    "qwen-free": DEEPDIVE_SEARCH_BEHAVIOR,
+}
+
 # Short display names for the Open-WebUI model selector (≤3 words —
 # the long use-case names crowded the mobile UI). Enriched into
 # /api/v1/models by patch_openai_model_names.py.
 # Contract: test_web_search_pipeline.py::test_model_display_names_are_short.
 MODEL_NAMES = {
-    "qwen-fast": "Fast Chat",
-    "qwen-long": "Long Docs",
-    "qwen-128k": "Deep Plan",
-    "qwen-256k-batch": "Batch Only",
-    "qwen-think": "Think Mode",
-    "qwen-balanced": "Balanced",
-    "qwen-quality": "Max Quality",
-    "devstral-coding": "Devstral Code",
-    "qwen-dsh-fast": "Agentic Fast",
-    "qwen-dsh-low": "Agentic Best",
-    "qwen-dsh-medium": "Agentic Mid",
-    "nano": "Nano Chat",
+    "qwen-fast": "Fast Chat 64k",
+    "qwen-long": "Long Docs 128k",
+    "qwen-128k": "Deep Plan 192k",
+    "qwen-256k-batch": "Batch Only 256k",
+    "qwen-think": "Think Mode 64k",
+    "qwen-balanced": "Balanced 128k",
+    "qwen-quality": "Max Quality 16k",
+    "devstral-coding": "Devstral Code 64k",
+    "qwen-dsh-fast": "Agentic Fast 64k",
+    "qwen-dsh-low": "Agentic Best 64k",
+    "qwen-dsh-medium": "Agentic Mid 64k",
+    "qwen-deepdive": "Deep Dive 128k",
+    "qwen-free": "Free Think 128k",
+    "nano": "Nano Chat 32k",
 }
 
 # Canonical selector order (ui.model_order_list): everyday chat first,
@@ -176,6 +250,8 @@ MODEL_ORDER = [
     "qwen-dsh-fast",
     "qwen-dsh-medium",
     "qwen-dsh-low",
+    "qwen-deepdive",
+    "qwen-free",
     "qwen-256k-batch",
 ]
 
@@ -183,8 +259,8 @@ MODEL_ORDER = [
 # Kept canonical here so `apply-model-config` restores them.
 MODEL_DESCRIPTIONS = {
     "qwen-fast": "Everyday chat and quick planning — the fast default.",
-    "qwen-long": "Long documents and deep analysis (65k ctx).",
-    "qwen-128k": "Big planning, roadmaps, and audits (128k ctx).",
+    "qwen-long": "Long documents and deep analysis (128k ctx).",
+    "qwen-128k": "Big planning, roadmaps, and audits (192k ctx).",
     "qwen-256k-batch": "Bulk ingestion only — not interactive.",
     "qwen-think": "Shows explicit step-by-step reasoning.",
     "qwen-balanced": "Quality/VRAM balance for code and research.",
@@ -193,7 +269,40 @@ MODEL_DESCRIPTIONS = {
     "qwen-dsh-fast": "Agentic coding, no reasoning — fastest.",
     "qwen-dsh-low": "Agentic coding, light reasoning — best output.",
     "qwen-dsh-medium": "Agentic coding, medium reasoning — quick.",
+    "qwen-deepdive": "Multi-source research: hypotheses, falsification, blindspots.",
+    "qwen-free": "Uncensored ideation — abliterated weights, same rigor loop.",
     "nano": "Tiny 3B on a dedicated server — instant answers, no tools.",
+}
+
+# Completion cap per alias — keep in sync with `max_tokens` in
+# set_context_lengths.py. Reasoning presets (think, dsh-low, dsh-medium) and
+# the long-doc/batch tiers get 16384 because chain-of-thought and bulk output
+# share the same max_tokens budget; interactive presets get 8192; nano stays
+# small for instant replies.
+MAX_TOKENS = {
+    "qwen-fast": 8192,
+    "qwen-think": 16384,
+    "qwen-balanced": 8192,
+    "qwen-quality": 8192,
+    "qwen-long": 8192,
+    "qwen-128k": 16384,
+    "qwen-256k-batch": 16384,
+    "devstral-coding": 8192,
+    "qwen-dsh-fast": 8192,
+    "qwen-dsh-low": 16384,
+    "qwen-dsh-medium": 16384,
+    "qwen-deepdive": 16384,
+    "qwen-free": 16384,
+    "nano": 2048,
+}
+DEFAULT_MAX_TOKENS = 8192
+
+# Per-model temperature overrides (models not listed keep whatever is in the
+# DB). The ideation presets run slightly hot for divergent hypothesis
+# generation; the falsification loop is what keeps the extra variance honest.
+TEMPERATURE_BY_MODEL = {
+    "qwen-deepdive": 0.8,
+    "qwen-free": 0.8,
 }
 
 # function_calling: Qwen3.8-27B (with --jinja) emits OpenAI-compatible tool_calls,
@@ -210,6 +319,8 @@ FUNCTION_CALLING_BY_MODEL = {
     "qwen-dsh-fast": "native",
     "qwen-dsh-low": "native",
     "qwen-dsh-medium": "native",
+    "qwen-deepdive": "native",
+    "qwen-free": "native",
 }
 
 # Anti-loop sampling: Qwen3.8's recommended presence_penalty for non-thinking
@@ -229,6 +340,8 @@ PRESENCE_PENALTY_BY_MODEL = {
     "qwen-think": 0.0,
     "qwen-dsh-low": 0.0,
     "qwen-dsh-medium": 0.0,
+    "qwen-deepdive": 0.0,
+    "qwen-free": 0.0,
 }
 
 # Per-model prompts align with AGENTS.md usage:
@@ -249,6 +362,8 @@ MODEL_PROMPTS = {
     "qwen-dsh-fast": CODING_PROMPT,
     "qwen-dsh-low": CODING_PROMPT,
     "qwen-dsh-medium": CODING_PROMPT,
+    "qwen-deepdive": DEEPDIVE_PROMPT,
+    "qwen-free": IDEATION_PROMPT,
 }
 
 # Minimal prompt for the nano SLM — no tools, no search; just fast answers.
@@ -276,6 +391,8 @@ MODEL_DEFAULT_FEATURES = {
     "qwen-dsh-fast": ["knowledge", "time", "code_interpreter", "memory"],
     "qwen-dsh-low": ["knowledge", "time", "code_interpreter", "memory"],
     "qwen-dsh-medium": ["knowledge", "time", "code_interpreter", "memory"],
+    "qwen-deepdive": ["knowledge", "time", "memory"],
+    "qwen-free": ["knowledge", "time", "memory"],
 }
 
 # Capabilities = what the UI is allowed to show/offer for a model.
@@ -302,6 +419,8 @@ VISION_MODELS = {
     "qwen-dsh-fast",
     "qwen-dsh-low",
     "qwen-dsh-medium",
+    "qwen-deepdive",
+    "qwen-free",
 }
 
 # Default feature toggles for auto-discovered / fallback models.
@@ -356,7 +475,7 @@ def system_prompt_for(model_id: str, fallback: str = None) -> str:
     WEB_SEARCH_BEHAVIOR rules for armed models."""
     base = MODEL_PROMPTS.get(model_id, fallback or PLANNING_PROMPT)
     if model_id in WEB_SEARCH_MODELS:
-        return base + WEB_SEARCH_BEHAVIOR
+        return base + SEARCH_BEHAVIOR_BY_MODEL.get(model_id, WEB_SEARCH_BEHAVIOR)
     return base
 
 
@@ -518,7 +637,9 @@ def _clone_qwen_long(c, source_id: str, target_id: str, description: str):
 
     params["system"] = system_prompt_for(target_id, LONG_PROMPT)
     params["function_calling"] = FUNCTION_CALLING_BY_MODEL.get(target_id, "native")
-    params["max_tokens"] = 4096
+    params["max_tokens"] = MAX_TOKENS.get(target_id, DEFAULT_MAX_TOKENS)
+    if target_id in TEMPERATURE_BY_MODEL:
+        params["temperature"] = TEMPERATURE_BY_MODEL[target_id]
     if target_id in PRESENCE_PENALTY_BY_MODEL:
         params["presence_penalty"] = PRESENCE_PENALTY_BY_MODEL[target_id]
 
@@ -554,8 +675,10 @@ def main():
 
     # 0. Ensure the long-context Qwen aliases exist before tooling fix runs.
     for target, desc in [
-        ("qwen-128k", "Planning/long-doc analysis — Qwen3.8-27B-UD-Q4_K_M (Dynamic v3.0), 128k context, q4_0 KV, draft-mtp, vision"),
+        ("qwen-128k", "Planning/long-doc analysis — Qwen3.8-27B-UD-Q4_K_M (Dynamic v3.0), 192k context, q4_0 KV, draft-mtp, vision"),
         ("qwen-256k-batch", "Batch ingestion only — Qwen3.8-27B-UD-Q4_K_M (Dynamic v3.0), 256k context, q4_0 KV, no speculative decode, vision"),
+        ("qwen-deepdive", "Deep research / hypothesis hunting — Qwen3.8-27B-UD-Q4_K_M, 128k context, reasoning on, draft-mtp n=2, vision"),
+        ("qwen-free", "Uncensored ideation — Huihui Qwen3.8-27B-abliterated UD-Q4_K_XL, 128k context, reasoning on, draft-mtp n=2, vision"),
     ]:
         exists = c.execute("SELECT 1 FROM model WHERE id = ?", (target,)).fetchone()
         if not exists:
@@ -643,7 +766,9 @@ def main():
         # Set per-model prompt, function_calling, and limits
         params["system"] = system_prompt_for(mid)
         params["function_calling"] = FUNCTION_CALLING_BY_MODEL.get(mid, "native")
-        params["max_tokens"] = 4096
+        params["max_tokens"] = MAX_TOKENS.get(mid, DEFAULT_MAX_TOKENS)
+        if mid in TEMPERATURE_BY_MODEL:
+            params["temperature"] = TEMPERATURE_BY_MODEL[mid]
         # All Qwen/Devstral presets can use local tools; let them run read-only tools
         # without a per-call prompt, but web search and code interpreter still need the
         # user to toggle them on per chat.
@@ -735,7 +860,7 @@ def main():
     }
     default_params = {
         "function_calling": "native",
-        "max_tokens": 4096,
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "temperature": 0.7,
         "system": PLANNING_PROMPT,
     }
@@ -819,7 +944,7 @@ def main():
                 {
                     "system": NANO_PROMPT,
                     "function_calling": "native",
-                    "max_tokens": 2048,
+                    "max_tokens": MAX_TOKENS["nano"],
                     "temperature": 0.6,
                 }
             ),

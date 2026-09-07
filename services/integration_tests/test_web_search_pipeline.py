@@ -170,7 +170,11 @@ class TestStaticConfig:
         for line in text.splitlines():
             if "CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS" in line:
                 value = int(line.split("=")[-1].strip().strip('"\''))
-                assert 1 <= value <= 8, f"cap should be small (1-8), got {value}"
+                # Bounded but not tiny: 4 killed a legit 12-search research
+                # chat on 2026-09-07 (empty reply). 16 is the sweet spot —
+                # enough for multi-round research, still far below OWUI's
+                # runaway-friendly default of 256.
+                assert 1 <= value <= 24, f"cap should be bounded (1-24), got {value}"
                 return
         pytest.fail("cap mentioned but no value parsed")
 

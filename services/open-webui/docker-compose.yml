@@ -21,14 +21,16 @@ services:
       - ENABLE_ORJSON=true
       - ENABLE_TOOL_PERMISSIONS=true
       # Cap runaway native tool-call loops (OWUI default is 256 iterations —
-      # a confused local model can spin for minutes). 4 covers
-      # search→fetch→answer with headroom.
-      - CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS=4
+      # a confused local model can spin for minutes). 16 covers multi-round
+      # research (parallel search_web calls per round) while still bounding
+      # a true runaway; 4 killed a legit 12-search research chat on
+      # 2026-09-07 with an empty reply.
+      - CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS=16
       - ENABLE_OLLAMA_API=false
       - ENABLE_IMAGE_GENERATION=false
       - DEFAULT_MODELS=qwen-fast
       - DEFAULT_MODEL_METADATA={"capabilities":{"web_search":true,"knowledge":true,"memory":true,"builtin_tools":true,"code_interpreter":true,"time":true},"default_feature_ids":["knowledge","time","memory"],"builtinTools":{"knowledge":true,"time":true,"code_interpreter":true,"web_search":true}}
-      - DEFAULT_MODEL_PARAMS={"function_calling":"native","max_tokens":4096,"temperature":0.7}
+      - DEFAULT_MODEL_PARAMS={"function_calling":"native","max_tokens":8192,"temperature":0.7}
       - RAG_TOP_K=5
       - RAG_CHUNK_SIZE=1000
       - RAG_RELEVANCE_THRESHOLD=0.0

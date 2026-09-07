@@ -24,6 +24,8 @@ WORKSPACE_MODELS = [
     "qwen-dsh-fast",
     "qwen-dsh-low",
     "qwen-dsh-medium",
+    "qwen-deepdive",
+    "qwen-free",
 ]
 
 for mid in WORKSPACE_MODELS:
