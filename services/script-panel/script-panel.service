@@ -1,0 +1,19 @@
+[Unit]
+Description=Script Panel — control panel for the accumulated script library
+Documentation=https://127.0.0.1:8770/
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/Projects/aios/venv/bin/python3 %h/Projects/aios/services/script-panel/script_panel.py
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=%h/Projects/aios
+
+# Localhost only — the panel can execute allowlisted scripts.
+Environment=SCRIPT_PANEL_HOST=127.0.0.1
+Environment=SCRIPT_PANEL_PORT=8770
+Environment=SCRIPT_PANEL_TIMEOUT=120
+
+[Install]
+WantedBy=default.target

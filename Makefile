@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-llama-nano check-llama-nano
+.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-llama-nano check-llama-nano install-script-panel check-script-panel
 
 # Default target
 test: test-all
@@ -112,6 +112,18 @@ install-llama-nano:
 # Quick health check for the nano server.
 check-llama-nano:
 	@./venv/bin/python3 -c "import urllib.request, json; print(json.load(urllib.request.urlopen('http://127.0.0.1:8090/v1/models')))"
+
+# Install and start the script-panel control panel on 127.0.0.1:8770.
+install-script-panel:
+	@echo "🔗 Installing script-panel systemd user service..."
+	@mkdir -p "$${HOME}/.config/systemd/user"
+	@cp ./services/script-panel/script-panel.service "$${HOME}/.config/systemd/user/script-panel.service"
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now script-panel
+
+# Quick health check for the script panel.
+check-script-panel:
+	@./venv/bin/python3 -c "import urllib.request, json; d=json.load(urllib.request.urlopen('http://127.0.0.1:8770/api/catalog')); print(len(d['scripts']), 'scripts in catalog')"
 
 # Generate a SearXNG secret for the local search container if one doesn't exist.
 search-secret:

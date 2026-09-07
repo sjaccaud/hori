@@ -1,0 +1,799 @@
+{
+  "version": 1,
+  "generated": "2026-09-07",
+  "note": "Script library for the HORI/AIOS rig. Entries are hand-curated; add new scripts here when created. runnable=false rows are reference-only (installers, sudo-only, hooks, destructive). probes feed the status column.",
+  "categories": {
+    "ai-stack": "Inference, OWUI, models, benchmarks",
+    "aios-dev": "aios repo tooling — ingest, memory, hooks, health",
+    "gaming": "GameMode / Heroic / display-mode switching",
+    "power": "Idle power management",
+    "network": "WoL, SSH hardening",
+    "backup": "restic/system backups and recovery media",
+    "system": "One-shot fixes, installers, sysctl"
+  },
+  "scripts": [
+    {
+      "id": "run-llama",
+      "name": "run-llama.sh",
+      "path": "~/llama-builds/spiritbuun-714/run-llama.sh",
+      "category": "ai-stack",
+      "what": "Launches llama-server in router mode: 13 model presets from router.ini, models-max 1, --jinja, polling monitor.",
+      "why": "Single launch point for the whole inference stack; llamacpp.service ExecStarts this.",
+      "created": "2026-08",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "llamacpp.service",
+        "scope": "system"
+      },
+      "tags": [
+        "inference",
+        "router",
+        "systemd"
+      ]
+    },
+    {
+      "id": "apply-model-config",
+      "name": "apply-model-config.sh",
+      "path": "~/Projects/aios/services/open-webui/apply-model-config.sh",
+      "category": "ai-stack",
+      "what": "Stops OWUI, copies webui.db out, runs fix_tooling.py + set_context_lengths.py + make_models_workspace.py against it, copies back, restarts, re-applies the openai.py display-name patch.",
+      "why": "The OWUI DB is the source of truth for model prompts/params; editing a live DB corrupts WAL. This is the only safe apply path.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": true,
+      "confirm": true,
+      "confirm_text": "Stops Open-WebUI for ~40s. Continue?",
+      "interpreter": "bash",
+      "env": {
+        "OPENWEBUI_USER_NAME": "Jacko"
+      },
+      "timeout": 120,
+      "tags": [
+        "owui",
+        "config",
+        "disruptive"
+      ]
+    },
+    {
+      "id": "benchmark-llamacpp",
+      "name": "benchmark-llamacpp.sh",
+      "path": "~/scripts/benchmark-llamacpp.sh",
+      "category": "ai-stack",
+      "what": "Smoke-test + speed benchmark against the local llama-server endpoint (fixed model).",
+      "why": "Quick regression check after router/model changes.",
+      "created": "2026-08-17",
+      "kind": "script",
+      "runnable": true,
+      "interpreter": "bash",
+      "timeout": 300,
+      "tags": [
+        "benchmark",
+        "inference"
+      ]
+    },
+    {
+      "id": "benchmark-port",
+      "name": "benchmark-llamacpp-port.sh",
+      "path": "~/scripts/benchmark-llamacpp-port.sh",
+      "category": "ai-stack",
+      "what": "Same benchmark but takes a port argument — for A/B testing alternate configs on side ports.",
+      "why": "Used during the spec-decode / ctx tuning passes to compare configs without touching the live router.",
+      "created": "2026-08-20",
+      "kind": "script",
+      "runnable": true,
+      "interpreter": "bash",
+      "timeout": 300,
+      "tags": [
+        "benchmark",
+        "inference"
+      ]
+    },
+    {
+      "id": "run-bench-suite",
+      "name": "run-bench-suite.sh",
+      "path": "~/scripts/run-bench-suite.sh",
+      "category": "ai-stack",
+      "what": "Boots a llama-server with a custom router.ini on a test port, then runs the benchmark against it.",
+      "why": "Full A/B harness for router experiments (the spec-n sweep, ctx retunes).",
+      "created": "2026-08-20",
+      "kind": "script",
+      "runnable": true,
+      "confirm": true,
+      "confirm_text": "Spins up a second llama-server on a test port — heavy VRAM use while it runs. Continue?",
+      "interpreter": "bash",
+      "timeout": 600,
+      "tags": [
+        "benchmark",
+        "heavy"
+      ]
+    },
+    {
+      "id": "model-eval-overnight",
+      "name": "model-eval-overnight.sh",
+      "path": "~/scripts/model-eval-overnight.sh",
+      "category": "ai-stack",
+      "what": "Stops the main llama-server, runs lm-eval + speed benches across the 8 main 32GB models, restarts llamacpp.",
+      "why": "Clean-VRAM eval pass; produced the 2026-09-06 model-quality table in AGENTS.md.",
+      "created": "2026-09-06",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Disrupts the live AI stack for hours — run manually overnight.",
+      "tags": [
+        "eval",
+        "disruptive"
+      ]
+    },
+    {
+      "id": "eval-report",
+      "name": "eval-report.py",
+      "path": "~/scripts/eval-report.py",
+      "category": "ai-stack",
+      "what": "Combines overnight eval + benchmark results into one table.",
+      "why": "Companion to model-eval-overnight.sh.",
+      "created": "2026-09-06",
+      "kind": "script",
+      "runnable": true,
+      "interpreter": "python3",
+      "timeout": 60,
+      "tags": [
+        "eval",
+        "report"
+      ]
+    },
+    {
+      "id": "aios-health",
+      "name": "health.py",
+      "path": "~/Projects/aios/scripts/health.py",
+      "category": "aios-dev",
+      "what": "Quick non-sudo health check for the HORI/AIOS spine (services, sockets, recent logs).",
+      "why": "Fast triage when something feels off; read-only.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": true,
+      "interpreter": "python3",
+      "timeout": 60,
+      "tags": [
+        "health",
+        "read-only"
+      ]
+    },
+    {
+      "id": "devin-resume",
+      "name": "devin_resume.sh",
+      "path": "~/Projects/aios/scripts/devin_resume.sh",
+      "category": "aios-dev",
+      "what": "Crash-recovery checklist — verifies the 6 things a fresh Devin session needs before touching the repo.",
+      "why": "Session-continuity protocol after earlier context-loss incidents.",
+      "created": "2026-08-09",
+      "kind": "script",
+      "runnable": true,
+      "interpreter": "bash",
+      "timeout": 60,
+      "tags": [
+        "devin",
+        "read-only"
+      ]
+    },
+    {
+      "id": "install-hooks",
+      "name": "install_hooks.sh",
+      "path": "~/Projects/aios/scripts/install_hooks.sh",
+      "category": "aios-dev",
+      "what": "Reconstructs git pre-commit/pre-push hooks from a gitignored patterns file.",
+      "why": "The hooks contain PII/a real secret so they can't be committed; this rebuilds them on fresh clones.",
+      "created": "2026-08-09",
+      "kind": "script",
+      "runnable": true,
+      "confirm": true,
+      "confirm_text": "Writes .git hooks into the aios repo. Continue?",
+      "interpreter": "bash",
+      "timeout": 30,
+      "tags": [
+        "git",
+        "hooks"
+      ]
+    },
+    {
+      "id": "ingest-general",
+      "name": "ingest_general.py",
+      "path": "~/Projects/aios/scripts/ingest_general.py",
+      "category": "aios-dev",
+      "what": "Ingests general documents into the knowledge/Qdrant store.",
+      "why": "Feeds OWUI knowledge collections.",
+      "created": "2026-08-30",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Needs venv + args; run from the aios repo.",
+      "tags": [
+        "ingest",
+        "knowledge"
+      ]
+    },
+    {
+      "id": "ingest-codebase",
+      "name": "ingest_codebase.py",
+      "path": "~/Projects/aios/scripts/ingest_codebase.py",
+      "category": "aios-dev",
+      "what": "Ingests a codebase tree into the knowledge store.",
+      "why": "Same pipeline as ingest_general but tuned for source trees.",
+      "created": "2026-08-30",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Needs venv + args; run from the aios repo.",
+      "tags": [
+        "ingest",
+        "knowledge"
+      ]
+    },
+    {
+      "id": "memory-consolidation",
+      "name": "memory_consolidation.py",
+      "path": "~/Projects/aios/scripts/memory_consolidation.py",
+      "category": "aios-dev",
+      "what": "Memory consolidation pass — merges/prunes stored memories.",
+      "why": "Keeps the memory store from accreting duplicates; driven by the aios-consolidation timer.",
+      "created": "2026-08-30",
+      "kind": "script",
+      "runnable": false,
+      "probe": {
+        "type": "timer",
+        "unit": "aios-consolidation.timer",
+        "scope": "system"
+      },
+      "tags": [
+        "memory",
+        "timer"
+      ]
+    },
+    {
+      "id": "qdrant-ingest",
+      "name": "qdrant_ingest.py",
+      "path": "~/Projects/aios/scripts/qdrant_ingest.py",
+      "category": "aios-dev",
+      "what": "Direct Qdrant ingest helper.",
+      "why": "Low-level variant of the ingest scripts.",
+      "created": "2026-08-30",
+      "kind": "script",
+      "runnable": false,
+      "tags": [
+        "ingest",
+        "qdrant"
+      ]
+    },
+    {
+      "id": "audit-review",
+      "name": "audit_review.py",
+      "path": "~/Projects/aios/scripts/audit_review.py",
+      "category": "aios-dev",
+      "what": "Reviews tool-daemon / session audit logs.",
+      "why": "Post-incident and safety review tooling.",
+      "created": "2026-08-09",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Needs args; run from the aios repo.",
+      "tags": [
+        "audit"
+      ]
+    },
+    {
+      "id": "consolidation-metrics",
+      "name": "consolidation_metrics.py",
+      "path": "~/Projects/aios/scripts/consolidation_metrics.py",
+      "category": "aios-dev",
+      "what": "Quality metrics for memory-consolidation output.",
+      "why": "Regression check for the consolidation pipeline (has a test file alongside).",
+      "created": "2026-08-30",
+      "kind": "script",
+      "runnable": false,
+      "tags": [
+        "memory",
+        "metrics"
+      ]
+    },
+    {
+      "id": "toggle-game-ai",
+      "name": "toggle-game-ai.sh",
+      "path": "~/.local/bin/toggle-game-ai.sh",
+      "category": "gaming",
+      "what": "Swaps between AI-server mode and FPS gaming mode: stops/starts llama.cpp, OWUI, and the rest of the AI stack; flips GPU + power state.",
+      "why": "The 32GB card can't serve the AI stack and game well at once; this is the single switch.",
+      "created": "2026-08-24",
+      "kind": "script",
+      "runnable": true,
+      "confirm": true,
+      "confirm_text": "Toggles the AI stack off (or back on) — interrupts anything running. Continue?",
+      "interpreter": "bash",
+      "timeout": 120,
+      "tags": [
+        "gaming",
+        "disruptive"
+      ]
+    },
+    {
+      "id": "gamemode-start",
+      "name": "gamemode-start.sh",
+      "path": "~/.local/bin/gamemode-start.sh",
+      "category": "gaming",
+      "what": "GameMode start hook: disables watchdogs/perf restrictions and pauses background timers.",
+      "why": "Games need the CPU governor and no background backup/eval timers stealing cycles.",
+      "created": "2026-08-23",
+      "kind": "hook",
+      "runnable": false,
+      "notes": "Invoked by GameMode, not by hand.",
+      "tags": [
+        "gamemode",
+        "hook"
+      ]
+    },
+    {
+      "id": "gamemode-end",
+      "name": "gamemode-end.sh",
+      "path": "~/.local/bin/gamemode-end.sh",
+      "category": "gaming",
+      "what": "GameMode end hook: restores watchdogs/perf settings and restarts background timers.",
+      "why": "Undoes gamemode-start.sh when the game exits.",
+      "created": "2026-08-23",
+      "kind": "hook",
+      "runnable": false,
+      "tags": [
+        "gamemode",
+        "hook"
+      ]
+    },
+    {
+      "id": "gamemode-gpu",
+      "name": "gamemode-gpu.sh",
+      "path": "~/.local/bin/gamemode-gpu.sh",
+      "category": "gaming",
+      "what": "GameMode GPU helper: sets/restores high-performance dGPU state; works without sudo once the amdgpu udev rule is in place.",
+      "why": "Forces the R9700 into its performance profile during play.",
+      "created": "2026-08-24",
+      "kind": "hook",
+      "runnable": false,
+      "tags": [
+        "gamemode",
+        "gpu",
+        "hook"
+      ]
+    },
+    {
+      "id": "cp77-pre",
+      "name": "cp77_pre_launch.sh",
+      "path": "~/Games/Heroic/Scripts/cp77_pre_launch.sh",
+      "category": "gaming",
+      "what": "Sets DP-1 to the in-game Cyberpunk resolution + VRR/165Hz and forces GNOME scale 1.0.",
+      "why": "Without it the game renders at the wrong scale/res on the 4K display.",
+      "created": "2026-08-24",
+      "kind": "hook",
+      "runnable": false,
+      "notes": "Heroic pre-launch hook.",
+      "tags": [
+        "cp77",
+        "display",
+        "hook"
+      ]
+    },
+    {
+      "id": "cp77-post",
+      "name": "cp77_post_launch.sh",
+      "path": "~/Games/Heroic/Scripts/cp77_post_launch.sh",
+      "category": "gaming",
+      "what": "Restores DP-1 to the mode/scale saved by cp77_pre_launch.sh.",
+      "why": "Undoes the pre-launch display change.",
+      "created": "2026-08-24",
+      "kind": "hook",
+      "runnable": false,
+      "tags": [
+        "cp77",
+        "display",
+        "hook"
+      ]
+    },
+    {
+      "id": "cp77-display",
+      "name": "cp77_display.py",
+      "path": "~/Games/Heroic/Scripts/cp77_display.py",
+      "category": "gaming",
+      "what": "Sets or restores DP-1 mode for Cyberpunk 2077 based on in-game resolution (the logic the pre/post hooks call).",
+      "why": "Central display-mode engine; owns the saved-state file.",
+      "created": "2026-09-06",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Driven by the pre/post hooks; has a 'current' mode for debugging.",
+      "tags": [
+        "cp77",
+        "display"
+      ]
+    },
+    {
+      "id": "cleanup-gaming-cruft",
+      "name": "cleanup-gaming-cruft.sh",
+      "path": "~/scripts/cleanup-gaming-cruft.sh",
+      "category": "gaming",
+      "what": "Removes Bottles (and its Rockstar bottle) while keeping Steam, Heroic, Sunshine.",
+      "why": "One-off cleanup from the 2026-09-04 gaming-stack tidy.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "notes": "Destructive; sudo only; already run — kept for reference.",
+      "tags": [
+        "cleanup",
+        "sudo"
+      ]
+    },
+    {
+      "id": "ai-power-manager",
+      "name": "ai-power-manager.sh",
+      "path": "~/.local/bin/ai-power-manager.sh",
+      "category": "power",
+      "what": "Idle-power daemon: drops the box to a low-power profile when idle, keeps it reachable/responsive when in use.",
+      "why": "The rig idles hot otherwise; saves real wattage without breaking WoL/SSH.",
+      "created": "2026-09-04",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "ai-power-manager.service",
+        "scope": "system"
+      },
+      "tags": [
+        "power",
+        "daemon",
+        "systemd"
+      ]
+    },
+    {
+      "id": "ai-power-manager-gui",
+      "name": "ai-power-manager-gui.py",
+      "path": "~/.local/bin/ai-power-manager-gui.py",
+      "category": "power",
+      "what": "GUI status/control app for the power manager (desktop icon).",
+      "why": "At-a-glance idle/active state without systemctl.",
+      "created": "2026-09-04",
+      "kind": "app",
+      "runnable": false,
+      "notes": "GUI app — launch from the desktop, not the panel.",
+      "tags": [
+        "power",
+        "gui"
+      ]
+    },
+    {
+      "id": "install-ai-power-manager",
+      "name": "install-ai-power-manager.sh",
+      "path": "~/scripts/install-ai-power-manager.sh",
+      "category": "power",
+      "what": "Installs the ai-power-manager systemd service.",
+      "why": "One-time installer (already applied).",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "tags": [
+        "install",
+        "sudo"
+      ]
+    },
+    {
+      "id": "install-ai-power-manager-gui",
+      "name": "install-ai-power-manager-gui.sh",
+      "path": "~/scripts/install-ai-power-manager-gui.sh",
+      "category": "power",
+      "what": "Installs the GUI desktop icon (user-level, no sudo).",
+      "why": "One-time installer (already applied).",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "tags": [
+        "install"
+      ]
+    },
+    {
+      "id": "wol-keepalive",
+      "name": "wol-keepalive.sh",
+      "path": "~/scripts/wol-keepalive.sh",
+      "category": "network",
+      "what": "Re-arms Wake-on-LAN on the Aquantia NIC (B850 AI TOP drops the setting); runs as a sleep hook + boot one-shot.",
+      "why": "Without it WoL silently stops working after suspend/reboot — the box becomes unreachable remotely.",
+      "created": "2026-08-21",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "wol-enp7s0.service",
+        "scope": "system"
+      },
+      "tags": [
+        "wol",
+        "hook",
+        "systemd"
+      ]
+    },
+    {
+      "id": "install-wol-fix",
+      "name": "install-wol-fix.sh",
+      "path": "~/scripts/install-wol-fix.sh",
+      "category": "network",
+      "what": "Installs the WoL sleep hook + one-shot service.",
+      "why": "One-time installer (already applied).",
+      "created": "2026-08-21",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "tags": [
+        "install",
+        "wol",
+        "sudo"
+      ]
+    },
+    {
+      "id": "harden-ssh",
+      "name": "harden-ssh-for-public.sh",
+      "path": "~/scripts/harden-ssh-for-public.sh",
+      "category": "network",
+      "what": "Hardens sshd while keeping public-WiFi/5G + Tailscale access working.",
+      "why": "SSH was exposed on untrusted networks; this locked it down without locking the owner out.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "notes": "Already applied; rerun only after sshd config changes.",
+      "tags": [
+        "ssh",
+        "security",
+        "sudo"
+      ]
+    },
+    {
+      "id": "whole-ubuntu-backup",
+      "name": "whole-ubuntu-backup.sh",
+      "path": "~/scripts/whole-ubuntu-backup.sh",
+      "category": "backup",
+      "what": "Full-system restic backup to the 8TB drive.",
+      "why": "Bare-metal recovery for the OS disk.",
+      "created": "2026-08-17",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "probe": {
+        "type": "timer",
+        "unit": "restic-ubuntu-backup.timer",
+        "scope": "system"
+      },
+      "notes": "Timer-driven (restic-ubuntu-backup.timer); status column shows schedule.",
+      "tags": [
+        "restic",
+        "backup",
+        "sudo"
+      ]
+    },
+    {
+      "id": "whole-ubuntu-prune",
+      "name": "whole-ubuntu-prune.sh",
+      "path": "~/scripts/whole-ubuntu-prune.sh",
+      "category": "backup",
+      "what": "Prunes old restic snapshots per retention policy.",
+      "why": "Keeps the 8TB repo from growing unbounded.",
+      "created": "2026-09-06",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "probe": {
+        "type": "timer",
+        "unit": "restic-ubuntu-prune.timer",
+        "scope": "system"
+      },
+      "tags": [
+        "restic",
+        "backup",
+        "sudo"
+      ]
+    },
+    {
+      "id": "install-whole-ubuntu-backup",
+      "name": "install-whole-ubuntu-backup.sh",
+      "path": "~/scripts/install-whole-ubuntu-backup.sh",
+      "category": "backup",
+      "what": "Installs the restic backup service + timer.",
+      "why": "One-time installer (already applied).",
+      "created": "2026-08-17",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "tags": [
+        "install",
+        "backup",
+        "sudo"
+      ]
+    },
+    {
+      "id": "open-webui-backup",
+      "name": "open-webui-backup.sh",
+      "path": "~/scripts/open-webui-backup.sh",
+      "category": "backup",
+      "what": "Backs up the Open-WebUI data (chats, webui.db) to the 8TB cold drive.",
+      "why": "The DB holds all chat history + model config — and has already been corrupted once by a docker-cp mishap.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "notes": "Requires the 8TB drive mounted; run manually with sudo.",
+      "tags": [
+        "backup",
+        "owui",
+        "sudo"
+      ]
+    },
+    {
+      "id": "fresh-start-4tb",
+      "name": "fresh-start-4tb-copy.sh",
+      "path": "~/scripts/fresh-start-4tb-copy.sh",
+      "category": "backup",
+      "what": "Copies irreplaceable small files + current model weights to the external 4TB SSD — a portable, Mac-independent recovery set.",
+      "why": "The 'grab one drive and rebuild anywhere' kit.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": true,
+      "confirm": true,
+      "confirm_text": "Long-running copy to the 4TB SSD — it must be mounted. Continue?",
+      "interpreter": "bash",
+      "timeout": 3600,
+      "tags": [
+        "backup",
+        "recovery"
+      ]
+    },
+    {
+      "id": "fix-8tb-uas",
+      "name": "fix-8tb-uas.sh",
+      "path": "~/scripts/fix-8tb-uas.sh",
+      "category": "system",
+      "what": "Forces the ORICO 8TB USB RAID (VID 125f / PID a578) onto the stable usb-storage driver instead of buggy UAS, then fsck + remount.",
+      "why": "UAS caused disconnects/corruption on this enclosure; the quirk is now persisted, this is the manual fix.",
+      "created": "2026-08-17",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "notes": "One-shot fix, already applied.",
+      "tags": [
+        "usb",
+        "storage",
+        "sudo"
+      ]
+    },
+    {
+      "id": "fix-sysctl",
+      "name": "fix-sysctl.sh",
+      "path": "~/.local/bin/fix-sysctl.sh",
+      "category": "system",
+      "what": "Cleans stray sysctl files and persists watchdog/perf settings in the correct file.",
+      "why": "An earlier edit scattered settings across wrong files; this consolidated them.",
+      "created": "2026-08-22",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "tags": [
+        "sysctl",
+        "sudo"
+      ]
+    },
+    {
+      "id": "setup-devin-sudo",
+      "name": "setup-devin-sudo.sh",
+      "path": "~/scripts/setup-devin-sudo.sh",
+      "category": "system",
+      "what": "Installs a narrow NOPASSWD sudoers allowlist for Devin sessions (rocm-smi, systemctl on AI services, etc.).",
+      "why": "Lets Devin manage the AI services without a password while keeping sudo closed otherwise.",
+      "created": "2026-09-04",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "tags": [
+        "sudo",
+        "devin",
+        "security"
+      ]
+    },
+    {
+      "id": "switch-dual-gpu",
+      "name": "switch-to-dual-gpu.sh",
+      "path": "~/scripts/switch-to-dual-gpu.sh",
+      "category": "system",
+      "what": "Prepares + benchmarks a 2x R9700 setup (run after the second GPU is physically installed and seen by rocm-smi).",
+      "why": "Staged for if/when a second card goes in.",
+      "created": "2026-08-17",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Dormant — single GPU currently installed.",
+      "tags": [
+        "gpu",
+        "dormant"
+      ]
+    },
+    {
+      "id": "local-tools-svc",
+      "name": "local_tools_server.py",
+      "path": "~/Projects/aios/services/open-webui/local_tools_server.py",
+      "category": "ai-stack",
+      "what": "OpenAPI tool server giving OWUI models read_file / run_safe_command / get_status on the host.",
+      "why": "How the models inspect the machine; allowlist-gated, audit-logged.",
+      "created": "2026-09-04",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "local-tools.service",
+        "scope": "user"
+      },
+      "tags": [
+        "owui",
+        "tools",
+        "systemd"
+      ]
+    },
+    {
+      "id": "project-tools-svc",
+      "name": "project_tools_server.py",
+      "path": "~/Projects/aios/services/open-webui/project_tools_server.py",
+      "category": "ai-stack",
+      "what": "OpenAPI tool server for propose/confirm/rollback project creation.",
+      "why": "Lets models scaffold projects through a gated two-step flow.",
+      "created": "2026-09-04",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "project-tools.service",
+        "scope": "user"
+      },
+      "tags": [
+        "owui",
+        "tools",
+        "systemd"
+      ]
+    },
+    {
+      "id": "llama-nano-svc",
+      "name": "llama-nano.service (nano SLM)",
+      "path": "~/Projects/aios/services/open-webui/llama-nano.service",
+      "category": "ai-stack",
+      "what": "Dedicated llama-server for Llama-3.2-3B on 127.0.0.1:8090, 32k ctx — the always-on fast responder.",
+      "why": "Instant answers + subagent work without evicting the main router model.",
+      "created": "2026-09-07",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "llama-nano.service",
+        "scope": "user"
+      },
+      "tags": [
+        "inference",
+        "nano",
+        "systemd"
+      ]
+    },
+    {
+      "id": "open-webui-svc",
+      "name": "Open-WebUI (docker)",
+      "path": "~/Projects/aios/services/open-webui/docker-compose.yml",
+      "category": "ai-stack",
+      "what": "The chat UI + orchestration layer (container open_webui_aios).",
+      "why": "The front door to everything.",
+      "created": "2026-08",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "docker",
+        "container": "open_webui_aios"
+      },
+      "tags": [
+        "owui",
+        "docker"
+      ]
+    }
+  ]
+}
