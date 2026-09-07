@@ -87,6 +87,16 @@ Verified: `qwen-fast` calls `search_web` for external questions and
 `uname -r` for local-state questions (local-first prompt routing works).
 14/14 integration tests pass.
 
+**OaK declutter (same day):** OaK was a research stepping-stone, not a
+persistent chat surface. Set `is_active=0` on `consensus-oak`,
+`covenant-oak`, `cross-project-oak` models + the `oak_tool_selector`
+filter (reversible — rows kept for revival). Tool-server connections
+were already `enable:false`; servers 8767/8768 are not running. Recall
+in normal chat: `read_file`/`run_safe_command` already reach
+`~/Projects/*/.oak/kernel.json` (`~` is a local-tools read root), and an
+OWUI memory now points future chats at the kernel paths — no bespoke UI
+needed. Verified: `/api/models` shows only the 11 short-named presets.
+
 ### SLICE-12-PROJECT-OFFLOAD: Back up non-daily `~/Projects` to private GitHub repos and optionally free local 2TB space. — COMPLETE
 
 **Branch:** `rebrand/hori` (merged)
