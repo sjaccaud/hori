@@ -142,20 +142,22 @@ WEB_SEARCH_BEHAVIOR = (
     "- run_safe_command is for inspecting THIS host only. Never use it (or curl/wget through it) to reach the web — all external requests go through search_web and fetch_url."
 )
 
-# Use-case-focused display names shown in the Open-WebUI model selector
-# (enriched into /api/v1/models by patch_openai_model_names.py).
+# Short display names for the Open-WebUI model selector (≤3 words —
+# the long use-case names crowded the mobile UI). Enriched into
+# /api/v1/models by patch_openai_model_names.py.
+# Contract: test_web_search_pipeline.py::test_model_display_names_are_short.
 MODEL_NAMES = {
-    "qwen-fast": "Everyday Chat & Planning (fast)",
-    "qwen-long": "Long Document Analysis (65k ctx)",
-    "qwen-128k": "Deep Planning & Backlogs (128k ctx)",
-    "qwen-256k-batch": "Batch Ingestion Only (256k, non-interactive)",
-    "qwen-think": "Step-by-Step Reasoning (shows thinking)",
-    "qwen-balanced": "Balanced Coding & Research (Q6_K)",
-    "qwen-quality": "High-Stakes Coding (Q8_0 best quality)",
-    "devstral-coding": "Devstral Coding & Commands (32k)",
-    "qwen-dsh-fast": "Agentic Coding - No Thinking (fastest)",
-    "qwen-dsh-low": "Agentic Coding - Light Reasoning (best output)",
-    "qwen-dsh-medium": "Agentic Coding - Medium Reasoning (fastest with thinking)",
+    "qwen-fast": "Fast Chat",
+    "qwen-long": "Long Docs",
+    "qwen-128k": "Deep Plan",
+    "qwen-256k-batch": "Batch Only",
+    "qwen-think": "Think Mode",
+    "qwen-balanced": "Balanced",
+    "qwen-quality": "Max Quality",
+    "devstral-coding": "Devstral Code",
+    "qwen-dsh-fast": "Agentic Fast",
+    "qwen-dsh-low": "Agentic Best",
+    "qwen-dsh-medium": "Agentic Mid",
 }
 
 # function_calling: Qwen3.8-27B (with --jinja) emits OpenAI-compatible tool_calls,
@@ -209,7 +211,7 @@ MODEL_PROMPTS = {
     "qwen-quality": CODING_PROMPT,
     "devstral-coding": CODING_PROMPT,
     "qwen-dsh-fast": CODING_PROMPT,
-    "qwen-dsh-low": CODING_PROMPT + WEB_SEARCH_BEHAVIOR,
+    "qwen-dsh-low": CODING_PROMPT,
     "qwen-dsh-medium": CODING_PROMPT,
 }
 
@@ -262,13 +264,14 @@ VISION_MODELS = {
 # Web search and code interpreter are OFF by default; the user toggles them when needed.
 META_DEFAULT_FEATURES = ["knowledge", "time", "memory"]
 
-# Models allowed to decide web search themselves via the builtin search_web /
-# fetch_url tools (native function calling). Enabled 2026-09-07 as a pilot on
-# qwen-dsh-low (agentic-tuned, light reasoning — best tool-call judgment of the
-# local presets). Guardrails: WEB_SEARCH_BEHAVIOR prompt rules + the global
+# Models that get the builtin search_web / fetch_url tools (model decides when
+# to search via native function calling). Piloted on qwen-dsh-low 2026-09-07,
+# then armed for all interactive presets the same day. qwen-256k-batch stays
+# unarmed: it is a non-interactive bulk-ingestion preset and should not wander
+# the web mid-batch. Guardrails: WEB_SEARCH_BEHAVIOR prompt rules + the global
 # CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS cap in docker-compose.yml.
 # Test contract: services/integration_tests/test_web_search_pipeline.py.
-WEB_SEARCH_MODELS = {"qwen-dsh-low"}
+WEB_SEARCH_MODELS = set(ALL_QWEN_DEVSTRAL) - {"qwen-256k-batch"}
 
 # Builtin tool categories: Open-WebUI defaults EVERY unlisted category to True,
 # so anything not explicitly disabled is injected into the tool list. Keep the
@@ -302,6 +305,15 @@ def builtin_tools_for(model_id: str) -> dict:
     tools = dict(META_BUILTINTOOLS)
     tools["web_search"] = model_id in WEB_SEARCH_MODELS
     return tools
+
+
+def system_prompt_for(model_id: str, fallback: str = None) -> str:
+    """System prompt for a model: MODEL_PROMPTS entry (or fallback) plus the
+    WEB_SEARCH_BEHAVIOR rules for armed models."""
+    base = MODEL_PROMPTS.get(model_id, fallback or PLANNING_PROMPT)
+    if model_id in WEB_SEARCH_MODELS:
+        return base + WEB_SEARCH_BEHAVIOR
+    return base
 
 
 def default_features_for(model_id: str) -> list:
@@ -460,7 +472,7 @@ def _clone_qwen_long(c, source_id: str, target_id: str, description: str):
     params = json.loads(row[2]) if row[2] else {}
     meta = json.loads(row[3]) if row[3] else {}
 
-    params["system"] = MODEL_PROMPTS.get(target_id, LONG_PROMPT)
+    params["system"] = system_prompt_for(target_id, LONG_PROMPT)
     params["function_calling"] = FUNCTION_CALLING_BY_MODEL.get(target_id, "native")
     params["max_tokens"] = 4096
     if target_id in PRESENCE_PENALTY_BY_MODEL:
@@ -585,7 +597,7 @@ def main():
         meta = json.loads(row[1]) if row[1] else {}
 
         # Set per-model prompt, function_calling, and limits
-        params["system"] = MODEL_PROMPTS.get(mid, PLANNING_PROMPT)
+        params["system"] = system_prompt_for(mid)
         params["function_calling"] = FUNCTION_CALLING_BY_MODEL.get(mid, "native")
         params["max_tokens"] = 4096
         # All Qwen/Devstral presets can use local tools; let them run read-only tools

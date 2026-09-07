@@ -188,27 +188,43 @@ class TestStaticConfig:
         assert builtins.get("web_search") is True
         assert "web_search" in features
 
-    def test_pilot_prompt_has_search_rules(self):
-        """The pilot model's system prompt must carry the search-behavior
+    def test_armed_models_have_search_rules(self):
+        """Every armed model's system prompt must carry the search-behavior
         rules, including the explicit boundary that keeps the model from
         burning tool calls on run_safe_command+curl for web requests
         (observed 2026-09-07: model chose curl over search_web)."""
         mod = _load_fix_tooling()
-        prompt = mod.MODEL_PROMPTS[PILOT_MODEL]
-        assert "search_web" in prompt
-        assert "fetch_url" in prompt
-        assert "run_safe_command" in prompt  # boundary rule present
-        for needle in ("cite", "never invent", "could not be verified"):
-            assert needle in prompt.lower(), f"missing rule: {needle}"
+        for mid in mod.WEB_SEARCH_MODELS:
+            prompt = mod.system_prompt_for(mid)
+            assert "search_web" in prompt, f"{mid}: no search_web rule"
+            assert "fetch_url" in prompt, f"{mid}: no fetch_url rule"
+            assert "run_safe_command" in prompt, f"{mid}: no boundary rule"
+            for needle in ("cite", "never invent", "could not be verified"):
+                assert needle in prompt.lower(), f"{mid}: missing '{needle}'"
 
-    def test_fix_tooling_keeps_web_search_off_elsewhere(self):
-        """Non-pilot models must keep web_search off — one regression at a
-        time."""
+    def test_all_interactive_models_armed(self):
+        """Every interactive model gets model-decided web search; the
+        batch-ingestion preset stays unarmed (non-interactive, bulk jobs
+        shouldn't wander the web)."""
         mod = _load_fix_tooling()
-        for mid in ("qwen-fast", "qwen-128k"):
-            if mid in getattr(mod, "WEB_SEARCH_MODELS", set()):
+        armed = mod.WEB_SEARCH_MODELS
+        assert "qwen-256k-batch" not in armed, "batch model must stay unarmed"
+        for mid in mod.ALL_QWEN_DEVSTRAL:
+            if mid == "qwen-256k-batch":
                 continue
-            assert mod.builtin_tools_for(mid).get("web_search") is False
+            assert mid in armed, f"{mid} not in WEB_SEARCH_MODELS"
+            assert mod.builtin_tools_for(mid).get("web_search") is True
+            assert "web_search" in mod.default_features_for(mid)
+
+    def test_model_display_names_are_short(self):
+        """Mobile selector got crowded — display names must be ≤3 words
+        and unique."""
+        mod = _load_fix_tooling()
+        names = list(mod.MODEL_NAMES.values())
+        assert len(names) == len(set(names)), "display names must be unique"
+        for mid, name in mod.MODEL_NAMES.items():
+            words = len(name.split())
+            assert words <= 3, f"{mid}: '{name}' is {words} words"
 
 
 # --- 2. Live service tests ------------------------------------------------
@@ -251,17 +267,40 @@ class TestLiveServices:
 # --- 3. Model metadata (the 4-condition tool gate) ------------------------
 
 class TestModelMetadata:
-    def test_pilot_model_has_search_web_tool_enabled(self):
+    def test_armed_models_have_search_web_tool_enabled(self):
         if not _docker_running(OWUI_CONTAINER):
             pytest.skip(f"container {OWUI_CONTAINER} not running")
-        data = _model_meta(PILOT_MODEL)
-        meta = data["meta"]
-        bt = meta.get("builtinTools", {})
-        feats = meta.get("default_feature_ids", [])
-        caps = meta.get("capabilities", {})
-        assert caps.get("web_search") is True, "capability missing"
-        assert bt.get("web_search") is True, "builtinTools.web_search off"
-        assert "web_search" in feats, "web_search not in default_feature_ids"
+        mod = _load_fix_tooling()
+        for mid in sorted(mod.WEB_SEARCH_MODELS):
+            data = _model_meta(mid)
+            meta = data["meta"]
+            bt = meta.get("builtinTools", {})
+            feats = meta.get("default_feature_ids", [])
+            caps = meta.get("capabilities", {})
+            assert caps.get("web_search") is True, f"{mid}: capability missing"
+            assert bt.get("web_search") is True, f"{mid}: builtinTools.web_search off"
+            assert "web_search" in feats, f"{mid}: not in default_feature_ids"
+
+    def test_display_names_in_db_are_short(self):
+        """Live model.name values match the short names in fix_tooling."""
+        if not _docker_running(OWUI_CONTAINER):
+            pytest.skip(f"container {OWUI_CONTAINER} not running")
+        mod = _load_fix_tooling()
+        out = subprocess.run(
+            [
+                "docker", "exec", OWUI_CONTAINER, "python3", "-c",
+                "import sqlite3, json;"
+                "con=sqlite3.connect('/app/backend/data/webui.db');"
+                "print(json.dumps(dict(con.execute('SELECT id, name FROM model').fetchall())))",
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert out.returncode == 0, out.stderr[-400:]
+        names = json.loads(out.stdout.strip().splitlines()[-1])
+        for mid, expected in mod.MODEL_NAMES.items():
+            assert names.get(mid) == expected, (
+                f"{mid}: db has '{names.get(mid)}', want '{expected}'"
+            )
 
 
 # --- 4. Backend-dependent tests -------------------------------------------

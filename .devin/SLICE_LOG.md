@@ -75,6 +75,18 @@ loops.
 and unprompted "latest llama.cpp release" question → clean query). Tool
 execution + citation display happen in the OWUI UI loop.
 
+**Follow-up (same day):** after the pilot felt usable, all interactive
+models were armed (`WEB_SEARCH_MODELS = ALL_QWEN_DEVSTRAL - {qwen-256k-batch}`)
+and display names were shortened to ≤3 words for the mobile selector
+(Fast Chat, Long Docs, Deep Plan, Batch Only, Think Mode, Balanced,
+Max Quality, Devstral Code, Agentic Fast, Agentic Best, Agentic Mid).
+Added `system_prompt_for()` so WEB_SEARCH_BEHAVIOR applies to every armed
+model. Re-applied `patch_openai_model_names.py` inside the container —
+the earlier `docker compose up` recreate had wiped the openai.py patch.
+Verified: `qwen-fast` calls `search_web` for external questions and
+`uname -r` for local-state questions (local-first prompt routing works).
+14/14 integration tests pass.
+
 ### SLICE-12-PROJECT-OFFLOAD: Back up non-daily `~/Projects` to private GitHub repos and optionally free local 2TB space. — COMPLETE
 
 **Branch:** `rebrand/hori` (merged)
