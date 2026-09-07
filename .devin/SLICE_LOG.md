@@ -49,6 +49,13 @@ loops.
   `web_search` in `default_feature_ids`, search-rules prompt appended.
 
 **Surprises:**
+- Builtin tools are UI-only: `use_builtin_tools` in middleware.py requires
+  a top-level `session_id` in the request ("API callers don't expect
+  hidden tools"). Without it, `search_web`/`fetch_url` are never
+  registered — the earlier "model chose curl" runs were testing a path
+  where the tool didn't exist. With `session_id` + `features.web_search`,
+  the model calls `search_web` both on request AND unprompted for
+  fresh-info questions (verified live).
 - `/api/chat/completions` passes tool calls through to the client
   (`finish_reason: tool_calls`) rather than executing server-side — the
   OWUI UI executes them in its own loop.
@@ -58,10 +65,15 @@ loops.
 - `docker cp` of webui.db into a *running* container does not take effect
   (old inode held open) — apply-model-config.sh's stop/copy/patch/start
   ordering is load-bearing.
+- A `/tmp/model-archive-eval-*` llama-server benchmark held 18.9 GB VRAM
+  and cut generation to ~0.3 tok/s; killed at user request (they'll
+  reschedule the bench). llamacpp.service had been cleanly stopped at
+  04:00 before the eval — service is `enabled`, unit override already
+  points at run-llama.sh.
 
-**Unsure:** whether the 27B reliably chooses `search_web` over
-`run_safe_command`+curl — first live test chose curl; prompt boundary
-rule added but model judgment is inherently nondeterministic.
+**Verified live:** `search_web` fires for `qwen-dsh-low` (explicit request
+and unprompted "latest llama.cpp release" question → clean query). Tool
+execution + citation display happen in the OWUI UI loop.
 
 ### SLICE-12-PROJECT-OFFLOAD: Back up non-daily `~/Projects` to private GitHub repos and optionally free local 2TB space. — COMPLETE
 

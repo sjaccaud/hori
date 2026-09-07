@@ -27,6 +27,14 @@ Layers, cheapest first:
   4. Backend-dependent tests — skipped unless llama-server is up on
      :8080. The e2e chat test verifies a real completion round-trips.
 
+Known gate: builtin tools (search_web, fetch_url, etc.) are only injected
+for UI-originated requests — i.e. requests carrying a top-level
+`session_id` field (middleware.py use_builtin_tools). Raw API calls
+without `session_id` get only tool_ids-based tools; the model then
+reasonably reaches for run_safe_command/curl for web access. To exercise
+the UI path over the API, pass `"session_id": "<any>"` and
+`"features": {"web_search": true}` in the request body.
+
 Defends: the Sept 2026 local web-search enablement (SearXNG replaces
 paid search APIs; model-callable search replaces always-on injection).
 
