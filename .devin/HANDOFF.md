@@ -32,8 +32,8 @@
 
 ## What is still open
 
-- Canonicalize aios_core restart with `sudo systemctl restart aios_core` (currently a manually restarted process from this session).
-- Decide whether to rotate the admin token (it was visible in local tool output during testing).
+- None. aios_core was restarted via `sudo systemctl restart aios_core` by the user.
+- The `AIOS_ADMIN_TOKEN` rotation decision was left as-is per the user.
 
 ## Resume command for next session
 

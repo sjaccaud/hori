@@ -34,10 +34,10 @@ scripts are updated to reflect the new remote surface.
 - `audit_funnel.sh` passes; Tailscale Serve exposes 443, 3443, 8443, 8444 with intended paths.
 - Live `/mcp/sse` verified over Tailnet (returns `event: endpoint` with session_id; 401 without token).
 - `https://<tailnet>:8444/v1/models` verified from Tailnet and returns `nano`.
+- aios_core restarted via `sudo systemctl restart aios_core` by the user.
 
 **Remaining before merge:**
-- Restart aios_core via `sudo systemctl restart aios_core` once the user is ready (currently a manually restarted process is running).
-- Decide whether to rotate `AIOS_ADMIN_TOKEN` (it appeared in local live-testing output).
+- None. aios_core was restarted via `sudo systemctl restart aios_core` by the user. The `AIOS_ADMIN_TOKEN` rotation decision was left as-is per the user.
 
 **PRD:** `.devin/prd/remote-mcp-tools.md`
 **Work order:** `core/state/proposed_work_orders/60b7e3e7-f9b6-404b-9848-8c5c87750700.json`
