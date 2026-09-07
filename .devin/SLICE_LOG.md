@@ -9,6 +9,60 @@
 
 ## Completed Slices
 
+### [2026-09-07] Local web search: SearXNG verified + model-decided `search_web` pilot on `qwen-dsh-low`
+
+**Problem:** User wanted local/free web search wired into Open-WebUI with
+automatic "search when needed" behavior, plus a fix for flaky tool-call
+loops.
+
+**What was found:**
+- SearXNG (`searchrouter_aios`, `searxng/searxng:latest` on 127.0.0.1:8081)
+  was already running and OWUI's `web.search.*` DB config was already
+  correct — the stale `searchrouter` build service in
+  `services/open-webui/docker-compose.yml` (no Dockerfile in
+  `../searchrouter`, container-name collision) was the only real defect;
+  removed.
+- OWUI 0.11.3 exposes `search_web`/`fetch_url` as *model-callable* builtin
+  tools, gated by 4 conditions: `builtinTools.web_search` AND
+  `web.search.enable` AND model capability AND request
+  `features.web_search` (see `open_webui/utils/tools.py`). With native
+  function calling, OWUI deliberately skips forced RAG injection and lets
+  the model decide.
+- `CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS` defaulted to 256 — set to 4 in
+  compose (suspected cause of "tool call loop" stalls).
+- `llamacpp.service` was `inactive` at session start (port 8080 down →
+  OWUI `/api/models` empty, every chat "Model not found"). Its
+  `llamacpp.service.d/override.conf` already points ExecStart at
+  `run-llama.sh` (router mode) — the unit is current, just stopped.
+
+**What was built:**
+- `services/integration_tests/test_web_search_pipeline.py` — 12 tests in
+  4 layers: static config (compose cap, fix_tooling helpers, pilot prompt
+  rules), live services (SearXNG JSON, OWUI health/config, retrieval
+  endpoint e2e via in-container JWT mint), model metadata gate, and
+  llama-dependent checks (skipped when :8080 is down).
+- `fix_tooling.py`: `WEB_SEARCH_MODELS` set + `builtin_tools_for()` /
+  `default_features_for()` helpers + `WEB_SEARCH_BEHAVIOR` prompt rules
+  (when to search, cite-or-say-unknown, `run_safe_command` is host-only —
+  the model tried `run_safe_command`+`curl` for web access on first test).
+- `qwen-dsh-low` model row patched: `builtinTools.web_search=true`,
+  `web_search` in `default_feature_ids`, search-rules prompt appended.
+
+**Surprises:**
+- `/api/chat/completions` passes tool calls through to the client
+  (`finish_reason: tool_calls`) rather than executing server-side — the
+  OWUI UI executes them in its own loop.
+- `default_feature_ids` is consumed by the *frontend* only
+  (`utils/automations.py`); raw API callers must pass `features`
+  explicitly.
+- `docker cp` of webui.db into a *running* container does not take effect
+  (old inode held open) — apply-model-config.sh's stop/copy/patch/start
+  ordering is load-bearing.
+
+**Unsure:** whether the 27B reliably chooses `search_web` over
+`run_safe_command`+curl — first live test chose curl; prompt boundary
+rule added but model judgment is inherently nondeterministic.
+
 ### SLICE-12-PROJECT-OFFLOAD: Back up non-daily `~/Projects` to private GitHub repos and optionally free local 2TB space. — COMPLETE
 
 **Branch:** `rebrand/hori` (merged)

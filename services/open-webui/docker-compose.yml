@@ -1,33 +1,12 @@
-services:
-  searchrouter:
-    build:
-      context: ../searchrouter
-    container_name: searchrouter_aios
-    restart: always
-    network_mode: host
-    environment:
-      - PORT=8081
-      - HOST=0.0.0.0
-      - SEARCH_RESULT_COUNT=3
-      - SEARCH_MODE=priority
-      - REQUEST_TIMEOUT=10.0
-      - SEARXNG_FALLBACK_URL=${SEARXNG_FALLBACK_URL:-}
-    env_file:
-      - ${HOME}/.config/aios/open-webui.env
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 512m
+# NOTE: search is provided by the standalone SearXNG service in
+# services/searchrouter/ (container `searchrouter_aios` on 127.0.0.1:8081,
+# started via `make search-up` or its own docker-compose.yml). Do not re-add a
+# searchrouter service here: the old build-based definition was removed
+# because ../searchrouter has no Dockerfile and conflicts with the running
+# SearXNG container's name.
 
+services:
   open-webui:
-    depends_on:
-      - searchrouter
     image: ghcr.io/open-webui/open-webui:main
     container_name: open_webui_aios
     restart: always
@@ -41,6 +20,10 @@ services:
       - OPENAI_API_KEY=not-needed
       - ENABLE_ORJSON=true
       - ENABLE_TOOL_PERMISSIONS=true
+      # Cap runaway native tool-call loops (OWUI default is 256 iterations —
+      # a confused local model can spin for minutes). 4 covers
+      # search→fetch→answer with headroom.
+      - CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS=4
       - ENABLE_OLLAMA_API=false
       - ENABLE_IMAGE_GENERATION=false
       - DEFAULT_MODELS=qwen-fast
@@ -56,7 +39,7 @@ services:
       - ENABLE_KB_EXEC=false
       - ENABLE_WEB_SEARCH=true
       - WEB_SEARCH_ENGINE=searxng
-      - SEARXNG_QUERY_URL=http://127.0.0.1:8081/search?<query>
+      - SEARXNG_QUERY_URL=http://127.0.0.1:8081/search?q=<query>
       - WEB_SEARCH_RESULT_COUNT=3
       - WEB_SEARCH_CONCURRENT_REQUESTS=2
       - BYPASS_WEB_SEARCH_WEB_LOADER=true

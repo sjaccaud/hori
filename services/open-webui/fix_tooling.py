@@ -128,6 +128,20 @@ CODING_PROMPT = ((
     "Do not preface answers with meta-commentary about sources unless the user asks."
 ) + TOOL_USAGE).format(USER_NAME=USER_NAME)
 
+# Extra system-prompt rules appended for WEB_SEARCH_MODELS (defined below).
+# These teach the model *when* to search and how to stay grounded — the
+# local-model hallucination risk (invented URLs, answering from stale memory
+# despite search results) is addressed here rather than by disabling the
+# feature. No {USER_NAME} placeholders: appended to already-formatted prompts.
+WEB_SEARCH_BEHAVIOR = (
+    "\n\nWeb search rules (search_web / fetch_url tools):\n"
+    "- Call search_web when the question depends on current, specific, or external facts: latest versions, releases, news, prices, or documentation you do not already have locally. Answer stable knowledge directly without searching.\n"
+    "- After search_web, call fetch_url on the most relevant result URL when the snippet is not enough to answer confidently.\n"
+    "- Ground the answer in what the tools actually return and cite the sources. If the results do not answer the question, say so explicitly — never invent URLs or fill gaps with guesses.\n"
+    "- One or two searches is usually enough. If a search returns nothing useful, rephrase the query once, then stop and report what could not be verified.\n"
+    "- run_safe_command is for inspecting THIS host only. Never use it (or curl/wget through it) to reach the web — all external requests go through search_web and fetch_url."
+)
+
 # Use-case-focused display names shown in the Open-WebUI model selector
 # (enriched into /api/v1/models by patch_openai_model_names.py).
 MODEL_NAMES = {
@@ -195,7 +209,7 @@ MODEL_PROMPTS = {
     "qwen-quality": CODING_PROMPT,
     "devstral-coding": CODING_PROMPT,
     "qwen-dsh-fast": CODING_PROMPT,
-    "qwen-dsh-low": CODING_PROMPT,
+    "qwen-dsh-low": CODING_PROMPT + WEB_SEARCH_BEHAVIOR,
     "qwen-dsh-medium": CODING_PROMPT,
 }
 
@@ -248,12 +262,19 @@ VISION_MODELS = {
 # Web search and code interpreter are OFF by default; the user toggles them when needed.
 META_DEFAULT_FEATURES = ["knowledge", "time", "memory"]
 
+# Models allowed to decide web search themselves via the builtin search_web /
+# fetch_url tools (native function calling). Enabled 2026-09-07 as a pilot on
+# qwen-dsh-low (agentic-tuned, light reasoning — best tool-call judgment of the
+# local presets). Guardrails: WEB_SEARCH_BEHAVIOR prompt rules + the global
+# CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS cap in docker-compose.yml.
+# Test contract: services/integration_tests/test_web_search_pipeline.py.
+WEB_SEARCH_MODELS = {"qwen-dsh-low"}
+
 # Builtin tool categories: Open-WebUI defaults EVERY unlisted category to True,
 # so anything not explicitly disabled is injected into the tool list. Keep the
 # useful read/knowledge tools; disable the workspace/social categories that only
 # serve as tool-misfire bait on small local models (e.g. update_task loops).
-# web_search is also OFF by default; the user toggles it when they want fresh
-# external results. On local models it tends to hallucinate URLs and fail.
+# web_search stays OFF for all models except WEB_SEARCH_MODELS.
 META_BUILTINTOOLS = {
     "knowledge": True,
     "time": True,
@@ -273,6 +294,25 @@ META_BUILTINTOOLS = {
     "calendar": False,
     "notifications": False,
 }
+
+
+def builtin_tools_for(model_id: str) -> dict:
+    """Builtin-tool map for a model: META_BUILTINTOOLS plus per-model
+    web_search enablement from WEB_SEARCH_MODELS."""
+    tools = dict(META_BUILTINTOOLS)
+    tools["web_search"] = model_id in WEB_SEARCH_MODELS
+    return tools
+
+
+def default_features_for(model_id: str) -> list:
+    """default_feature_ids for a model: the per-model list plus 'web_search'
+    for WEB_SEARCH_MODELS (the request must carry features.web_search for the
+    builtin search_web tool to be registered — see tools.py gate)."""
+    feats = list(MODEL_DEFAULT_FEATURES.get(model_id, META_DEFAULT_FEATURES))
+    if model_id in WEB_SEARCH_MODELS and "web_search" not in feats:
+        feats.append("web_search")
+    return feats
+
 
 # Attaches local tool servers via metadata['tool_ids'] using 'server:<id>' ids.
 #
@@ -432,10 +472,8 @@ def _clone_qwen_long(c, source_id: str, target_id: str, description: str):
         **META_CAPABILITIES,
         **({"vision": True} if target_id in VISION_MODELS else {}),
     }
-    meta["default_feature_ids"] = MODEL_DEFAULT_FEATURES.get(
-        target_id, ["knowledge", "time", "web_search", "memory"]
-    )
-    meta["builtinTools"] = {**meta.get("builtinTools", {}), **META_BUILTINTOOLS}
+    meta["default_feature_ids"] = default_features_for(target_id)
+    meta["builtinTools"] = {**meta.get("builtinTools", {}), **builtin_tools_for(target_id)}
 
     c.execute(
         "INSERT OR REPLACE INTO model (id, user_id, base_model_id, name, params, meta, updated_at, created_at, is_active) "
@@ -563,10 +601,8 @@ def main():
             **META_CAPABILITIES,
             **({"vision": True} if mid in VISION_MODELS else {}),
         }
-        meta["default_feature_ids"] = MODEL_DEFAULT_FEATURES.get(
-            mid, ["knowledge", "time", "memory"]
-        )
-        meta["builtinTools"] = {**meta.get("builtinTools", {}), **META_BUILTINTOOLS}
+        meta["default_feature_ids"] = default_features_for(mid)
+        meta["builtinTools"] = {**meta.get("builtinTools", {}), **builtin_tools_for(mid)}
 
         # Preserve description if present, add generic if missing
         if "description" not in meta:
