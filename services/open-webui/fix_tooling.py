@@ -37,6 +37,11 @@ TOOL_USAGE = (
     "- For project/directory surveys, 'list my projects', or questions that need current filesystem state, prefer run_safe_command (ls, tree, find, du, etc.) and read_file. "
     "Only call query_knowledge_files for conceptual/historical questions that are likely covered in the attached knowledge collections; do NOT call query_knowledge_files, view_knowledge_file, search_memories, search_chats, or search_notes for status questions.\n"
     "- For small known files, you may call read_file up to 4 times in parallel. For large outputs or exploration, issue one focused call, read the result, then decide the next step.\n"
+    "- Workspace write tools (when attached) are confirmation-gated: call "
+    "propose_workspace_write with relative paths under the configured Projects "
+    "workspace, show the manifest to the user, and only call "
+    "confirm_workspace_write after explicit user approval. Directories and .md "
+    "files only; no overwrite or delete.\n"
     "- For questions about the CURRENT state of the system — downloads, files on disk, running services/processes, disk usage, or which models exist — you MUST call run_safe_command, read_file, or get_status BEFORE answering. "
     "Never answer current-state questions from attached knowledge or memory alone, even when it looks relevant; it may be stale.\n"
     "- The offline model archive lives at /mnt/4TB/model-archive (categories: llm/, vlm/, stt/, slm/, tts/, embedding/). For 'haul', 'stash', 'the downloads', or similar, check /mnt/4TB/model-archive and /opt/ai-models with run_safe_command (ls/find/du) first.\n"
@@ -124,7 +129,11 @@ DEEPDIVE_PROMPT = ((
     "- get_current_timestamp: get the current date and time.\n"
     "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
-    "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like inxi, rocm-smi, lscpu, ps, df, etc.\n\n"
+    "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like inxi, rocm-smi, lscpu, ps, df, etc.\n"
+    "- propose_workspace_write / confirm_workspace_write / "
+    "rollback_workspace_write (Workspace Tools server): propose directories and "
+    ".md files using relative paths under the configured Projects workspace, "
+    "show the manifest, and confirm only after explicit user approval.\n\n"
     "Method — follow it for any 'what's going on / what connects X to Y / what's likely next' question:\n"
     "1. Decompose the question into the key claims, actors, and incentives.\n"
     "2. Generate several competing hypotheses — including uncomfortable or unfashionable ones — and state a rough prior confidence for each.\n"
@@ -489,6 +498,32 @@ def default_features_for(model_id: str) -> list:
     return feats
 
 
+# Workspace write tools are deliberately narrower than project creation: they
+# can scaffold directories and Markdown files under the configured Projects
+# workspace. Keep them off every model except Deep Dive until the workflow has
+# proven itself in use.
+WORKSPACE_WRITE_MODELS = {"qwen-deepdive"}
+WORKSPACE_TOOLS_CONNECTION = {
+    "url": "http://127.0.0.1:8771",
+    "config": {
+        "enable": True,
+        "function_name_filter_list": (
+            "propose_workspace_write,"
+            "confirm_workspace_write,"
+            "rollback_workspace_write"
+        ),
+    },
+    "info": {"id": "workspace-tools", "name": "Workspace Tools"},
+}
+
+
+def workspace_server_tool_ids_for(model_id: str) -> list[str]:
+    """Extra server tool ids attached only to explicitly write-enabled models."""
+    if model_id in WORKSPACE_WRITE_MODELS:
+        return ["server:workspace-tools"]
+    return []
+
+
 # Attaches local tool servers via metadata['tool_ids'] using 'server:<id>' ids.
 #
 # Two distinct mechanisms in Open-WebUI 0.11.x:
@@ -520,6 +555,14 @@ class Filter:
         server_tool_ids: str = Field(
             default="server:local-tools,server:project-tools",
             description="Comma-separated 'server:<id>' tool_ids to attach (server-side execution).",
+        )
+        write_models: str = Field(
+            default="qwen-deepdive",
+            description="Comma-separated model ids allowed to use workspace write tools.",
+        )
+        write_server_tool_ids: str = Field(
+            default="server:workspace-tools",
+            description="Comma-separated write-capable 'server:<id>' tool_ids for write_models.",
         )
         debug: bool = Field(
             default=True,
@@ -577,8 +620,18 @@ class Filter:
                 if self.valves and self.valves.server_tool_ids
                 else "server:local-tools"
             )
+            server_ids = {t.strip() for t in server_tool_ids.split(",") if t.strip()}
+            write_models = {
+                m.strip()
+                for m in (getattr(self.valves, "write_models", "") or "").split(",")
+                if m.strip()
+            }
+            if model_id in write_models:
+                write_ids = getattr(self.valves, "write_server_tool_ids", "") or ""
+                server_ids.update(t.strip() for t in write_ids.split(",") if t.strip())
+            server_tool_ids = ",".join(sorted(server_ids))
 
-            for tool_id in {t.strip() for t in server_tool_ids.split(",") if t.strip()}:
+            for tool_id in server_ids:
                 if tool_id not in existing:
                     existing.append(tool_id)
 
@@ -699,10 +752,11 @@ def main():
     row = c.execute("SELECT value FROM config WHERE key='tool_server.connections'").fetchone()
     if row:
         conns = json.loads(row[0])
-        # Ensure project-tools is present and local-tools is clean.
+        # Ensure project-tools/workspace-tools are present and local-tools is clean.
         urls = {conn_cfg.get('url', '') for conn_cfg in conns}
-        if project_tools_conn['url'] not in urls:
-            conns.append(project_tools_conn)
+        for tool_conn in (project_tools_conn, WORKSPACE_TOOLS_CONNECTION):
+            if tool_conn['url'] not in urls:
+                conns.append(tool_conn)
         for conn_cfg in conns:
             url = conn_cfg.get('url', '')
             if url == 'http://127.0.0.1:8766':
@@ -719,6 +773,15 @@ def main():
                 conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info']['id'] = 'project-tools'
                 conn_cfg['info']['name'] = 'Project Tools'
+            elif url == WORKSPACE_TOOLS_CONNECTION['url']:
+                conn_cfg['config'] = conn_cfg.get('config', {})
+                conn_cfg['config']['enable'] = True
+                conn_cfg['config']['function_name_filter_list'] = (
+                    WORKSPACE_TOOLS_CONNECTION['config']['function_name_filter_list']
+                )
+                conn_cfg['info'] = conn_cfg.get('info', {})
+                conn_cfg['info']['id'] = 'workspace-tools'
+                conn_cfg['info']['name'] = 'Workspace Tools'
             elif url in ('http://127.0.0.1:8767', 'http://127.0.0.1:8768'):
                 # OaK tool servers are not running; keep them disabled to reduce bloat.
                 conn_cfg.setdefault('config', {})['enable'] = False
@@ -745,6 +808,7 @@ def main():
                             "info": {"id": "local-tools", "name": "Local Tools"},
                         },
                         project_tools_conn,
+                        WORKSPACE_TOOLS_CONNECTION,
                     ],
                     ensure_ascii=False,
                 ),
@@ -831,6 +895,8 @@ def main():
                 {
                     "models": ",".join(ALL_QWEN_DEVSTRAL),
                     "server_tool_ids": "server:local-tools,server:project-tools",
+                    "write_models": ",".join(sorted(WORKSPACE_WRITE_MODELS)),
+                    "write_server_tool_ids": "server:workspace-tools",
                 },
                 ensure_ascii=False,
             ),

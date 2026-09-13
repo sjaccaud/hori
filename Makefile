@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-llama-nano check-llama-nano install-script-panel check-script-panel
+.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-project-tools check-project-tools install-workspace-tools check-workspace-tools install-llama-nano check-llama-nano install-script-panel check-script-panel
 
 # Default target
 test: test-all
@@ -22,7 +22,7 @@ test-stress-safety:
 # Run unit tests
 test-unit:
 	@echo "🧪 Running unit tests..."
-	PYTHONPATH=. ./venv/bin/python3 -m pytest services/red_teaming/test_engine.py services/aios_core/test_main.py services/aios_core/test_intent_graph.py services/aios_core/test_web_search.py services/aios_core/test_multi_search.py services/aios_core/test_tts.py services/aios_core/test_safety_events.py services/aios_core/test_autolisten.py services/aios_core/test_chat_surface.py services/aios_core/test_presence.py services/proactive_agent/test_landscape_survey.py services/proactive_agent/test_notifier.py services/tool_daemon/test_schema.py services/tool_daemon/test_registry.py services/tool_daemon/test_validation.py services/tool_daemon/test_output_parser.py services/tool_daemon/test_tools.py services/tool_daemon/test_audit.py services/tool_daemon/test_fail_closed.py services/tool_daemon/test_server.py services/tool_daemon/test_rate_limiter.py services/tool_daemon/test_guard_rails.py services/tool_daemon/test_response_verification.py services/open_webui/test_system_state_sync.py services/open-webui/test_local_tools_server.py services/open-webui/test_project_tools_server.py services/aios_core/test_mcp_server.py hori/test_detect.py hori/test_sqlite_memory.py hori/test_init.py hori/test_persona.py services/broker/test_broker.py
+	PYTHONPATH=. ./venv/bin/python3 -m pytest services/red_teaming/test_engine.py services/aios_core/test_main.py services/aios_core/test_intent_graph.py services/aios_core/test_web_search.py services/aios_core/test_multi_search.py services/aios_core/test_tts.py services/aios_core/test_safety_events.py services/aios_core/test_autolisten.py services/aios_core/test_chat_surface.py services/aios_core/test_presence.py services/proactive_agent/test_landscape_survey.py services/proactive_agent/test_notifier.py services/tool_daemon/test_schema.py services/tool_daemon/test_registry.py services/tool_daemon/test_validation.py services/tool_daemon/test_output_parser.py services/tool_daemon/test_tools.py services/tool_daemon/test_audit.py services/tool_daemon/test_fail_closed.py services/tool_daemon/test_server.py services/tool_daemon/test_rate_limiter.py services/tool_daemon/test_guard_rails.py services/tool_daemon/test_response_verification.py services/open_webui/test_system_state_sync.py services/open-webui/test_local_tools_server.py services/open-webui/test_project_tools_server.py services/open-webui/test_workspace_tools_server.py services/open-webui/test_workspace_tool_registration.py services/aios_core/test_workspace_writes.py services/aios_core/test_mcp_server.py hori/test_detect.py hori/test_sqlite_memory.py hori/test_init.py hori/test_persona.py services/broker/test_broker.py
 
 # Run MCP unit + adversarial tests (fast feedback loop)
 test-mcp:
@@ -100,6 +100,18 @@ install-project-tools:
 check-project-tools:
 	@./venv/bin/python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8769/health').read().decode())"
 
+# Install and start the workspace Markdown/directory tools server on 127.0.0.1:8771.
+install-workspace-tools:
+	@echo "🔗 Installing workspace-tools systemd user service..."
+	@mkdir -p "$${HOME}/.config/systemd/user"
+	@cp ./services/open-webui/workspace-tools.service "$${HOME}/.config/systemd/user/workspace-tools.service"
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now workspace-tools
+
+# Quick health check for the workspace-tools server.
+check-workspace-tools:
+	@./venv/bin/python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8771/health').read().decode())"
+
 # Install and start the nano SLM server (Llama-3.2-3B) on 127.0.0.1:8090.
 # Registered in Open-WebUI as a second OpenAI base URL; shows as "Nano Chat".
 install-llama-nano:
@@ -149,6 +161,8 @@ aios-up:
 	@systemctl --user start local-tools
 	@echo "Starting project-tools user service..."
 	@systemctl --user start project-tools
+	@echo "Starting workspace-tools user service..."
+	@systemctl --user start workspace-tools 2>/dev/null || echo "  (not installed — run 'make install-workspace-tools')"
 	@echo "Starting llama-nano user service..."
 	@systemctl --user start llama-nano 2>/dev/null || echo "  (not installed — run 'make install-llama-nano')"
 	@echo "Ensuring SearXNG secret..."
@@ -173,5 +187,7 @@ aios-down:
 	@systemctl --user stop local-tools
 	@echo "Stopping project-tools user service..."
 	@systemctl --user stop project-tools
+	@echo "Stopping workspace-tools user service..."
+	@systemctl --user stop workspace-tools 2>/dev/null || true
 	@echo "Stopping llama-nano user service..."
 	@systemctl --user stop llama-nano 2>/dev/null || true

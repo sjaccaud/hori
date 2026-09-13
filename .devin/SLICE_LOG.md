@@ -5,7 +5,15 @@
 
 ## Current Slice
 
-### (none — ready for next slice planning)
+### SLICE-14-WORKSPACE-MARKDOWN-TOOLS: Give Deep Dive a confirmation-gated workspace writer for directories and Markdown scaffolds under `~/Projects`.
+
+**Branch:** `slice/14-workspace-markdown-tools`
+
+**Demo criterion:** In Open-WebUI, `qwen-deepdive` can propose a directory/Markdown manifest for a path such as `content_factory/...`, the user can review and confirm it, and the confirmed scaffold appears under `~/Projects` with an audit trail and rollback record.
+
+**Safety boundary:** proposal/confirmation only; relative paths confined to the configured workspace root (`~/Projects` by default); directories plus `.md` files only; create-only (no overwrite/delete); path traversal and symlink escapes denied; Open-WebUI exposes the workspace tool server only to `qwen-deepdive` initially.
+
+**Status:** implemented, tested, installed as the `workspace-tools` user service, and registered in Open-WebUI. Live verification covered service health, model-filter attachment (`qwen-deepdive` only), and proposal → confirm → rollback under `content_factory`. The remaining demo is an interactive Open-WebUI chat where `qwen-deepdive` proposes a manifest and the user explicitly confirms it.
 
 
 ## Completed Slices

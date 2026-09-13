@@ -5,8 +5,8 @@
 > canonical glossary for HORI. When code and docs diverge on a term's meaning,
 > that is a bug — fix one or the other immediately (Pillar VII).
 >
-> **Last Updated:** 2026-09-07
-> **Version:** 1.1
+> **Last Updated:** 2026-09-13
+> **Version:** 1.2
 
 ---
 
@@ -47,6 +47,9 @@
 | **Response Verification Layer** | Every LLM response is scanned for action claims. If the LLM says "I found 847 files" but no count_files tool was called, the response is intercepted and replaced with a safe fallback. | services/tool_daemon/response_verification.py | verification layer, PoC 15.14 | VII |
 | **Memory Poisoning Guard** | Tool result data cannot flow into store_memory without explicit user-originated confirmation. Prevents a compromised LLM from injecting false memories via tool results. | services/aios_core/memory_guard.py | memory guard | VII |
 | **Safety Level** | Classification for tools: READ_ONLY (spine), SIDE_EFFECTS (HORI 2.0), DESTRUCTIVE (HORI 2.0). The safety spine only permits READ_ONLY tools. | services/tool_daemon/schema.py | tool classification | VII |
+| **Workspace Root** | The configured filesystem boundary for workspace write tools (`WORKSPACE_TOOLS_ROOT`, currently `~/Projects`). Model-supplied paths are relative to this root and may not traverse or symlink outside it. | services/aios_core/workspace_writes.py | writable workspace, Projects workspace | VII |
+| **Workspace Write Manifest** | The reviewed list of directory and `.md` file entries proposed by `propose_workspace_write`; confirmation consumes its token before any write occurs. | services/aios_core/workspace_writes.py | manifest, dry run | VII |
+| **Workspace Tools** | The Open-WebUI tool server on `127.0.0.1:8771` exposing `propose_workspace_write`, `confirm_workspace_write`, and `rollback_workspace_write`; initially attached only to `qwen-deepdive`. | services/open-webui/workspace_tools_server.py, docs/operations.md | workspace writer | VII |
 
 ---
 

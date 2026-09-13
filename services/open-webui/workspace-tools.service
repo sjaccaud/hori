@@ -1,0 +1,27 @@
+[Unit]
+Description=HORI Workspace Markdown Tools for Open-WebUI
+Documentation=https://127.0.0.1:8771/openapi.json
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/Projects/aios/venv/bin/python3 %h/Projects/aios/services/open-webui/workspace_tools_server.py
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=%h/Projects/aios
+
+# Hardening: workspace writes stay under ~/Projects; audit/pending state stays
+# under ~/.local/share/aios. Everything else in the home directory is read-only.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/Projects %h/.local/share/aios
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+Environment=WORKSPACE_TOOLS_HOST=127.0.0.1
+Environment=WORKSPACE_TOOLS_PORT=8771
+Environment=WORKSPACE_TOOLS_ROOT=%h/Projects
+
+[Install]
+WantedBy=default.target

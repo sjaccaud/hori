@@ -257,6 +257,7 @@ PoC 13.1 (10,000-Turn Stress Test), PoC 13.7 (Deflection Mitigation).
 - `5680/tcp` -> `aios_core`
 - `8766/tcp` -> local-tools server (Open-WebUI and MCP `read_file`/`run_safe_command`)
 - `8769/tcp` -> project-tools server
+- `8771/tcp` -> workspace-tools server (confirmation-gated directories + `.md` writes)
 - `3000/tcp` -> `open_webui_aios` Docker container
 - `6333/tcp`, `6334/tcp` -> `qdrant_aios`
 - `5678/tcp` -> `n8n_aios`
@@ -560,6 +561,11 @@ Three collections for hierarchical memory (the anti-groundhog mechanism):
   - `task.query.retrieval.enable: false` (retrieval queries)
   - `task.voice.prompt.enable: false` (voice prompt generation)
 - **DB config location:** `/app/backend/data/webui.db` (SQLite, inside container)
+- **Local tool servers:**
+  - `local-tools-adaptive` (:8766): read-only host inspection (`read_file`, `run_safe_command`, `get_status`)
+  - `project-tools-adaptive` (:8769): confirmed project-skeleton creation
+  - `workspace-tools` (:8771): confirmed directory + Markdown manifest writes under `WORKSPACE_TOOLS_ROOT` (`~/Projects` in the unit). Create-only; `.md` files only; attached only to `qwen-deepdive` by `services/open-webui/fix_tooling.py`.
+  - Install/verify workspace tools: `make install-workspace-tools`, then `make check-workspace-tools`.
 
 ## Destructive Pattern Gate
 
