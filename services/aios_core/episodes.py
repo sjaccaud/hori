@@ -30,6 +30,9 @@ from typing import Any, Optional
 THREADS_ROOT = Path(
     os.environ.get("HORI_THREADS_ROOT", "~/.local/share/hori/threads")
 ).expanduser()
+REVIEW_ROOT = Path(
+    os.environ.get("HORI_REVIEW_ROOT", "~/.local/share/hori/review")
+).expanduser()
 
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 MAX_EPISODE_BYTES = 64 * 1024
@@ -170,6 +173,14 @@ def _split_frontmatter(text: str) -> tuple[dict, str]:
     return fm, text[end + 4:].lstrip("\n")
 
 
+def _file_verified(path: Path) -> bool:
+    """True if the file's frontmatter has a real verified_by value."""
+    fm, _ = _split_frontmatter(
+        path.read_text(encoding="utf-8", errors="replace"))
+    v = str(fm.get("verified_by", "")).strip('"').strip()
+    return bool(v) and v != "unverified"
+
+
 def read_thread(
     name: str, episodes: int = 1, root: Optional[Path] = None
 ) -> dict[str, Any]:
@@ -190,9 +201,25 @@ def read_thread(
     return {"name": name, "state": state, "episodes": out_eps}
 
 
-def list_threads(root: Optional[Path] = None) -> list[dict[str, Any]]:
+def _pending_proposals(review_root: Path, thread: str) -> int:
+    """Count pending review-queue items for a thread."""
+    if not review_root.is_dir():
+        return 0
+    n = 0
+    for f in review_root.glob(f"*-{thread}.md"):
+        fm, _ = _split_frontmatter(
+            f.read_text(encoding="utf-8", errors="replace"))
+        if str(fm.get("status", "")).strip('"') == "pending":
+            n += 1
+    return n
+
+
+def list_threads(
+    root: Optional[Path] = None, review_root: Optional[Path] = None
+) -> list[dict[str, Any]]:
     """List all threads with status/updated from state.md frontmatter."""
     root = _resolve_root(root)
+    review_root = review_root if review_root is not None else REVIEW_ROOT
     if not root.is_dir():
         return []
     out = []
@@ -210,6 +237,7 @@ def list_threads(root: Optional[Path] = None) -> list[dict[str, Any]]:
             "status": fm.get("status", "unknown"),
             "updated": fm.get("updated", ""),
             "episode_count": count,
+            "pending_proposals": _pending_proposals(review_root, tdir.name),
         })
     return out
 
@@ -252,8 +280,21 @@ def search_episodes(
                             "line": i,
                             "context": line.strip()[:300],
                         })
-                        if len(hits) >= limit:
-                            return hits
+                        if len(hits) >= limit * 4:
+                            break
             except UnicodeDecodeError:
                 continue
-    return hits
+
+    verified_cache: dict[str, bool] = {}
+
+    def _hit_verified(hit: dict) -> bool:
+        rel = hit["file"]
+        if rel not in verified_cache:
+            f = root / rel
+            verified_cache[rel] = (
+                f.name != "state.md" and f.exists() and _file_verified(f)
+            )
+        return verified_cache[rel]
+
+    # Stable sort: verified sources first (Pillar VII trust ordering).
+    return sorted(hits, key=lambda h: not _hit_verified(h))[:limit]

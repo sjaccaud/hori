@@ -17,6 +17,8 @@
 
 **Status:** implemented, tested, live-run. `services/aios_core/thread_consolidation.py` + `scripts/thread_consolidation.py` + `services/systemd/aios-thread-consolidation.{service,timer}` (03:20 nightly). Tests: 6 unit, 4 adversarial (no xfail). Full suite 723 passed. Live run 2026-09-15: 11 threads scanned, 2 state-prose proposals queued (pending), report at `~/.local/share/hori/consolidation/2026-09-15.md`. Unit installed + enabled 2026-09-15; `systemctl start` run clean (exit 0, journal OK); next timer fire 03:22. Dedup added: threads with an existing pending proposal aren't re-proposed.
 
+**Slice D thin pass (same branch):** `episode_search` ranks verified episodes (real `verified_by`) above unverified; `thread_list` reports `pending_proposals` per thread (verified live: hori=1, system-memory=1). Deferred until soak produces data: semantic episode search, failure-mining tuning, trust-tier weighting beyond verified-first.
+
 ---
 
 ### SLICE-16-SESSION-HOOKS: Wire agent clients to the HORI episode store and make recall push-based.

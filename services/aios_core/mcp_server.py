@@ -181,7 +181,7 @@ def list_mcp_tools() -> List[mcp_types.Tool]:
         ),
         _tool(
             "thread_list",
-            "List workstream threads with status, updated date, and episode count.",
+            "List workstream threads with status, updated date, episode count, and pending review proposals.",
             {"type": "object", "properties": {}, "required": []},
         ),
         _tool(

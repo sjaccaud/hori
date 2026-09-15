@@ -106,3 +106,36 @@ def test_missing_thread_errors(tmp_path):
                                 author="d", root=root)
     with pytest.raises(FileNotFoundError):
         episodes.read_thread("nope", root=root)
+
+
+def test_search_ranks_verified_first(tmp_path):
+    """Episodes with a real verified_by rank above unverified ones."""
+    root = tmp_path / "threads"
+    _seed_thread(root)
+    episodes.append_episode(thread="system-memory", title="Guess",
+                            summary="the undervolt is probably fine",
+                            author="qwen-fast", root=root)  # unverified
+    episodes.append_episode(thread="system-memory", title="Proven",
+                            summary="the undervolt is stable",
+                            author="devin", verified_by="run-bench.sh",
+                            root=root)
+
+    hits = episodes.search_episodes("undervolt", root=root)
+    assert len(hits) >= 2
+    assert "002" in hits[0]["file"]  # verified episode ranked first
+
+
+def test_list_threads_shows_pending_proposals(tmp_path):
+    """thread_list surfaces the review queue count per thread."""
+    root = tmp_path / "threads"
+    review = tmp_path / "review"
+    _seed_thread(root)
+    review.mkdir()
+    (review / "001-state-prose-system-memory.md").write_text(
+        '---\nkind: "state-prose"\nthread: "system-memory"\nstatus: pending\n---\n\nx\n')
+    (review / "002-state-prose-system-memory.md").write_text(
+        '---\nkind: "state-prose"\nthread: "system-memory"\nstatus: applied\n---\n\nx\n')
+
+    out = episodes.list_threads(root=root, review_root=review)
+    t = {x["name"]: x for x in out}["system-memory"]
+    assert t["pending_proposals"] == 1
