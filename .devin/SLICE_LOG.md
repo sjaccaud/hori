@@ -5,6 +5,20 @@
 
 ## Current Slice
 
+### SLICE-15-EPISODE-THREADS-MCP: Expose the workstream thread/episode store (`~/.local/share/hori/threads/`) as four tools on the existing MCP-over-SSE surface, so Devin/Cline/Open-WebUI share one persistent memory API.
+
+**Branch:** `slice/15-episode-threads-mcp`
+
+**Demo criterion:** An agent client (Devin session) calls `episode_append` over authenticated MCP; a second client reads the same episode back via `thread_read` / `episode_search`. No raw transcript, no manual file editing.
+
+**Safety boundary:** writes confined to the threads root; thread names are validated slugs; episodes are append-only (no overwrite/delete, no writes to `state.md`); size and count caps; same admin-token auth as every other MCP tool; no new ports or services.
+
+**PRD:** `.devin/prd/episode-threads-mcp.md` · **Work order:** `core/state/proposed_work_orders/a1f0c9e2-3b4d-4e5f-8a6b-7c8d9e0f1a2b.json`
+
+**Status:** implemented, tested, live-verified. `services/aios_core/episodes.py` (slug-validated, append-only, confined file store) + four MCP tools wired in `mcp_server.py`. Tests: 6 unit (`test_episodes.py`), 2 MCP dispatch (`test_mcp_server.py`), 4 adversarial (`test_episode_writes_confined.py`, no xfail — safety holds). `make test` green: 476 unit / 43 integration / 40 regression / 154 adversarial. Live verify over real `/mcp/sse`: unauth 401, `episode_append` → `thread_read` → `episode_search` round-trip into `~/.local/share/hori/threads/system-memory/episodes/002-*.md`, traversal rejected. aios_core restarted, `/health` ok.
+
+---
+
 ### SLICE-14-WORKSPACE-MARKDOWN-TOOLS: Give Deep Dive a confirmation-gated workspace writer for directories and Markdown scaffolds under `~/Projects`.
 
 **Branch:** `slice/14-workspace-markdown-tools`

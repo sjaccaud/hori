@@ -175,7 +175,7 @@
 
 | Term | Definition | Source of Truth | Aliases | Pillar |
 |------|------------|-----------------|---------|--------|
-| **MCP-over-SSE** | Admin-token-gated MCP server on aios_core exposing `get_status`, `read_file`, `run_safe_command`, `search_web`, `fetch_url`, `memory_search`, and `memory_store` to remote clients over SSE (Tailnet-only, port 443). JSON-RPC via `GET /mcp/sse` and `POST /mcp/messages?session_id=<id>`. | `services/aios_core/mcp_server.py`, `services/aios_core/main.py`, `.devin/prd/remote-mcp-tools.md` | MCP remote surface | II, IV, VII |
+| **MCP-over-SSE** | Admin-token-gated MCP server on aios_core exposing `get_status`, `read_file`, `run_safe_command`, `search_web`, `fetch_url`, `memory_search`, `memory_store`, `thread_list`, `thread_read`, `episode_append`, and `episode_search` to remote clients over SSE (Tailnet-only, port 443). JSON-RPC via `GET /mcp/sse` and `POST /mcp/messages?session_id=<id>`. | `services/aios_core/mcp_server.py`, `services/aios_core/main.py`, `.devin/prd/remote-mcp-tools.md` | MCP remote surface | II, IV, VII |
 | **Nano Chat** | The Llama 3.2 3B Open-WebUI preset and dedicated `nano` model served by `llama-nano.service` on `127.0.0.1:8090`, exposed at `https://<tailnet>:8444/v1`. Fast, low-VRAM, no tools. | `services/open-webui/llama-nano.service`, `docs/operations.md` | nano | I, IV |
 
 ---
@@ -196,3 +196,5 @@
 - **docs/archive/architecture_analysis.md:** Implies large context windows (historical).
 - **elastic_context_window.md / operations.md:** 16384 (down from 65536) is current.
 - **Resolution:** 16K with turbo4 KV cache is canonical.
+| **Thread (workstream)** | A durable, named line of work (`~/.local/share/hori/threads/<slug>/`) holding a curated `state.md` plus an append-only `episodes/` history. The persistent-state layer above conversational memory. | `services/aios_core/episodes.py`, `.devin/prd/episode-threads-mcp.md` | workstream, thread | III, VI |
+| **Episode** | A structured Markdown record appended to a thread (`episodes/NNN-<slug>.md`) with frontmatter (title, date, author, verified_by, open_issues, files_touched) and a human-readable body. Create-only; the unit of workstream history. | `services/aios_core/episodes.py` | episode, work episode | VI |

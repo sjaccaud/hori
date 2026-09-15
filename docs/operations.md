@@ -394,9 +394,15 @@ The shared intelligence layer. All surfaces (Open WebUI, future voice loop, futu
     HTTP 202 immediately and queues the JSON-RPC response on the SSE
     stream. Requires the same admin bearer token.
   - **Exposed MCP tools:** `get_status`, `read_file`, `run_safe_command`,
-    `search_web`, `fetch_url`, `memory_search`, `memory_store`. `read_file`
-    and `run_safe_command` delegate to the local-tools server (:8766) and
-    inherit its allowlists and audit logging.
+    `search_web`, `fetch_url`, `memory_search`, `memory_store`,
+    `thread_list`, `thread_read`, `episode_append`, `episode_search`.
+    `read_file` and `run_safe_command` delegate to the local-tools server
+    (:8766) and inherit its allowlists and audit logging. The four
+    `thread_*`/`episode_*` tools expose the workstream store
+    (`HORI_THREADS_ROOT`, default `~/.local/share/hori/threads/`):
+    thread names are slug-validated, episode writes are append-only
+    (create-only, capped at 64 KiB / 500 per thread), and all paths are
+    verified inside the threads root before any write.
   - **Tailnet-only reachability:** `/mcp` is proxied through Tailscale
     Serve (port 443) and is NOT exposed via Funnel. Verify with
     `scripts/hardening/audit_funnel.sh`.

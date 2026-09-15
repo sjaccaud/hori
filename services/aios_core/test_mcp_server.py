@@ -26,7 +26,7 @@ def admin_token():
 
 
 def test_list_mcp_tools_returns_core_tools(admin_token):
-    """list_mcp_tools() must expose the 7 tools in the interface contract."""
+    """list_mcp_tools() must expose the tools in the interface contract."""
     tools = list_mcp_tools()
     names = [t.name for t in tools]
     expected = [
@@ -37,8 +37,67 @@ def test_list_mcp_tools_returns_core_tools(admin_token):
         "fetch_url",
         "memory_search",
         "memory_store",
+        "thread_list",
+        "thread_read",
+        "episode_append",
+        "episode_search",
     ]
     assert names == expected
+
+
+def test_episode_tools_round_trip(admin_token, tmp_path, monkeypatch):
+    """episode_append then thread_read/thread_list over call_mcp_tool."""
+    import services.aios_core.episodes as episodes
+    from services.aios_core.mcp_server import call_mcp_tool
+
+    root = tmp_path / "threads"
+    tdir = root / "system-memory"
+    (tdir / "episodes").mkdir(parents=True)
+    (tdir / "state.md").write_text("---\nstatus: active\n---\n\n# s\n")
+    monkeypatch.setattr(episodes, "THREADS_ROOT", root)
+
+    res = asyncio.run(call_mcp_tool("episode_append", {
+        "thread": "system-memory",
+        "title": "MCP round trip",
+        "summary": "written via tools/call",
+        "author": "test-mcp",
+        "open_issues": ["none"],
+    }))
+    assert res.is_error is False
+    data = json.loads(res.content[0].text)
+    assert data["ok"] is True
+
+    res = asyncio.run(call_mcp_tool("thread_read", {"name": "system-memory"}))
+    data = json.loads(res.content[0].text)
+    assert data["episodes"][0]["frontmatter"]["author"] == "test-mcp"
+
+    res = asyncio.run(call_mcp_tool("thread_list", {}))
+    data = json.loads(res.content[0].text)
+    assert data[0]["name"] == "system-memory"
+    assert data[0]["episode_count"] == 1
+
+    res = asyncio.run(call_mcp_tool("episode_search", {"query": "round trip"}))
+    data = json.loads(res.content[0].text)
+    assert len(data) == 1
+
+
+def test_episode_append_rejects_bad_thread(admin_token, tmp_path, monkeypatch):
+    """A traversal thread name over MCP returns is_error, writes nothing."""
+    import services.aios_core.episodes as episodes
+    from services.aios_core.mcp_server import call_mcp_tool
+
+    root = tmp_path / "threads"
+    root.mkdir()
+    monkeypatch.setattr(episodes, "THREADS_ROOT", root)
+
+    res = asyncio.run(call_mcp_tool("episode_append", {
+        "thread": "../escape",
+        "title": "t",
+        "summary": "s",
+        "author": "evil",
+    }))
+    assert res.is_error is True
+    assert list(root.iterdir()) == []
 
 
 def test_call_tool_get_status_returns_system_state(admin_token):

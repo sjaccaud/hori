@@ -35,6 +35,7 @@ from starlette.responses import Response
 
 import mcp.types as mcp_types
 
+from . import episodes as episode_store
 from .memory import retrieve_memory, store_memory
 from .multi_search import multi_search
 
@@ -176,6 +177,53 @@ def list_mcp_tools() -> List[mcp_types.Tool]:
                     "tier": {"type": "string", "enum": ["working", "project", "longterm"], "default": "working"},
                 },
                 "required": ["content", "conversation_id"],
+            },
+        ),
+        _tool(
+            "thread_list",
+            "List workstream threads with status, updated date, and episode count.",
+            {"type": "object", "properties": {}, "required": []},
+        ),
+        _tool(
+            "thread_read",
+            "Read a thread's state.md plus its latest episodes.",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Thread slug, e.g. 'system-memory'"},
+                    "episodes": {"type": "integer", "default": 1, "maximum": 10},
+                },
+                "required": ["name"],
+            },
+        ),
+        _tool(
+            "episode_append",
+            "Append a structured episode to a thread (create-only, no overwrite).",
+            {
+                "type": "object",
+                "properties": {
+                    "thread": {"type": "string"},
+                    "title": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "author": {"type": "string", "description": "Tool/model that wrote this, e.g. 'devin'"},
+                    "verified_by": {"type": "string"},
+                    "open_issues": {"type": "array", "items": {"type": "string"}},
+                    "files_touched": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["thread", "title", "summary", "author"],
+            },
+        ),
+        _tool(
+            "episode_search",
+            "Substring search over thread state files and episodes.",
+            {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "thread": {"type": "string"},
+                    "limit": {"type": "integer", "default": 10, "maximum": 100},
+                },
+                "required": ["query"],
             },
         ),
     ]
@@ -327,6 +375,36 @@ async def call_mcp_tool(name: str, arguments: dict[str, Any]) -> mcp_types.CallT
                 role=arguments.get("role", "user"),
                 conversation_id=arguments.get("conversation_id", ""),
                 tier=arguments.get("tier", "working"),
+            )
+            return _tool_ok(result)
+
+        if name == "thread_list":
+            return _tool_ok(episode_store.list_threads())
+
+        if name == "thread_read":
+            result = episode_store.read_thread(
+                name=arguments.get("name", ""),
+                episodes=arguments.get("episodes", 1),
+            )
+            return _tool_ok(result)
+
+        if name == "episode_append":
+            result = episode_store.append_episode(
+                thread=arguments.get("thread", ""),
+                title=arguments.get("title", ""),
+                summary=arguments.get("summary", ""),
+                author=arguments.get("author", ""),
+                verified_by=arguments.get("verified_by"),
+                open_issues=arguments.get("open_issues"),
+                files_touched=arguments.get("files_touched"),
+            )
+            return _tool_ok(result)
+
+        if name == "episode_search":
+            result = episode_store.search_episodes(
+                query=arguments.get("query", ""),
+                thread=arguments.get("thread"),
+                limit=arguments.get("limit", 10),
             )
             return _tool_ok(result)
 
