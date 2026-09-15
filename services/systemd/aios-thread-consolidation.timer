@@ -1,0 +1,14 @@
+[Unit]
+Description=HORI Thread Consolidation — nightly timer
+# Runs 20 minutes after the memory-tier consolidation so the two
+# LLM workloads don't overlap.
+# Traces to: .devin/prd/thread-consolidation.md.
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+# If the machine was off, run once shortly after boot.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

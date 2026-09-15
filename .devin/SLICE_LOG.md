@@ -15,7 +15,7 @@
 
 **PRD:** `.devin/prd/thread-consolidation.md` · **Work order:** `core/state/proposed_work_orders/7c2b4d6e-1a3f-4b5c-9d8e-0f1a2b3c4d5e.json`
 
-**Status:** PRD written (user approved hybrid writes + rule mining in scope); TDD starting.
+**Status:** implemented, tested, live-run. `services/aios_core/thread_consolidation.py` + `scripts/thread_consolidation.py` + `services/systemd/aios-thread-consolidation.{service,timer}` (03:20 nightly). Tests: 6 unit, 4 adversarial (no xfail). Full suite 723 passed. Live run 2026-09-15: 11 threads scanned, 2 state-prose proposals queued (pending), report at `~/.local/share/hori/consolidation/2026-09-15.md`. **Pending:** unit install needs sudo (`install_services.sh`) — file is templated, not yet installed/enabled.
 
 ---
 
