@@ -231,12 +231,25 @@ def write_proposal(
     return {"ok": True, "file": fname}
 
 
+def _has_pending_proposal(review_dir: Path, kind: str, thread: str) -> bool:
+    """True if a pending proposal of this kind already covers the thread."""
+    if not review_dir.is_dir():
+        return False
+    for f in review_dir.glob(f"*-{kind}-{thread}.md"):
+        fm_lines, _ = _split_fm(f.read_text(encoding="utf-8", errors="replace"))
+        if (_fm_value(fm_lines, "status") or "").strip('"') == "pending":
+            return True
+    return False
+
+
 def propose_state_update(
     thread_dir: Path,
     call_llm: Callable[[str, str], str],
     review_dir: Path,
 ) -> Optional[dict]:
     """Ask the LLM for a prose state.md update; emit as a proposal only."""
+    if _has_pending_proposal(review_dir, "state-prose", thread_dir.name):
+        return None
     state = (thread_dir / "state.md").read_text(encoding="utf-8", errors="replace")
     eps = sorted((thread_dir / "episodes").glob("*.md"))[-5:]
     if not eps:

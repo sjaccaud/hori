@@ -111,3 +111,20 @@ def test_llm_down_skips_proposals_cleanly(tmp_path):
     assert (tdir / "state.md").read_text().count("2026-09-15") == 1
     assert report["llm_available"] is False
     assert report["proposals"] == []
+
+
+def test_propose_state_update_skips_pending(tmp_path):
+    """A thread with a pending state-prose proposal is not re-proposed."""
+    root = tmp_path / "threads"
+    tdir = _seed_thread(root)
+    _episode(tdir, 1)
+    review = tmp_path / "review"
+
+    def llm(system, user):
+        return "add a line"
+
+    first = tc.propose_state_update(tdir, llm, review)
+    assert first is not None
+    # second run: pending proposal exists -> no new file
+    assert tc.propose_state_update(tdir, llm, review) is None
+    assert len(list(review.glob("*.md"))) == 1
