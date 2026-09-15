@@ -406,6 +406,18 @@ The shared intelligence layer. All surfaces (Open WebUI, future voice loop, futu
   - **Tailnet-only reachability:** `/mcp` is proxied through Tailscale
     Serve (port 443) and is NOT exposed via Funnel. Verify with
     `scripts/hardening/audit_funnel.sh`.
+  - **Configured clients (2026-09-15):** Devin CLI
+    (`~/.config/devin/mcp_config.json`, user scope, loopback
+    `http://127.0.0.1:5680/mcp/sse`) and Cline
+    (`cline_mcp_settings.json`, `type: sse`, same URL; read tools
+    auto-approved, `episode_append` requires confirmation). Both use the
+    admin bearer token stored in the client config files.
+  - **Devin session hooks:** `SessionStart` runs
+    `scripts/hori_session_start.py` (injects the thread index plus the
+    cwd-matched thread's state + latest episode, ~4 KB cap, fail-open);
+    `SessionEnd` runs `scripts/hori_session_end.py` (appends a line to
+    `~/.local/share/hori/sessions.jsonl` for consolidation signals).
+    Configured in `~/.config/devin/config.json` under `hooks`.
 
 ## Proactive Opportunity Agent
 

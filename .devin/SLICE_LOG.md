@@ -5,6 +5,18 @@
 
 ## Current Slice
 
+### SLICE-16-SESSION-HOOKS: Wire agent clients to the HORI episode store and make recall push-based.
+
+**Branch:** `slice/16-session-hooks`
+
+**Demo criterion:** A new Devin session opens with the thread index (and the cwd-matched thread's state + latest episode) already in context; Cline and Devin can call `thread_*`/`episode_*` tools over loopback MCP.
+
+**Safety boundary:** no new network surface — loopback MCP only, same admin token; hooks read files directly (fail-open, ~4 KB context cap); Cline `episode_append` is not auto-approved (human click per write).
+
+**Status:** implemented. Devin user-scope MCP server `hori` (SSE, bearer) in `~/.config/devin/mcp_config.json`; Cline `cline_mcp_settings.json` (type sse, same URL); `scripts/hori_session_start.py` + `scripts/hori_session_end.py` wired via `~/.config/devin/config.json` hooks; `~/AGENTS.md` ritual updated to prefer `episode_append`. Verified: hook output standalone, sessions.jsonl journaling. Pending: in-session verification next Devin/Cline launch.
+
+---
+
 ### SLICE-15-EPISODE-THREADS-MCP: Expose the workstream thread/episode store (`~/.local/share/hori/threads/`) as four tools on the existing MCP-over-SSE surface, so Devin/Cline/Open-WebUI share one persistent memory API.
 
 **Branch:** `slice/15-episode-threads-mcp`
