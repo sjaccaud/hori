@@ -5,6 +5,20 @@
 
 ## Current Slice
 
+### SLICE-17-THREAD-CONSOLIDATION: Nightly loop that folds episodes into thread state, flags stale threads, and mines rule proposals — all LLM output lands in a human review queue, never auto-applied.
+
+**Branch:** `slice/17-thread-consolidation`
+
+**Demo criterion:** `thread_consolidation.py` run produces a dated report under `~/.local/share/hori/consolidation/`, mechanical `updated:` fields refresh on threads with new episodes, and any prose/rule suggestions appear as `status: pending` files in `~/.local/share/hori/review/`.
+
+**Safety boundary:** mechanical writer touches only the `updated` frontmatter key; LLM output reaches only `write_proposal` (status hard-forced to pending); all writes confined to threads root + review dir; LLM stages skipped in game mode.
+
+**PRD:** `.devin/prd/thread-consolidation.md` · **Work order:** `core/state/proposed_work_orders/7c2b4d6e-1a3f-4b5c-9d8e-0f1a2b3c4d5e.json`
+
+**Status:** PRD written (user approved hybrid writes + rule mining in scope); TDD starting.
+
+---
+
 ### SLICE-16-SESSION-HOOKS: Wire agent clients to the HORI episode store and make recall push-based.
 
 **Branch:** `slice/16-session-hooks`
