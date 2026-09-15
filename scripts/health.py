@@ -33,11 +33,11 @@ ENDPOINTS = [
 
 SERVICES = [
     ("aios_core", True),
-    ("llamacpp", True),
+    ("llamacpp-adaptive", True),
     ("aios-sherpa", True),
     ("aios-tool-daemon", True),
-    ("local-tools", True, "--user"),
-    ("project-tools", True, "--user"),
+    ("local-tools-adaptive", True),
+    ("project-tools-adaptive", True),
     ("workspace-tools", False, "--user"),
 ]
 
@@ -133,7 +133,7 @@ def main() -> int:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
         if data.get("ok"):
             status = data["status"]

@@ -7,7 +7,8 @@
 
 services:
   open-webui:
-    image: ghcr.io/open-webui/open-webui:main
+    # Pinned 2026-09-10; sha256 verified by `docker image inspect`.
+    image: ghcr.io/open-webui/open-webui:main@sha256:8afd2d774834c618a75411b3491cdc5da7396dc464f56a160b937ff2992eb6e4
     container_name: open_webui_aios
     restart: always
     network_mode: host

@@ -1,0 +1,28 @@
+[Unit]
+Description=Llama.cpp ROCm Server (Jacko AI Rig)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<user>
+WorkingDirectory=~/llama-builds/spiritbuun-714
+ExecStart=~/llama-builds/spiritbuun-714/bin/llama-server \
+  --model /opt/ai-models/Qwen3.8-27B-IQ4_NL.gguf \
+  --alias Qwen3.8-27B \
+  -c 65536 \
+  -np 1 \
+  -fa on \
+  -b 2048 \
+  -ub 2048 \
+  -ctk f16 \
+  -ctv f16 \
+  --spec-type ngram-mod \
+  --jinja \
+  --host 0.0.0.0 \
+  --port 8080
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

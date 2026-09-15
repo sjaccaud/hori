@@ -1010,22 +1010,90 @@ async def system_state():
         return None
 
     def _get_rocm_version():
+        def _read_env(pid):
+            try:
+                with open(f"/proc/{pid}/environ", "rb") as f:
+                    data = f.read()
+                env = {}
+                for item in data.split(b"\0"):
+                    if b"=" in item:
+                        k, v = item.split(b"=", 1)
+                        env[k.decode("utf-8", "replace")] = v.decode("utf-8", "replace")
+                return env
+            except Exception:
+                return {}
+
+        def _rocm_prefix(env):
+            for part in env.get("LD_LIBRARY_PATH", "").split(":"):
+                part = part.strip()
+                if part and "/rocm/core-" in part and part.endswith("/lib") and Path(part).is_dir():
+                    return part[:-4]
+            prefix = env.get("ROCM_PREFIX", "")
+            if prefix and Path(prefix).is_dir():
+                return prefix
+            return None
+
+        def _version(prefix):
+            vf = Path(prefix) / ".info" / "version"
+            if vf.is_file():
+                return vf.read_text(encoding="utf-8").strip()
+            hipcc = Path(prefix) / "bin" / "hipcc"
+            if hipcc.is_file() and os.access(hipcc, os.X_OK):
+                try:
+                    result = subprocess.run([str(hipcc), "--version"], capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        for line in result.stdout.splitlines():
+                            if "HIP version:" in line:
+                                return line.split("HIP version:")[1].strip()
+                except Exception:
+                    pass
+            return None
+
+        candidates = []
         try:
-            result = subprocess.run(["/opt/rocm/bin/hipcc", "--version"], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    if "HIP version:" in line:
-                        return line.split("HIP version:")[1].strip()
+            for pid_str in os.listdir("/proc"):
+                if not pid_str.isdigit():
+                    continue
+                try:
+                    with open(f"/proc/{pid_str}/cmdline", "rb") as f:
+                        cmdline = [x.decode("utf-8", "replace") for x in f.read().split(b"\0") if x]
+                    if not cmdline or "llama-server" not in cmdline[0]:
+                        continue
+                    prefix = _rocm_prefix(_read_env(int(pid_str)))
+                    if prefix:
+                        candidates.append((cmdline, prefix))
+                except Exception:
+                    continue
         except Exception:
             pass
-        try:
-            result = subprocess.run(["hipcc", "--version"], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    if "HIP version:" in line:
-                        return line.split("HIP version:")[1].strip()
-        except Exception:
-            pass
+
+        for cmdline, prefix in candidates:
+            if "--port" in cmdline:
+                try:
+                    idx = cmdline.index("--port") + 1
+                    if idx < len(cmdline) and "8080" in cmdline[idx]:
+                        version = _version(prefix)
+                        if version:
+                            return version
+                except Exception:
+                    pass
+
+        for _, prefix in candidates:
+            version = _version(prefix)
+            if version:
+                return version
+
+        for hipcc in ("/opt/rocm/bin/hipcc", "hipcc"):
+            try:
+                if hipcc != "hipcc" and not Path(hipcc).is_file():
+                    continue
+                result = subprocess.run([hipcc, "--version"], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    for line in result.stdout.splitlines():
+                        if "HIP version:" in line:
+                            return line.split("HIP version:")[1].strip()
+            except Exception:
+                pass
         return "unknown"
 
     def _get_loaded_model():

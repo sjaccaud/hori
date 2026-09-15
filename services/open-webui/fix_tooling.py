@@ -37,6 +37,7 @@ TOOL_USAGE = (
     "- For project/directory surveys, 'list my projects', or questions that need current filesystem state, prefer run_safe_command (ls, tree, find, du, etc.) and read_file. "
     "Only call query_knowledge_files for conceptual/historical questions that are likely covered in the attached knowledge collections; do NOT call query_knowledge_files, view_knowledge_file, search_memories, search_chats, or search_notes for status questions.\n"
     "- For small known files, you may call read_file up to 4 times in parallel. For large outputs or exploration, issue one focused call, read the result, then decide the next step.\n"
+    "- read_file auto-summarizes files larger than its max_bytes cap via the local nano model (the result has summarized=true); pass summarize=false or an explicit max_bytes when you need exact raw content.\n"
     "- Workspace write tools (when attached) are confirmation-gated: call "
     "propose_workspace_write with relative paths under the configured Projects "
     "workspace, show the manifest to the user, and only call "
@@ -46,6 +47,8 @@ TOOL_USAGE = (
     "Never answer current-state questions from attached knowledge or memory alone, even when it looks relevant; it may be stale.\n"
     "- The offline model archive lives at /mnt/4TB/model-archive (categories: llm/, vlm/, stt/, slm/, tts/, embedding/). For 'haul', 'stash', 'the downloads', or similar, check /mnt/4TB/model-archive and /opt/ai-models with run_safe_command (ls/find/du) first.\n"
     "- run_safe_command is shell-free: no pipes |, chaining ; &&, $(), or find -exec. Glob chars (* ? [ ]) in paths are expanded automatically. If a call fails, read the error and adjust once — do not retry the same shape.\n"
+    "- The router holds one model at a time; switching presets (e.g. from qwen-fast to devstral-coding) unloads the current model and aborts any in-flight chat or tool loop. Finish or wait for the current reply before switching models.\n"
+    "- qwen-256k-batch is for batch ingestion only; a full 256k prefill is slow. Before running it, avoid competing for the last VRAM with nano or large read_file summaries — the model may OOM if the GPU is already near full.\n"
     "- Never paste raw tool output (JSON envelopes with ok/stdout/stderr fields, or unfiltered stdout dumps) into your reply. Summarize tool results as prose or a compact table.\n"
     "- Do not use web_search or fetch_url for local status questions, and do not ask the user to clarify when a tool call can resolve the ambiguity. Check first, then report what you found."
 )

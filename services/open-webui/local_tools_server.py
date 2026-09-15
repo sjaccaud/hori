@@ -3,7 +3,8 @@
 
 Exposes server-side read-only tools:
 
-- read_file: read a text file from an allowed host path.
+- read_file: read a text file from an allowed host path (auto-summarized
+  via the local nano model when the file exceeds max_bytes).
 - run_safe_command: run a pre-approved, read-only diagnostic command.
 - get_status: fetch a concise AIOS system status snapshot.
 
@@ -46,6 +47,15 @@ AUDIT_LOG = os.environ.get(
     os.path.expanduser("~/.local/share/local-tools/audit.jsonl"),
 )
 
+# read_file auto-summarization: files larger than max_bytes are condensed by
+# the local nano model (llama-nano.service) instead of silently truncating.
+NANO_URL = os.environ.get(
+    "LOCAL_TOOLS_NANO_URL", "http://127.0.0.1:8090/v1/chat/completions"
+)
+NANO_MODEL = os.environ.get("LOCAL_TOOLS_NANO_MODEL", "nano")
+NANO_SUMMARIZE_CHARS = 80_000
+NANO_SUMMARIZE_TIMEOUT = 120
+
 # Roots that read_file may access. Secrets are still filtered below.
 _DEFAULT_READ_ROOTS = (
     os.path.expanduser("~") + ":/etc:/usr/share:/opt/krill_harvester:/tmp"
@@ -63,22 +73,47 @@ READ_DENY_PATTERNS = os.environ.get(
     "**/.ssh/**,**/.gnupg/**,/etc/shadow,/etc/sudoers*,/etc/gshadow",
 ).split(",")
 
-# Commands that run_safe_command may execute. Some have further filters below.
-ALLOWED_COMMANDS = frozenset(
-    os.environ.get(
-        "LOCAL_TOOLS_ALLOWED_COMMANDS",
-        "inxi,rocm-smi,nvidia-smi,amdgpu-top,amdgpu_top,lscpu,lsmem,lsusb,lspci,lshw,"
-        "dmidecode,ps,pgrep,top,htop,iotop,powertop,df,du,free,vmstat,iostat,sar,"
-        "uptime,uname,ss,netstat,ip,ethtool,ping,dig,nslookup,lsof,fuser,traceroute,"
-        "tailscale,lsblk,blkid,findmnt,zramctl,swapon,smartctl,hdparm,nvme,fdisk,parted,"
-        "dmesg,journalctl,loginctl,systemctl,dpkg,dpkg-query,apt-cache,apt,snap,flatpak,"
-        "docker,git,find,grep,rg,ls,cat,head,tail,awk,sed,cut,sort,uniq,wc,tr,xargs,"
-        "which,whereis,file,stat,readlink,realpath,modinfo,rocminfo,readelf,objdump,"
-        "strings,lsscsi,coredumpctl,lsb_release,cpupower,mount,findmnt,xrandr,wlr-randr,"
-        "gsettings,gdbus,ollama,huggingface-cli,hf,yt-dlp,pandoc,ffprobe,ffmpeg,timeout,"
-        "gamemoded,sunshine",
-    ).split(",")
+CORE_COMMANDS = frozenset(
+    "inxi,rocm-smi,nvidia-smi,amdgpu-top,amdgpu_top,lscpu,lsmem,lsusb,lspci,lshw,"
+    "dmidecode,ps,pgrep,top,htop,iotop,powertop,df,du,free,vmstat,iostat,sar,"
+    "uptime,uname,ss,netstat,ip,ethtool,ping,dig,nslookup,lsof,fuser,traceroute,"
+    "tailscale,lsblk,blkid,findmnt,zramctl,swapon,smartctl,hdparm,nvme,fdisk,parted,"
+    "dmesg,journalctl,loginctl,systemctl,dpkg,dpkg-query,apt-cache,apt,snap,flatpak,"
+    "find,grep,rg,ls,cat,head,tail,awk,sed,cut,sort,uniq,wc,tr,xargs,"
+    "which,whereis,file,stat,readlink,realpath,modinfo,rocminfo,readelf,objdump,"
+    "strings,lsscsi,coredumpctl,lsb_release,cpupower,mount,findmnt,xrandr,wlr-randr,"
+    "gsettings,gdbus,gamemoded".split(",")
 )
+
+# Commands that can fetch from the network or touch mutable state.
+# Set LOCAL_TOOLS_EXTENDED_COMMANDS=0 to disable them for stricter sessions.
+EXTENDED_COMMANDS = frozenset(
+    "docker,git,huggingface-cli,hf,yt-dlp,pandoc,ffprobe,ffmpeg,ollama,sunshine".split(",")
+)
+
+def _allowed_commands() -> frozenset[str]:
+    """Compute the command allowlist from environment overrides."""
+    override = os.environ.get("LOCAL_TOOLS_ALLOWED_COMMANDS")
+    if override:
+        return frozenset(override.split(","))
+    strict = os.environ.get("LOCAL_TOOLS_EXTENDED_COMMANDS", "1").lower() in {
+        "0",
+        "false",
+        "off",
+        "no",
+        "disabled",
+    }
+    if strict:
+        return CORE_COMMANDS
+    return CORE_COMMANDS | EXTENDED_COMMANDS
+
+
+# Commands that run_safe_command may execute. Some have further filters below.
+# LOCAL_TOOLS_ALLOWED_COMMANDS overrides everything; otherwise the default is
+# CORE + EXTENDED. Set LOCAL_TOOLS_EXTENDED_COMMANDS to 0/false/off/no to run
+# in a stricter "diagnostics only" profile (e.g., when the model has been
+# reading untrusted external content).
+ALLOWED_COMMANDS = _allowed_commands()
 
 # Commands that are allowed only with specific subcommand filters.
 SUBCOMMAND_FILTERS: dict[str, frozenset[str] | None] = {
@@ -104,13 +139,10 @@ SUBCOMMAND_FILTERS: dict[str, frozenset[str] | None] = {
             "ps",
             "images",
             "info",
-            "system",
             "logs",
             "inspect",
-            "volume",
-            "context",
-            "network",
             "stats",
+            "top",
         }
     ),
     "apt": frozenset({"list", "show", "search", "policy"}),
@@ -230,6 +262,63 @@ def _is_binary(path: Path) -> bool:
     return len(chunk) > 0 and non_text / len(chunk) > 0.30
 
 
+def _summarize_with_nano(path: Path) -> str | None:
+    """Ask the local nano model for a Markdown summary of a large file.
+
+    Sends at most NANO_SUMMARIZE_CHARS of the file head to the llama-nano
+    endpoint. Returns None on any failure so the caller can fall back to a
+    plain truncated read.
+    """
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as f:
+            head = f.read(NANO_SUMMARIZE_CHARS)
+    except OSError:
+        return None
+
+    truncated_note = (
+        f"\n\n(Only the first ~{NANO_SUMMARIZE_CHARS} characters are shown; "
+        "the file is longer.)" if len(head) >= NANO_SUMMARIZE_CHARS else ""
+    )
+    req = {
+        "model": NANO_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a precise file summarizer for an expert coding "
+                    "assistant. Read the file and produce a structured, dense "
+                    "Markdown summary: purpose, key symbols with approximate "
+                    "line numbers, imports/dependencies, TODOs and gotchas. "
+                    "Use exact symbol names. Do NOT wrap the whole output in "
+                    "a fenced code block."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Summarize this file. Path: `{path}`{truncated_note}\n\n"
+                    f"```\n{head}\n```"
+                ),
+            },
+        ],
+        "temperature": 0.2,
+        "max_tokens": 4096,
+    }
+    try:
+        http_req = urllib.request.Request(
+            NANO_URL,
+            data=json.dumps(req).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(http_req, timeout=NANO_SUMMARIZE_TIMEOUT) as resp:
+            resp_json = json.loads(resp.read().decode("utf-8"))
+        return resp_json["choices"][0]["message"]["content"]
+    except Exception as e:
+        log.info("nano summary failed for %s: %s", path, e)
+        return None
+
+
 def tool_read_file(args: dict[str, Any]) -> dict[str, Any]:
     path = args.get("path", "")
     if not path or not isinstance(path, str):
@@ -249,10 +338,30 @@ def tool_read_file(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": f"path error: {e}"}
 
     max_bytes = 102_400
-    if isinstance(args.get("max_bytes"), int) and 1 <= args["max_bytes"] <= 1_048_576:
+    max_bytes_explicit = isinstance(args.get("max_bytes"), int) and 1 <= args["max_bytes"] <= 1_048_576
+    if max_bytes_explicit:
         max_bytes = args["max_bytes"]
+    # Auto-summarize untargeted reads that exceed the cap; callers who pass an
+    # explicit max_bytes are doing bounded/paged reads and get exact content
+    # unless they also pass summarize=true.
+    summarize_arg = args.get("summarize")
+    summarize = bool(summarize_arg) if summarize_arg is not None else not max_bytes_explicit
 
     try:
+        file_size = p.stat().st_size
+        if file_size > max_bytes and summarize:
+            summary = _summarize_with_nano(p)
+            if summary is not None:
+                return {
+                    "ok": True,
+                    "path": str(p),
+                    "content": (
+                        f"# Bulk summary of {p} ({file_size} bytes)\n\n{summary}\n"
+                    ),
+                    "bytes_read": min(file_size, NANO_SUMMARIZE_CHARS),
+                    "truncated": True,
+                    "summarized": True,
+                }
         content = p.read_text(encoding="utf-8", errors="replace")[:max_bytes]
     except (OSError, PermissionError) as e:
         return {"ok": False, "error": f"read failed: {e}"}
@@ -262,7 +371,7 @@ def tool_read_file(args: dict[str, Any]) -> dict[str, Any]:
         "path": str(p),
         "content": content,
         "bytes_read": len(content.encode("utf-8")),
-        "truncated": p.stat().st_size > max_bytes,
+        "truncated": file_size > max_bytes,
     }
 
 
@@ -402,23 +511,151 @@ def tool_run_safe_command(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def tool_get_status(_args: dict[str, Any]) -> dict[str, Any]:
-    """Fetch a concise AIOS system status snapshot from aios_core /system/state.
-
-    This is a read-only, local-only call. It lets the assistant answer
-    "what's my system status?" in one tool call.
-    """
-    url = "http://127.0.0.1:5680/system/state"
+def _run(cmd: list[str], timeout: int = 5) -> tuple[str, int]:
+    """Run a command and return (stdout, returncode)."""
     try:
-        with urllib.request.urlopen(url, timeout=5) as resp:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return proc.stdout, proc.returncode
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return "", 1
+
+
+def _loaded_model() -> str | None:
+    """Ask llama-server which preset is currently loaded, if any."""
+    try:
+        with urllib.request.urlopen(
+            "http://127.0.0.1:8080/v1/models", timeout=3
+        ) as resp:
             data = json.loads(resp.read().decode("utf-8"))
+        for m in data.get("data", []):
+            if m.get("status", {}).get("value") == "loaded":
+                return m.get("id")
+    except Exception:
+        pass
+    return None
+
+
+def _llama_health() -> bool:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=2) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        return payload.get("status") == "ok"
+    except Exception:
+        return False
+
+
+def _systemctl_states(services: list[str]) -> dict[str, str]:
+    stdout, _ = _run(["systemctl", "is-active", *services])
+    states = stdout.strip().splitlines()
+    return {s: (states[i] if i < len(states) else "unknown") for i, s in enumerate(services)}
+
+
+def _gpu_snapshot() -> dict[str, Any]:
+    stdout, _ = _run(["rocm-smi", "--showid", "--showmeminfo", "VRAM", "--json"])
+    try:
+        return json.loads(stdout)
+    except json.JSONDecodeError:
+        return {}
+
+
+def _disk_snapshot() -> dict[str, Any]:
+    snapshot = {}
+    for fs in "/ /home /opt /mnt/4TB /mnt/8TB".split():
+        stdout, _ = _run(["df", "-h", fs])
+        lines = stdout.strip().splitlines()
+        if len(lines) >= 2:
+            parts = lines[1].split()
+            if len(parts) >= 6:
+                snapshot[fs] = {
+                    "size": parts[1],
+                    "used": parts[2],
+                    "available": parts[3],
+                    "use_percent": parts[4],
+                }
+    return snapshot
+
+
+def _memory_snapshot() -> dict[str, str]:
+    stdout, _ = _run(["free", "-h"])
+    lines = stdout.strip().splitlines()
+    if len(lines) >= 2:
+        parts = lines[1].split()
+        if len(parts) >= 7:
+            return {
+                "total": parts[1],
+                "used": parts[2],
+                "free": parts[3],
+                "shared": parts[4],
+                "buff_cache": parts[5],
+                "available": parts[6],
+            }
+    return {}
+
+
+def _docker_container_states(containers: list[str]) -> dict[str, str]:
+    states = {}
+    for name in containers:
+        stdout, _ = _run(
+            [
+                "docker",
+                "ps",
+                "--filter",
+                f"name={name}",
+                "--format",
+                "{{.Status}}",
+            ]
+        )
+        states[name] = stdout.strip() or "not running"
+    return states
+
+
+def tool_get_status(_args: dict[str, Any]) -> dict[str, Any]:
+    """Fetch a concise AIOS system status snapshot.
+
+    Preferred source is aios-core /system/state. If it is unreachable, build
+    the same shape from local read-only probes so the tool keeps working.
+    """
+    try:
+        with urllib.request.urlopen(
+            "http://127.0.0.1:5680/system/state", timeout=15
+        ) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        data["source"] = "aios-core"
         return {"ok": True, "status": data}
-    except urllib.error.HTTPError as e:
-        return {"ok": False, "error": f"aios-core returned {e.code}: {e.reason}"}
-    except urllib.error.URLError as e:
-        return {"ok": False, "error": f"could not reach aios-core: {e.reason}"}
     except Exception as e:
-        return {"ok": False, "error": f"status fetch failed: {e}"}
+        # Fallback: aios-core is a convenience, not a hard dependency.
+        snapshot = {
+            "status": "degraded",
+            "source": "local-tools-fallback",
+            "aios_core_error": str(e),
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "services": {
+                **_systemctl_states(
+                    [
+                        "llamacpp-adaptive",
+                        "llama-nano-adaptive",
+                        "local-tools-adaptive",
+                        "project-tools-adaptive",
+                    ]
+                ),
+                **_docker_container_states(
+                    [
+                        "open_webui_aios",
+                        "searchrouter_aios",
+                        "aios_embedding",
+                        "prometheus_aios",
+                        "grafana_aios",
+                        "qdrant_aios",
+                    ]
+                ),
+                "llama-server-health": _llama_health(),
+            },
+            "loaded_model": _loaded_model(),
+            "gpu": _gpu_snapshot(),
+            "memory": _memory_snapshot(),
+            "disk": _disk_snapshot(),
+        }
+        return {"ok": True, "status": snapshot}
 
 
 TOOLS = {
@@ -478,7 +715,12 @@ OPENAPI_SPEC: dict[str, Any] = {
         "/read_file": {
             "post": {
                 "operationId": "read_file",
-                "summary": "Read a text file from an allowed host path.",
+                "summary": (
+                    "Read a text file from an allowed host path. Files "
+                    "larger than max_bytes are auto-summarized by the local "
+                    "nano model instead of truncating (summarize=false "
+                    "disables)."
+                ),
                 "requestBody": {
                     "required": True,
                     "content": {
@@ -488,6 +730,7 @@ OPENAPI_SPEC: dict[str, Any] = {
                                 "properties": {
                                     "path": {"type": "string"},
                                     "max_bytes": {"type": "integer"},
+                                    "summarize": {"type": "boolean"},
                                 },
                                 "required": ["path"],
                             }

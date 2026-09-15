@@ -15,7 +15,8 @@
 
 services:
   searchrouter:
-    image: searxng/searxng:latest
+    # Pinned 2026-09-10; sha256 verified by `docker image inspect`.
+    image: searxng/searxng:latest@sha256:8bb6a6f677a758cefa4ae2c9f5da1012876e428a4388e3e86f34be4ca715330a
     container_name: searchrouter_aios
     ports:
       - "127.0.0.1:8081:8080"

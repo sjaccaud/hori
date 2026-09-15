@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import json
+import re
 import sqlite3
 import sys
 import time
+from pathlib import Path
 
 DB = sys.argv[1] if len(sys.argv) > 1 else "/app/backend/data/webui.db"
 conn = sqlite3.connect(DB)
@@ -11,28 +13,77 @@ c = conn.cursor()
 def now():
     return int(time.time())
 
-# Keep in sync with the [section] ctx in router.ini and MAX_TOKENS in
-# fix_tooling.py. Measured 2026-09-07 on the R9700 (31.9 GiB): qwen35 hybrid
-# KV costs ~25.3 KB/token at q4_0, draft-mtp reserves ~1.8 GiB, Devstral f16
-# KV ~160 KB/token, and the GPU-resident nano server (llama-nano.service,
-# 32k ctx) adds a fixed ~3 GiB alongside whichever preset is loaded.
-# qwen-quality is pinned at 16k: Q8_0 weights + q8_0 KV already hit ~30.4 GiB.
-contexts = {
-    'qwen-fast': 65536,
-    'qwen-think': 65536,
-    'qwen-balanced': 131072,
-    'qwen-quality': 16384,
-    'qwen-long': 131072,
-    'qwen-128k': 196608,
-    'qwen-256k-batch': 262144,
-    'devstral-coding': 65536,
-    'qwen-dsh-fast': 65536,
-    'qwen-dsh-low': 65536,
-    'qwen-dsh-medium': 65536,
-    'qwen-deepdive': 131072,
-    'qwen-free': 131072,
-    'nano': 32768,
+# Context lengths are read from the llama-server router.ini so there is
+# one source of truth. Measured 2026-09-07 on the R9700 (31.9 GiB): qwen35
+# hybrid KV costs ~25.3 KB/token at q4_0, draft-mtp reserves ~1.8 GiB,
+# Devstral f16 KV ~160 KB/token, and the GPU-resident nano server
+# (llama-nano.service, 32k ctx) adds a fixed ~3 GiB alongside whichever
+# preset is loaded. qwen-quality is pinned at 16k: Q8_0 weights + q4_0 KV,
+# no spec, ~26.5 GiB.
+
+ROUTER_INI = Path.home() / "llama-builds/mainline-adaptive-mtp-10/router.ini"
+
+# The local nano server is not in router.ini, so keep a tiny fallback table
+# for aliases that live outside the router.
+FALLBACK_CONTEXTS = {
+    "nano": 32768,
 }
+
+
+def _parse_router_contexts(router_ini: Path) -> dict[str, int]:
+    """Return {alias: ctx_size} from a llama-server router/preset INI.
+
+    If a section has both a section name and an `alias` key, the alias wins
+    so it maps cleanly to Open-WebUI model ids.
+    """
+    contexts: dict[str, int] = {}
+    section: str | None = None
+    alias: str | None = None
+    ctx: int | None = None
+
+    with router_ini.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith(";"):
+                continue
+            section_match = re.match(r"^\[(.+?)\]$", line)
+            if section_match:
+                # Flush previous section before moving on.
+                if section and ctx is not None:
+                    contexts[alias or section] = ctx
+                section = section_match.group(1)
+                alias = None
+                ctx = None
+                continue
+
+            if section is None or "=" not in line:
+                continue
+
+            key, _, value = line.partition("=")
+            key = key.strip()
+            # Strip inline comments.
+            value = value.split(";")[0].strip()
+
+            if key == "alias":
+                alias = value
+            elif key == "c":
+                try:
+                    ctx = int(value)
+                except ValueError:
+                    ctx = None
+
+    if section and ctx is not None:
+        contexts[alias or section] = ctx
+
+    return contexts
+
+
+if ROUTER_INI.exists():
+    contexts = _parse_router_contexts(ROUTER_INI)
+else:
+    contexts = {}
+
+contexts.update(FALLBACK_CONTEXTS)
 
 # Completion cap per alias. Reasoning presets and the long-doc/batch tiers get
 # 16384 because chain-of-thought tokens share the same max_tokens budget;

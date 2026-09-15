@@ -1,0 +1,32 @@
+[Unit]
+Description=HORI Project Creation Tools for Open-WebUI (system)
+Documentation=https://127.0.0.1:8769/openapi.json
+After=network.target
+Wants=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+# User/Group/WorkingDirectory and %h paths are substituted by the install
+# script (scripts/hardening/install_services.sh) with the real user and home.
+WorkingDirectory=%h/Projects/aios
+ExecStart=%h/Projects/aios/venv/bin/python3 %h/Projects/aios/services/open-webui/project_tools_server.py
+Restart=on-failure
+RestartSec=5
+
+# Hardening: project creation writes under ~/Projects; everything else stays read-only.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/Projects %h/.local/share
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+Environment=PROJECT_TOOLS_HOST=127.0.0.1
+Environment=PROJECT_TOOLS_PORT=8769
+
+[Install]
+WantedBy=multi-user.target

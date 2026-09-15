@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-09-07",
+  "generated": "2026-09-10",
   "note": "Script library for the HORI/AIOS rig. Entries are hand-curated; add new scripts here when created. runnable=false rows are reference-only (installers, sudo-only, hooks, destructive). probes feed the status column.",
   "categories": {
     "ai-stack": "Inference, OWUI, models, benchmarks",
@@ -15,22 +15,57 @@
     {
       "id": "run-llama",
       "name": "run-llama.sh",
-      "path": "~/llama-builds/spiritbuun-714/run-llama.sh",
+      "path": "~/llama-builds/mainline-adaptive-mtp-10/run-llama.sh",
       "category": "ai-stack",
-      "what": "Launches llama-server in router mode: 13 model presets from router.ini, models-max 1, --jinja, polling monitor.",
-      "why": "Single launch point for the whole inference stack; llamacpp.service ExecStarts this.",
-      "created": "2026-08",
+      "what": "Launches the llama-server router on :8080 with 13 model presets, --jinja, --models-max 1, mlock.",
+      "why": "Single launch point for the whole inference stack; llamacpp-adaptive.service ExecStarts this.",
+      "created": "2026-09-10",
       "kind": "service",
       "runnable": false,
       "probe": {
         "type": "systemd",
-        "unit": "llamacpp.service",
+        "unit": "llamacpp-adaptive.service",
         "scope": "system"
       },
       "tags": [
         "inference",
         "router",
-        "systemd"
+        "systemd",
+        "rocm-10"
+      ]
+    },
+    {
+      "id": "build-adaptive-mtp-10",
+      "name": "build-adaptive-mtp-10.sh",
+      "path": "~/llama-builds/build-adaptive-mtp-10.sh",
+      "category": "ai-stack",
+      "what": "Builds the mainline-adaptive-mtp-10 llama.cpp from source (ROCm 10, clang 23, gfx1201) and installs into ~/llama-builds/mainline-adaptive-mtp-10.",
+      "why": "This is the build that gave the ROCm 7→10 + adaptive-MTP cutover.",
+      "created": "2026-09-10",
+      "kind": "build",
+      "runnable": false,
+      "notes": "Destructive: wipes build and install dirs. Run manually; not from the panel.",
+      "tags": [
+        "inference",
+        "build",
+        "rocm-10"
+      ]
+    },
+    {
+      "id": "bench-router-adaptive-10",
+      "name": "bench-router-adaptive-10.sh",
+      "path": "~/llama-builds/mainline-adaptive-mtp-10/bench-router-adaptive-10.sh",
+      "category": "ai-stack",
+      "what": "Spins up a temporary llama-server on :8079 with the adaptive-MTP router and benchmarks qwen-fast prompt/generation throughput.",
+      "why": "Head-to-head benchmark against the old build; use after a compiler/runtime/model change.",
+      "created": "2026-09-10",
+      "kind": "benchmark",
+      "runnable": false,
+      "notes": "Do not run while llamacpp-adaptive is serving on :8080 — two Qwen models will not fit in 32 GB VRAM.",
+      "tags": [
+        "inference",
+        "benchmark",
+        "rocm-10"
       ]
     },
     {
@@ -728,15 +763,15 @@
       "name": "local_tools_server.py",
       "path": "~/Projects/aios/services/open-webui/local_tools_server.py",
       "category": "ai-stack",
-      "what": "OpenAPI tool server giving OWUI models read_file / run_safe_command / get_status on the host.",
+      "what": "OpenAPI tool server giving OWUI models read_file / run_safe_command / get_status on the host; auto-summarizes oversized files via llama-nano.",
       "why": "How the models inspect the machine; allowlist-gated, audit-logged.",
       "created": "2026-09-04",
       "kind": "service",
       "runnable": false,
       "probe": {
         "type": "systemd",
-        "unit": "local-tools.service",
-        "scope": "user"
+        "unit": "local-tools-adaptive.service",
+        "scope": "system"
       },
       "tags": [
         "owui",
@@ -756,8 +791,8 @@
       "runnable": false,
       "probe": {
         "type": "systemd",
-        "unit": "project-tools.service",
-        "scope": "user"
+        "unit": "project-tools-adaptive.service",
+        "scope": "system"
       },
       "tags": [
         "owui",
@@ -767,18 +802,18 @@
     },
     {
       "id": "llama-nano-svc",
-      "name": "llama-nano.service (nano SLM)",
-      "path": "~/Projects/aios/services/open-webui/llama-nano.service",
+      "name": "llama-nano-adaptive.service (nano SLM)",
+      "path": "~/llama-builds/mainline-adaptive-mtp-10/llama-nano-adaptive.service",
       "category": "ai-stack",
-      "what": "Dedicated llama-server for Llama-3.2-3B on 127.0.0.1:8090, 32k ctx — the always-on fast responder.",
-      "why": "Instant answers + subagent work without evicting the main router model.",
-      "created": "2026-09-07",
+      "what": "Dedicated llama-server for Llama-3.2-3B on 127.0.0.1:8090, 32k ctx — the always-on fast responder and read_file summarizer.",
+      "why": "Instant answers + subagent work without evicting the main router model; also used by local-tools for file summarization.",
+      "created": "2026-09-10",
       "kind": "service",
       "runnable": false,
       "probe": {
         "type": "systemd",
-        "unit": "llama-nano.service",
-        "scope": "user"
+        "unit": "llama-nano-adaptive.service",
+        "scope": "system"
       },
       "tags": [
         "inference",

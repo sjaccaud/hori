@@ -55,7 +55,7 @@ fi
 
 # --- 2. Restart llama-server (now bound to 127.0.0.1) and aios_core for the token ---
 echo "Restarting llama-server and aios_core..."
-systemctl restart llamacpp aios_core
+systemctl restart llamacpp-adaptive aios_core
 
 # --- 3. Disable Ubuntu telemetry ---
 echo "Disabling Ubuntu insights telemetry..."

@@ -199,3 +199,142 @@ def test_run_safe_command_returns_stderr_and_exit_code():
     assert not result["ok"]
     assert result["exit_code"] != 0
     assert "No such file" in result["stderr"] or "No such file" in result["stdout"]
+
+
+def test_read_file_summarizes_oversized_files_via_nano(monkeypatch, tmp_path):
+    """An untargeted read (no explicit max_bytes) of a file larger than the
+    default cap should return a nano-generated summary instead of a raw
+    truncation."""
+    f = tmp_path / "long.txt"
+    f.write_text("line\n" * 30_000)  # 150 KB > 102_400 default cap
+
+    class FakeResponse:
+        def read(self):
+            return json.dumps(
+                {"choices": [{"message": {"content": "A compact summary."}}]}
+            ).encode()
+
+        def __enter__(self, *args):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        return FakeResponse()
+
+    monkeypatch.setattr(jlt.urllib.request, "urlopen", fake_urlopen)
+    result = jlt.tool_read_file({"path": str(f)})
+    assert result["ok"], result
+    assert result.get("summarized"), result
+    assert "A compact summary." in result["content"]
+    assert result["truncated"]
+
+
+def test_read_file_explicit_max_bytes_is_a_targeted_read(monkeypatch, tmp_path):
+    """An explicit max_bytes means the caller wants exact paged content — no
+    summary unless they also pass summarize=true."""
+    f = tmp_path / "long.txt"
+    f.write_text("x" * 500)
+
+    def boom_urlopen(req, timeout=None):
+        raise AssertionError("nano must not be called for targeted reads")
+
+    monkeypatch.setattr(jlt.urllib.request, "urlopen", boom_urlopen)
+    result = jlt.tool_read_file({"path": str(f), "max_bytes": 100})
+    assert result["ok"]
+    assert result["truncated"]
+    assert not result.get("summarized")
+    assert result["content"] == "x" * 100
+
+
+def test_read_file_summarize_opt_in_and_opt_out(monkeypatch, tmp_path):
+    """summarize=true forces a summary even with explicit max_bytes;
+    summarize=false disables it entirely."""
+    f = tmp_path / "long.txt"
+    f.write_text("x" * 500)
+
+    class FakeResponse:
+        def read(self):
+            return json.dumps(
+                {"choices": [{"message": {"content": "opt-in summary"}}]}
+            ).encode()
+
+        def __enter__(self, *args):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(
+        jlt.urllib.request, "urlopen", lambda req, timeout=None: FakeResponse()
+    )
+    result = jlt.tool_read_file(
+        {"path": str(f), "max_bytes": 100, "summarize": True}
+    )
+    assert result["ok"] and result.get("summarized"), result
+    assert "opt-in summary" in result["content"]
+
+    def boom_urlopen(req, timeout=None):
+        raise AssertionError("nano must not be called when summarize=false")
+
+    monkeypatch.setattr(jlt.urllib.request, "urlopen", boom_urlopen)
+    big = tmp_path / "big.txt"
+    big.write_text("line\n" * 30_000)  # > default cap
+    result = jlt.tool_read_file({"path": str(big), "summarize": False})
+    assert result["ok"]
+    assert result["truncated"]
+    assert not result.get("summarized")
+    assert result["content"].startswith("line\n")
+
+
+def test_read_file_falls_back_to_truncation_when_nano_down(monkeypatch, tmp_path):
+    """If the nano endpoint is unreachable, read_file must still return the
+    truncated content rather than failing."""
+    f = tmp_path / "long.txt"
+    f.write_text("line\n" * 30_000)
+
+    def down_urlopen(req, timeout=None):
+        raise jlt.urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(jlt.urllib.request, "urlopen", down_urlopen)
+    result = jlt.tool_read_file({"path": str(f)})
+    assert result["ok"], result
+    assert result["truncated"]
+    assert not result.get("summarized")
+    assert result["content"].startswith("line\n")
+
+
+def test_run_safe_command_strict_mode_disables_extended(monkeypatch):
+    """LOCAL_TOOLS_EXTENDED_COMMANDS=0 drops docker/git/ollama but keeps diagnostics."""
+    monkeypatch.setenv("LOCAL_TOOLS_EXTENDED_COMMANDS", "0")
+    monkeypatch.delenv("LOCAL_TOOLS_ALLOWED_COMMANDS", raising=False)
+    allowed = jlt._allowed_commands()
+    assert "docker" not in allowed
+    assert "git" not in allowed
+    assert "ollama" not in allowed
+    assert "ffmpeg" not in allowed
+    assert "ls" in allowed
+    assert "df" in allowed
+    assert "systemctl" in allowed
+
+
+def test_run_safe_command_timeout_binary_is_denied():
+    """The `timeout` wrapper binary is not in the allowlist (tool has its own timeout)."""
+    result = jlt.tool_run_safe_command({"command": "timeout 5 ping 127.0.0.1"})
+    assert not result["ok"]
+    assert "not in allowlist" in result["error"]
+
+
+def test_run_safe_command_docker_drops_ambiguous_subcommands():
+    """docker ps is fine; docker system/volume/network/context are not."""
+    result = jlt.tool_run_safe_command({"command": "docker ps"})
+    assert result["ok"]
+    for cmd in [
+        "docker system prune",
+        "docker volume ls",
+        "docker network ls",
+        "docker context ls",
+    ]:
+        result = jlt.tool_run_safe_command({"command": cmd})
+        assert not result["ok"], f"should have denied {cmd}: {result}"

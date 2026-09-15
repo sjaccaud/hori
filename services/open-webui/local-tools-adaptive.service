@@ -1,0 +1,40 @@
+[Unit]
+Description=Local Tools OpenAPI server for Open-WebUI (system)
+Documentation=https://127.0.0.1:8766/openapi.json
+After=network.target llama-nano-adaptive.service
+Wants=network.target llama-nano-adaptive.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+# User/Group/WorkingDirectory and %h paths are substituted by the install
+# script (scripts/hardening/install_services.sh) with the real user and home.
+WorkingDirectory=%h/Projects/aios
+ExecStart=%h/Projects/aios/venv/bin/python3 %h/Projects/aios/services/open-webui/local_tools_server.py
+Restart=on-failure
+RestartSec=5
+
+# Hardening: tool server only needs the audit log writable.
+# No PrivateTmp: /tmp is in LOCAL_TOOLS_READ_ROOTS and must see the host /tmp.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/local-tools
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment="PATH=%h/rocm-10.0/rocm/core-10.0/bin:%h/llama-builds/mainline-adaptive-mtp-10/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="LD_LIBRARY_PATH=%h/llama-builds/mainline-adaptive-mtp-10/lib:%h/rocm-10.0/rocm/core-10.0/lib:%h/rocm-10.0/rocm/core-10.0/lib/rocm_sysdeps/lib:%h/rocm-10.0/rocm/core-10.0/lib/llvm/lib"
+
+# Keep the server lightweight and local-only.
+Environment=LOCAL_TOOLS_HOST=127.0.0.1
+Environment=LOCAL_TOOLS_PORT=8766
+Environment=LOCAL_TOOLS_MAX_OUTPUT=100000
+Environment=LOCAL_TOOLS_TIMEOUT=30
+Environment=LOCAL_TOOLS_READ_ROOTS=%h:/etc:/usr/share:/opt/krill_harvester:/tmp:/mnt/4TB:/mnt/8TB
+Environment=LOCAL_TOOLS_NANO_URL=http://127.0.0.1:8090/v1/chat/completions
+Environment=LOCAL_TOOLS_NANO_MODEL=nano
+
+[Install]
+WantedBy=multi-user.target
