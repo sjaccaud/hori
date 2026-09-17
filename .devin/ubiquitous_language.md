@@ -94,11 +94,11 @@
 | **llama.cpp** | The standardized inference engine compiled with ROCm/HIP backend for maximum tokens per second and zero CPU fallback. | docs/operations.md | inference engine | I |
 | **ROCm/HIP** | AMD's native compute architecture backend for llama.cpp, speaking directly to the Radeon AI PRO R9700 GPU. | docs/operations.md | HIP backend | I |
 | **I-Quants** | Importance Matrix Quants (e.g., IQ4_NL) that preserve highly active reasoning pathways in near-perfect definition while aggressively compressing less useful connections. | docs/operations.md | importance matrix quants | I |
-| **TurboQuant KV Cache** | KV cache quantization (turbo4, 4.125 bpv) from Spiritbuun's fork. Compresses KV cache 4x compared to f16, allowing 16K context in ~16GB VRAM total. | docs/operations.md | turbo4 | I |
-| **Speculative Decoding** | N-gram-mod self-speculative decoding (lossless, no draft model). NOT compatible with turbo4 + Qwen3.6. | docs/operations.md | ngram-mod, PoC 8b.4 | I |
+| **TurboQuant KV Cache** | KV cache quantization (turbo4, 4.125 bpv) from Spiritbuun's fork — **historical** (Aug 2026, Qwen3.6 era). Current stack uses q4_0/f16 KV on the `mainline-adaptive-mtp-10` build. | docs/operations.md Appendix A | turbo4 | I |
+| **Speculative Decoding** | `draft-mtp-adaptive` (Qwen3.8 embedded MTP draft head, adaptive n≤16) on most qwen-* aliases; `ngram-mod` on devstral-coding; off for qwen-quality/qwen-256k-batch. Superseded Aug-2026 ngram/turbo4 notes. | docs/operations.md (generated alias table) | draft-mtp, PoC 8b.4 | I |
 | **Flash Attention** | Optimized attention kernel (-fa on) that prevents VRAM bloat when pushing massive codebases or markdown memory logs into the context window. | docs/operations.md | -fa on | I |
-| **VBR (Variable Bit-Rate)** | KV cache mode that starts at f16 and dynamically degrades to turbo tiers as context fills. Available but not default. | docs/operations.md | dynamic KV | I |
-| **Prompt Caching** | NOTE: --cache-reuse 256 was removed Aug 2026 (incompatible with turbo4 KV cache, silently disabled). Prompt caching is now handled by aios-core's context trimming + slot KV checkpoints. | docs/operations.md | cache-reuse | I |
+| **VBR (Variable Bit-Rate)** | KV cache mode that starts at f16 and dynamically degrades to turbo tiers as context fills — Qwen3.6-era experiment, not in current presets. | docs/operations.md Appendix A | dynamic KV | I |
+| **Prompt Caching** | `--cache-reuse 256` is active on `devstral-coding` (f16 KV supports it; the Aug 2026 removal was a turbo4-era constraint). Multimodal qwen-* presets can't use it (mmproj). | docs/operations.md | cache-reuse | I |
 
 ---
 
@@ -176,7 +176,7 @@
 | Term | Definition | Source of Truth | Aliases | Pillar |
 |------|------------|-----------------|---------|--------|
 | **MCP-over-SSE** | Admin-token-gated MCP server on aios_core exposing `get_status`, `read_file`, `run_safe_command`, `search_web`, `fetch_url`, `memory_search`, `memory_store`, `thread_list`, `thread_read`, `episode_append`, and `episode_search` to remote clients over SSE (Tailnet-only, port 443). JSON-RPC via `GET /mcp/sse` and `POST /mcp/messages?session_id=<id>`. | `services/aios_core/mcp_server.py`, `services/aios_core/main.py`, `.devin/prd/remote-mcp-tools.md` | MCP remote surface | II, IV, VII |
-| **Nano Chat** | The Llama 3.2 3B Open-WebUI preset and dedicated `nano` model served by `llama-nano.service` on `127.0.0.1:8090`, exposed at `https://<tailnet>:8444/v1`. Fast, low-VRAM, no tools. | `services/open-webui/llama-nano.service`, `docs/operations.md` | nano | I, IV |
+| **Nano Chat** | The Llama 3.2 3B Open-WebUI preset and dedicated `nano` model served by `llama-nano-adaptive.service` on `127.0.0.1:8090`, exposed at `https://<tailnet>:8444/v1`. Fast, low-VRAM, no tools. | `services/open-webui/llama-nano.service`, `docs/operations.md` | nano | I, IV |
 
 ---
 
@@ -184,18 +184,20 @@
 
 ### KV Cache Quantization
 - **Manifesto (line 97):** Originally called for "uncompressed KV cache."
-- **stack.md (line 28):** TurboQuant turbo4 (4.125 bpv) is the current implementation.
-- **Resolution:** Per docs/README.md hierarchy, docs/operations.md wins for technical configuration. turbo4 superseded the manifesto's philosophical preference. Glossary documents turbo4 as canonical.
+- **Aug 2026 era:** TurboQuant turbo4 (Spiritbuun fork) — superseded.
+- **Current (Sep 2026):** q4_0 KV on all Qwen3.8 aliases, f16 on devstral-coding, `draft-mtp-adaptive` spec decode on `mainline-adaptive-mtp-10`.
+- **Resolution:** Per docs/README.md hierarchy, docs/operations.md wins for technical configuration. The manifesto's "uncompressed" is philosophy; quantized KV is how 128–196k contexts fit on 32GB. See operations.md generated alias table.
 
 ### VRAM Capacity
-- **docs/archive/architecture_analysis.md (line 14):** "32GB VRAM" (historical, stale).
-- **operations.md (line 33):** "~16GB VRAM (15GB model + ~1GB turbo4 KV cache at 16K context)" (current).
-- **Resolution:** operations.md is correct for current configuration. docs/archive/architecture_analysis.md is marked HISTORICAL. 32GB is installed capacity; ~16GB is current usage.
+- **docs/archive/architecture_analysis.md (line 14):** "32GB VRAM" — installed capacity, still correct.
+- **Current usage:** ~16–31GB depending on loaded alias (see operations.md generated table; `get_status` for live).
+- **Resolution:** operations.md is canonical for current configuration. docs/archive/architecture_analysis.md is marked HISTORICAL.
 
 ### Context Window Size
 - **docs/archive/architecture_analysis.md:** Implies large context windows (historical).
-- **elastic_context_window.md / operations.md:** 16384 (down from 65536) is current.
-- **Resolution:** 16K with turbo4 KV cache is canonical.
+- **Aug 2026 era:** 16384 turbo4-era ceiling.
+- **Current:** per-alias (16k `qwen-quality` … 262k `qwen-256k-batch`); typical interactive aliases run 131072.
+- **Resolution:** the generated alias table in operations.md is canonical — run `scripts/gen_router_doc.py --check` to detect drift.
 | **Thread (workstream)** | A durable, named line of work (`~/.local/share/hori/threads/<slug>/`) holding a curated `state.md` plus an append-only `episodes/` history. The persistent-state layer above conversational memory. | `services/aios_core/episodes.py`, `.devin/prd/episode-threads-mcp.md` | workstream, thread | III, VI |
 | **Episode** | A structured Markdown record appended to a thread (`episodes/NNN-<slug>.md`) with frontmatter (title, date, author, verified_by, open_issues, files_touched) and a human-readable body. Create-only; the unit of workstream history. | `services/aios_core/episodes.py` | episode, work episode | VI |
 | **Thread Consolidation** | The nightly workstream half of Sleep & Dream (`aios-thread-consolidation.timer`, ~03:20): refreshes mechanical `state.md` fields from episode dates, flags threads that had sessions but no episodes (via `sessions.jsonl`), and emits LLM-assisted state/rule proposals into the review queue. LLM stages skip in game mode. | `services/aios_core/thread_consolidation.py`, `scripts/thread_consolidation.py` | sleep and dream, fold | VI, VII |

@@ -57,7 +57,7 @@ The defaults work out of the box. Key settings you might want to change:
 ```yaml
 llm:
   api_url: "http://localhost:8080/v1/chat/completions"
-  model: "Qwen3.6-27B"          # or whatever your endpoint serves
+  model: "qwen-fast"            # or whatever your endpoint serves
 
 memory:
   backend: "sqlite"              # "sqlite" (no external deps) or "qdrant"

@@ -22,25 +22,25 @@ class Allowlist:
 
     DEFAULT = {
         "service_restart": {
-            "service": ["aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp"],
+            "service": ["aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp-adaptive"],
             "confirmed_by": {"pattern": r"^[A-Za-z0-9_.:-]{1,128}$"},
             "timeout": {"min": 5, "max": 300, "default": 60},
             "_required": ["service"],
         },
         "service_status": {
-            "service": ["aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp"],
+            "service": ["aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp-adaptive"],
             "confirmed_by": {"pattern": r"^[A-Za-z0-9_.:-]{1,128}$"},
             "timeout": {"min": 5, "max": 60, "default": 30},
             "_required": ["service"],
         },
         "service_stop": {
-            "service": ["aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp"],
+            "service": ["aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp-adaptive"],
             "confirmed_by": {"pattern": r"^[A-Za-z0-9_.:-]{1,128}$"},
             "timeout": {"min": 5, "max": 300, "default": 60},
             "_required": ["service"],
         },
         "journalctl_unit": {
-            "unit": ["aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp"],
+            "unit": ["aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp-adaptive"],
             "lines": {"min": 1, "max": 1000, "default": 50},
             "since": {"pattern": r"^[-+][0-9]+[smhd]$"},
             "confirmed_by": {"pattern": r"^[A-Za-z0-9_.:-]{1,128}$"},

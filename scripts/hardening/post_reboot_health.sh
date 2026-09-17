@@ -43,7 +43,7 @@ echo ""
 
 # --- 1. Service status ---
 echo "--- 1. Service Status ---"
-for svc in aios_core aios-sherpa aios-tool-daemon llamacpp; do
+for svc in aios_core aios-sherpa aios-tool-daemon llamacpp-adaptive; do
     if systemctl is-active --quiet "$svc" 2>/dev/null; then
         ok "$svc is active"
     else

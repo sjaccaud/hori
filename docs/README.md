@@ -54,8 +54,8 @@ When documents conflict, follow this priority:
 3. **docs/safety.md** — for safety architecture and adversarial analysis
 4. **docs/manifesto.md** — for mission and philosophy (not technical config)
 
-If manifesto.md says "uncompressed KV cache" but operations.md says
-"turbo4 KV cache", operations.md wins. The manifesto describes philosophy;
+If manifesto.md says "uncompressed KV cache" but operations.md documents
+quantized KV cache, operations.md wins. The manifesto describes philosophy;
 operations.md describes what's actually running.
 
 ## What Does NOT Belong in This Repo

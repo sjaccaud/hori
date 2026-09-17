@@ -593,7 +593,7 @@ async def admin_service_control(
     import subprocess as _subprocess
     import sys
 
-    allowed_services = {"aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp"}
+    allowed_services = {"aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp-adaptive"}
     if service not in allowed_services:
         return {"error": f"Service '{service}' not in allowlist"}
 
@@ -796,7 +796,7 @@ async def admin_journalctl_unit(
     """
     import asyncio as _asyncio
 
-    allowed_units = {"aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp"}
+    allowed_units = {"aios_core", "aios-sherpa", "aios-tool-daemon", "llamacpp-adaptive"}
     if unit not in allowed_units:
         return {"error": f"Unit '{unit}' not in allowlist"}
 
@@ -1127,20 +1127,34 @@ async def system_state():
         except Exception:
             return "unknown"
 
+    def _unit_state(unit: str) -> str:
+        """systemd is-active for the supervising unit. Port/HTTP probes answer
+        even when the unit has failed but something else holds the socket
+        (e.g. a duplicate user-scope unit won the port race on 2026-09-17),
+        so unit state is reported alongside liveness."""
+        try:
+            result = subprocess.run(
+                ["systemctl", "is-active", unit],
+                capture_output=True, text=True, timeout=3,
+            )
+            return result.stdout.strip() or "unknown"
+        except Exception:
+            return "unknown"
+
     # Full local stack — every service the chat path can silently depend on.
     # TCP check is only kept for qdrant (no /health); everything else gets a
     # real HTTP probe. Added searxng/local-tools/project-tools/llama-nano
     # 2026-09-07 after they were invisible during a "service down" incident.
     services = {
-        "llama-server": {"port": 8080, "up": _check_http(8080)},
-        "llama-nano": {"port": 8090, "up": _check_http(8090)},
+        "llama-server": {"port": 8080, "up": _check_http(8080), "unit": "llamacpp-adaptive", "unit_state": _unit_state("llamacpp-adaptive")},
+        "llama-nano": {"port": 8090, "up": _check_http(8090), "unit": "llama-nano-adaptive", "unit_state": _unit_state("llama-nano-adaptive")},
         "aios-core": {"port": 5680, "up": _check_http(5680)},
         "embedding-server": {"port": 8082, "up": _check_http(8082)},
         "qdrant": {"port": 6333, "up": _check_port(6333)},
         "open-webui": {"port": 3000, "up": _check_http(3000)},
         "searxng": {"port": 8081, "up": _check_http(8081, "/")},
-        "local-tools": {"port": 8766, "up": _check_http(8766)},
-        "project-tools": {"port": 8769, "up": _check_http(8769)},
+        "local-tools": {"port": 8766, "up": _check_http(8766), "unit": "local-tools-adaptive", "unit_state": _unit_state("local-tools-adaptive")},
+        "project-tools": {"port": 8769, "up": _check_http(8769), "unit": "project-tools-adaptive", "unit_state": _unit_state("project-tools-adaptive")},
     }
 
     all_up = all(s["up"] for s in services.values())

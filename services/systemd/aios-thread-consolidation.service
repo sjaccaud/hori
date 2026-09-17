@@ -4,8 +4,8 @@ Description=HORI Thread Consolidation (workstream "Sleep & Dream")
 # flags threads with sessions but no episodes, and writes LLM-assisted
 # state/rule proposals into the review queue (always status: pending).
 # Traces to: .devin/prd/thread-consolidation.md, docs/roadmap.md Tier 1B.
-After=network.target llamacpp.service aios_core.service
-Wants=llamacpp.service
+After=network.target llamacpp-adaptive.service aios_core.service
+Wants=llamacpp-adaptive.service
 
 [Service]
 Type=oneshot

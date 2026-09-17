@@ -4,11 +4,10 @@ This file is the canonical source of truth for hardware, runtime
 details, build/test commands, and inference configuration. Paths shown
 are examples — adjust to your own build locations.
 
-> **Live stack as of 2026-09-11:** Qwen3.8-27B (Unsloth Dynamic v3.0)
+> **Live stack as of 2026-09-17:** Qwen3.8-27B (Unsloth Dynamic v3.0)
 > on `mainline-adaptive-mtp-10`, ROCm 10.0
-> (`~/rocm-10.0/rocm/core-10.0`). Several sections below still
-> contain historical notes from the Aug 2026 Qwen3.6 / turbo4 / ROCm 7.14
-> setup.
+> (`~/rocm-10.0/rocm/core-10.0`). Qwen3.6 / turbo4 / ROCm 7.14-era notes
+> now live in **Appendix A — Historical** at the end of this file.
 
 ## Reference Hardware
 
@@ -49,22 +48,44 @@ PYTHONPATH=. ./venv/bin/python3 -m pytest services/aios_core/test_main.py -v
 
 ## llama.cpp Inference Service
 
-- **Systemd units:**
+- **Systemd units (system scope is canonical):**
   - Main router: `/etc/systemd/system/llamacpp-adaptive.service`
-  - Nano model: `~/.config/systemd/user/llama-nano.service`
+  - Nano model: `/etc/systemd/system/llama-nano-adaptive.service`
+  - A user-scope copy of `llamacpp-adaptive` raced the system unit for
+    :8080 and crash-looped it on 2026-09-17 — retired to
+    `docs/retired-services/`. Do not recreate a user-scope unit for this
+    server; whichever scope binds :8080 first wins, the loser crash-loops.
 - **Unit state:** `enabled`, `active (running)`, `Restart=always`, `RestartSec=3`
-- **Current model family:** Qwen3.8-27B (Unsloth Dynamic v3.0 quants) with vision
-  - Router aliases: `qwen-fast` (64k), `qwen-long` (128k), `qwen-128k` (192k),
-    `qwen-think` (64k, reasoning on), `qwen-balanced` (128k, UD-Q6_K),
-    `qwen-quality` (16k, Q8_0), `qwen-deepdive`, `qwen-free` (abliterated),
-    `qwen-dsh-fast/medium/low` (agentic), `qwen-256k-batch` (batch),
-    `devstral-coding` (Devstral 24B), and `nano` (Llama 3.2 3B on :8090).
-  - Speculative decode: `draft-mtp-adaptive` (n=12) on most Qwen aliases;
-    off for `qwen-quality`, `qwen-256k-batch`, and `devstral-coding`.
-  - Reasoning: off by default (`qwen-think` / `qwen-deepdive` / `qwen-free`
-    toggle it on).
-- **Memory:** ~16-31 GB VRAM depending on alias (Q8_0 ~26.5 GB, UD-Q4_K_M
-  ~16 GB at 64k ctx with q4_0 KV).
+- **Current model family:** Qwen3.8-27B (Unsloth Dynamic v3.0 quants) with
+  vision, plus Devstral-Small-2-24B and `nano` (Llama 3.2 3B on :8090).
+  The live alias table below is generated — refresh with
+  `scripts/gen_router_doc.py`, verify with `--check`.
+
+<!-- BEGIN GENERATED: router-aliases -->
+_Generated 2026-09-17 from `~/llama-builds/mainline-adaptive-mtp-10/router.ini` by `scripts/gen_router_doc.py` — do not hand-edit._
+
+| Alias | Weights | ctx | KV | Reasoning | Speculative decode |
+|---|---|---|---|---|---|
+| `qwen-fast` | Qwen3.8-27B-UD-Q4_K_M.gguf | 131072 | q4_0/q4_0 | off | draft-mtp-adaptive n≤16 |
+| `qwen-quality` | Qwen3.8-27B-Q8_0.gguf | 16384 | q4_0/q4_0 | off | none |
+| `qwen-balanced` | Qwen3.8-27B-UD-Q6_K.gguf | 131072 | q4_0/q4_0 | off | none |
+| `qwen-think` | Qwen3.8-27B-UD-Q4_K_M.gguf | 131072 | q4_0/q4_0 | on | none |
+| `qwen-128k` | Qwen3.8-27B-UD-Q4_K_M.gguf | 196608 | q4_0/q4_0 | off | draft-mtp-adaptive n≤16 |
+| `qwen-dsh-fast` | Qwen3.8-27B-UD-Q4_K_M.gguf | 131072 | q4_0/q4_0 | off | draft-mtp-adaptive n≤16 |
+| `qwen-dsh-low` | Qwen3.8-27B-UD-Q4_K_M.gguf | 131072 | q4_0/q4_0 | on {"reasoning_effort": "low"} | draft-mtp-adaptive n≤16 |
+| `qwen-dsh-medium` | Qwen3.8-27B-UD-Q4_K_M.gguf | 131072 | q4_0/q4_0 | on {"reasoning_effort": "medium"} | draft-mtp-adaptive n≤16 |
+| `qwen-deepdive` | Qwen3.8-27B-UD-Q4_K_M.gguf | 131072 | q4_0/q4_0 | on | draft-mtp-adaptive n≤16 |
+| `qwen-free` | Huihui-Qwen3.8-27B-abliterated-UD-Q4_K_XL.gguf | 131072 | q4_0/q4_0 | on | draft-mtp-adaptive n≤16 |
+| `qwen-256k-batch` | Qwen3.8-27B-UD-Q4_K_M.gguf | 262144 | q4_0/q4_0 | off | none |
+| `devstral-coding` | mistralai_Devstral-Small-2-24B-Instruct-2512-IQ4_NL.gguf | 65536 | f16/f16 | off | ngram-mod |
+<!-- END GENERATED: router-aliases -->
+
+- **Memory:** ~16-31 GB VRAM depending on alias (Q8_0 ~26.5 GB at 16k ctx,
+  UD-Q4_K_M ~16 GB weights + q4_0 KV at the alias's ctx).
+- **`qwen-256k-batch` is API-only** (removed from the OWUI selector
+  2026-09-17): a full 256k prefill is ~12 min and evicts the resident
+  model under `--models-max 1`, so it must not be a clickable preset.
+  Still callable via `/v1/chat/completions` with `model: qwen-256k-batch`.
 - **Binary:** mainline llama.cpp `adaptive-mtp` branch
   - Path: `~/llama-builds/mainline-adaptive-mtp-10/bin/llama-server`
   - Source: `~/llama.cpp-adaptive-mtp`, commit `d236d41a`
@@ -93,65 +114,17 @@ PYTHONPATH=. ./venv/bin/python3 -m pytest services/aios_core/test_main.py -v
 - The old `/opt/rocm/` symlink tree still points to `core-7.14` for compatibility,
   but the live inference stack uses the private `core-10.0` prefix above.
 
-### Inference Optimizations (Aug 2026)
-
-- **Context window: 16384** (down from 65536)
-  - KV cache at f16/65K = 16GB VRAM (97% of 34GB, zero headroom)
-  - KV cache at turbo4/16K = ~1GB VRAM (3% of 34GB, 13GB free)
-  - aios-core trims conversation to last 6 turns + memory retrieval, so 16K is plenty
-  - The "10000th turn = turn 1" promise is carried by the memory system, not the context window
-- **KV cache quantization: TurboQuant turbo4** (`-ctk turbo4 -ctv turbo4`)
-  - 3.6x KV cache compression vs f16 (from Spiritbuun's fork, ICLR 2026 paper)
-  - Near-zero quality loss (+0.9% perplexity vs f16)
-  - Available types: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1, turbo2, turbo3, turbo4, turbo8, turbo3_tcq, turbo2_tcq, turbo1_tcq, vbr
-  - Previous: q8_0 (2x compression, ~2GB VRAM). Now: turbo4 (3.6x compression, ~1GB VRAM)
-  - **Note:** turbo4 with Qwen3.6 requires ROCm 7.14. On ROCm 7.1, turbo4 produced corrupted output (slash token 14 repeated) due to the hybrid Gated DeltaNet + SSM layers.
-- **Speculative decoding: NOT compatible with turbo4 + Qwen3.6**
-  - `--spec-ngram-mod` crashes the server when combined with turbo4 KV cache on Qwen3.6
-  - Previously worked with Qwen2.5-Coder-32B + turbo4 on ROCm 7.1
-  - May work with f16 KV cache (untested, would use 16GB VRAM for 16K context)
-- **Single slot (`-np 1`):** aios-core is a single-user voice assistant. Running 1 slot instead of the default 4 saves ~3x KV cache VRAM allocation.
-- **Reasoning preserve (`--reasoning-preserve`):** Carries Qwen3.6's reasoning trace across turns instead of re-deriving it. Improves multi-turn quality and latency. The fork suggested this at startup.
-
-### VBR Mode (Available, Not Default)
-
-VBR (Variable Bit-Rate) KV cache is available on this build. It starts at f16 and dynamically degrades to turbo tiers as context fills, like video compression.
-
-To enable (65K context, dynamic quality):
-```
--ctk vbr -ctv vbr -c 65536
-```
-instead of the default:
-```
--ctk turbo4 -ctv turbo4 -c 16384
-```
-
-VBR uses ~19.9GB VRAM at 65K context (vs 20.7GB at 16K with turbo4). The tradeoff: VBR has ~2x slower direct inference (4.7s vs 1.7s for 100 tokens) due to dynamic tier management overhead. Use VBR when you need large context windows; use turbo4 for speed.
-
-### DFlash Draft Model (Available, Not Usable on 34GB VRAM)
-
-- DFlash draft model for Qwen3.5-27B: source `z-lab/Qwen3.5-27B-DFlash` on HuggingFace
-- Cannot fit alongside 27B target model in 32GB VRAM (19GB target + 4.3GB draft = 23.3GB, leaving only ~9GB for KV + compute)
-- Future: When a larger GPU is available (48GB+), DFlash with Qwen3.5-27B should work
+_Qwen3.6-era inference notes (turbo4 KV, VBR mode, DFlash, manual-start
+commands) moved to **Appendix A — Historical** at the end of this file._
 
 ### Rebuilding the Binary
 
-If the binary needs to be rebuilt (e.g. after a system update):
+If the binary needs to be rebuilt (e.g. after a system update). The live
+build is made by `~/llama-builds/mainline-adaptive-mtp-10/`'s build script —
+see `BUILD-MANIFEST.txt` there for the exact flags used last time. (The
+Spiritbuun-fork build recipe is in Appendix A.)
 
-**Spiritbuun fork** (for turbo4 KV cache):
-```bash
-cd <your-llama-cpp-source>
-rm -rf build
-ROCM_PATH=<your-rocm-path> \
-cmake -B build -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 \
-  -DCMAKE_BUILD_TYPE=Release -DGGML_HIP_NO_VMM=OFF \
-  -DROCM_PATH=<your-rocm-path> \
-  -DCMAKE_EXE_LINKER_FLAGS="-L<your-rocm-path>/lib/rocm_sysdeps/lib -Wl,-rpath,<your-rocm-path>/lib/rocm_sysdeps/lib" \
-  -DCMAKE_SHARED_LINKER_FLAGS="-L<your-rocm-path>/lib/rocm_sysdeps/lib -Wl,-rpath,<your-rocm-path>/lib/rocm_sysdeps/lib"
-ROCM_PATH=<your-rocm-path> cmake --build build --target llama-server -j$(nproc)
-```
-
-**Mainline llama.cpp** (no turbo4, but stable):
+**Mainline llama.cpp:**
 ```bash
 cd <your-llama-cpp-source>
 rm -rf build
@@ -168,72 +141,6 @@ ROCM_PATH=<your-rocm-path> cmake --build build --target llama-server -j$(nproc)
 Note: The Spiritbuun fork's `ggml/src/ggml-hip/CMakeLists.txt` has a patch to add
 `-include __clang_hip_runtime_wrapper.h` to `CMAKE_HIP_FLAGS` (needed for clang 23 / ROCm 7.14).
 The mainline build requires this flag via `-DCMAKE_HIP_FLAGS`.
-
-### Qwen3.6-27B Notes
-
-- Hybrid architecture: Gated DeltaNet + SSM layers (not pure attention)
-- IQ4_NL quantization (15GB) works reliably; Q4_K_M (18GB) produces corrupted output with system prompts
-- turbo4 KV cache works with ROCm 7.14 (was broken on ROCm 7.1 - produced slash output)
-- `--spec-ngram-mod` speculative decoding is NOT compatible with turbo4 KV cache (crashes)
-- `--cache-reuse` is NOT compatible with turbo4 KV cache (silently disabled at startup — log shows "cache_reuse is not supported by this context, it will be disabled"). Removed from runtime flags Aug 2026.
-- `enable_thinking=false` must be passed via `chat_template_kwargs` in API requests
-
-### Starting the server manually
-
-```bash
-LD_LIBRARY_PATH=<your-rocm-path>/lib:<your-rocm-path>/lib/rocm_sysdeps/lib:<your-rocm-path>/lib/llvm/lib \
-GPU_MAX_HW_QUEUES=1 \
-<your-llama-server-binary> \
-  --model ~/ai-models/qwen3.6-27b-IQ4_NL-with-MTP.gguf \
-  --alias Qwen3.6-27B \
-  -c 16384 -np 1 -fa on --reasoning-preserve \
-  -ctk turbo4 -ctv turbo4 \
-  --host 0.0.0.0 --port 8080
-```
-
-### Cutting-Edge Techniques Not Yet Available
-
-- **Paged KV cache** (`--kv-paged`): 16-token block allocation, 2.5x more concurrent sequences. PR in draft on mainline llama.cpp.
-- **Dynamic KV cache** (`--kv-dynamic`): Starts at 256 cells, grows on demand. PR in draft on mainline.
-- **EAGLE-3**: Draft-model speculative decoding, 2-3x speedup. Needs trained draft model for Qwen3.6 (none exists yet).
-- **DFlash with Qwen3.6**: No DFlash draft model trained for Qwen3.6 family (only Qwen3.5).
-
-### RDNA4 Vulkan Research Review (Aug 8 2026)
-
-Reviewed `docs/temp_r9700tweaks.md` — a 50+ experiment Reddit study on the same
-GPU (Radeon AI PRO R9700, gfx1201) using the **Vulkan** backend (RADV vs AMDVLK).
-
-**Most findings do NOT apply to us** because we use ROCm/HIP, not Vulkan:
-- `rm_kq=1` code change (modifies `ggml-vulkan.cpp`) — irrelevant
-- RADV vs AMDVLK driver selection, `GGML_VK_ALLOW_GRAPHICS_QUEUE`,
-  `GGML_VK_DISABLE_COOPMAT/MMVQ`, Mesa 25.3.6+ — all Vulkan-only
-
-**What we tested and applied:**
-- **PCIe ASPM=performance:** Research found +10.8% decode on 27B dense (Vulkan).
-  We A/B tested on ROCm: baseline 32.12 t/s vs ASPM=performance 32.09 t/s —
-  **no improvement** (within noise). ROCm's direct GPU memory mapping doesn't
-  suffer from PCIe ASPM L1 exit latency like Vulkan's buffer transfers do.
-  Not applied.
-- **`GPU_MAX_HW_QUEUES=1`:** Research found ROCm idle-100%-GPU bug on R9700
-  (95W wasted at idle). We weren't affected (3% idle), but added this env var
-  to the systemd service as a **preventive measure** against future
-  driver/kernel updates triggering it. Zero cost, zero risk.
-- **`--cache-reuse 256` removed:** Was silently disabled by turbo4 KV cache
-  (startup log: "cache_reuse is not supported by this context"). Dead flag,
-  removed from both the base service file and override.conf.
-- **Base systemd file cleaned up:** Removed stale speculative decoding flags
-  (`--spec-type ngram-mod`, `--spec-ngram-mod-*`) that crash with turbo4 +
-  Qwen3.6, fixed binary path, added missing flags to match actual running config.
-
-**What we deliberately did NOT do:**
-- Switch to Vulkan (we match their best-case 32.5 t/s at 32.1 t/s on ROCm,
-  and would lose turbo4 KV cache)
-- Force `power_dpm_force_performance_level=high` (research confirms `auto` is
-  better — we're already on `auto`)
-- Disable ECC (`amdgpu.ras_enable=0`) or runtime PM (`amdgpu.runpm=0`) —
-  fixes for problems we don't have
-
-**Current performance (Sep 2026):** ~21.5 t/s generation for Qwen3.8-27B UD-Q4_K_M with `draft-mtp-adaptive` n=12 at 64k ctx.
 
 ## Elastic Context Window
 
@@ -308,14 +215,14 @@ Cline can use the local `llama-server` as an OpenAI-compatible provider.
      - Use `http://localhost:8080/v1` if VS Code is running directly on this host.
    - **API Key**: any non-empty value, e.g. `not-needed`
      - Cline requires a key to be present, but the local server does not enforce one.
-   - **Model ID**: paste one of the exact IDs returned by `/v1/models`. Good defaults:
-     - `qwen-fast` (default 64k chat)
-     - `qwen-balanced` (128k coding/research)
-     - `devstral-coding` (Devstral 24B coding)
+   - **Model ID**: paste one of the exact IDs returned by `/v1/models` — the
+     generated alias table above is the live list. Good defaults:
+     - `qwen-fast` (default 128k chat)
+     - `qwen-balanced` (128k coding/research, Q6_K)
+     - `devstral-coding` (Devstral 24B coding, 64k)
      - `qwen-quality` (16k high-stakes reasoning, Q8_0)
-     - Other available models:
-       - `qwen-long`, `qwen-128k`, `qwen-think`, `qwen-deepdive`, `qwen-free`
-       - `qwen-dsh-fast`, `qwen-dsh-medium`, `qwen-dsh-low`
+     - Agentic/research: `qwen-dsh-fast`, `qwen-dsh-low`, `qwen-dsh-medium`,
+       `qwen-deepdive`, `qwen-free`, `qwen-think`, `qwen-128k`
 5. Cline has separate **Plan** and **Act** modes; configure the model for each mode if you use both.
 6. Click **Save**, then send a test message.
 
@@ -584,6 +491,18 @@ Three collections for hierarchical memory (the anti-groundhog mechanism):
 
 - **Interaction Surface (:5679):** Mock server removed. Open WebUI (:3000) and aios-core (:5680) are the real front doors.
 - **Ollama:** Fully decommissioned. Dead Ollama URL removed from Open WebUI config to eliminate 10s model-list timeout.
+- **`llamacpp.service`:** Original inference unit, superseded by
+  `llamacpp-adaptive.service` (Sep 2026). Unit file in
+  `docs/retired-services/`; stale `llamacpp` references in the broker
+  allowlist, recovery config, admin API allowlists, post-reboot health
+  check, and consolidation units were all swept to `llamacpp-adaptive`
+  on 2026-09-17.
+- **User-scope `llamacpp-adaptive.service`:** Duplicate unit
+  (`~/.config/systemd/user/`) raced the canonical system unit for :8080
+  during the 2026-09-17 rebase restart — system unit crash-looped on
+  port-bind while the user copy served. Retired to
+  `docs/retired-services/llamacpp-adaptive.user.service`. System scope
+  is the only owner of :8080 now.
 
 ## Open WebUI Configuration
 
@@ -618,9 +537,9 @@ Three collections for hierarchical memory (the anti-groundhog mechanism):
 
 - `llama-server` warns that CORS is `*` and no API key is set. This is acceptable on the Tailscale mesh but should not be exposed to untrusted networks.
 - `systemctl` changes require `sudo` and cannot be performed by unprivileged sessions in this environment.
-- The embedding server on :8081 is not in the systemd unit yet; it must be started manually or added as a separate service.
+- The embedding server (:8082) is a Docker container (`aios_embedding`), not a systemd unit — `cd services/open-webui && docker compose up -d embedding`.
 - aios-core uses `httpx` (async) for LLM calls, not `requests` (blocking). This is critical - blocking calls caused the server to hang during concurrent requests (model polling + chat).
-- aios-core must be started manually: `PYTHONPATH=. ./venv/bin/python3 -m services.aios_core.main &`
+- aios-core runs as the `aios_core` systemd service: `sudo systemctl restart aios_core`.
 - The systemd service for llama-server uses router mode (`--models-preset router.ini --models-max 1`), so it can host multiple aliases while keeping one model in VRAM at a time.
 
 ## Benchmark (Aug 2026)
@@ -742,3 +661,136 @@ entries. The wire contract between `audit.py` (Python, float) and
 
 **Soak clock impact:** The Sherpa was blind for the entire Aug 5-8
 period. The 2-week gate restarts from Aug 8 with both fixes applied.
+
+## Appendix A — Historical (Qwen3.6 / turbo4 / ROCm 7.14 era)
+
+Everything below describes the **Aug 2026 stack**: Qwen3.6-27B IQ4_NL on
+the Spiritbuun fork with TurboQuant `turbo4` KV cache. None of it reflects
+the live config — the current stack is Qwen3.8-27B UD quants on
+`mainline-adaptive-mtp-10` with q4_0/f16 KV and `draft-mtp-adaptive`
+speculative decode (see the generated alias table under "llama.cpp
+Inference Service"). Kept for archaeology: the failure notes, quant
+comparisons, and Vulkan review are still useful history.
+
+### Inference Optimizations (Aug 2026)
+
+- **Context window: 16384** (down from 65536)
+  - KV cache at f16/65K = 16GB VRAM (97% of 32GB, zero headroom)
+  - KV cache at turbo4/16K = ~1GB VRAM (3% of 32GB, 13GB free)
+  - aios-core trims conversation to last 6 turns + memory retrieval, so 16K is plenty
+  - The "10000th turn = turn 1" promise is carried by the memory system, not the context window
+- **KV cache quantization: TurboQuant turbo4** (`-ctk turbo4 -ctv turbo4`)
+  - 3.6x KV cache compression vs f16 (from Spiritbuun's fork, ICLR 2026 paper)
+  - Near-zero quality loss (+0.9% perplexity vs f16)
+  - Available types: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1, turbo2, turbo3, turbo4, turbo8, turbo3_tcq, turbo2_tcq, turbo1_tcq, vbr
+  - Previous: q8_0 (2x compression, ~2GB VRAM). Now: turbo4 (3.6x compression, ~1GB VRAM)
+  - **Note:** turbo4 with Qwen3.6 requires ROCm 7.14. On ROCm 7.1, turbo4 produced corrupted output (slash token 14 repeated) due to the hybrid Gated DeltaNet + SSM layers.
+- **Speculative decoding: NOT compatible with turbo4 + Qwen3.6**
+  - `--spec-ngram-mod` crashes the server when combined with turbo4 KV cache on Qwen3.6
+  - Previously worked with Qwen2.5-Coder-32B + turbo4 on ROCm 7.1
+  - May work with f16 KV cache (untested, would use 16GB VRAM for 16K context)
+- **Single slot (`-np 1`):** aios-core is a single-user voice assistant. Running 1 slot instead of the default 4 saves ~3x KV cache VRAM allocation.
+- **Reasoning preserve (`--reasoning-preserve`):** Carries Qwen3.6's reasoning trace across turns instead of re-deriving it. Improves multi-turn quality and latency. The fork suggested this at startup.
+
+### VBR Mode (Available, Not Default — Qwen3.6 era)
+
+VBR (Variable Bit-Rate) KV cache is available on this build. It starts at f16 and dynamically degrades to turbo tiers as context fills, like video compression.
+
+To enable (65K context, dynamic quality):
+```
+-ctk vbr -ctv vbr -c 65536
+```
+instead of the default:
+```
+-ctk turbo4 -ctv turbo4 -c 16384
+```
+
+VBR uses ~19.9GB VRAM at 65K context (vs 20.7GB at 16K with turbo4). The tradeoff: VBR has ~2x slower direct inference (4.7s vs 1.7s for 100 tokens) due to dynamic tier management overhead. Use VBR when you need large context windows; use turbo4 for speed.
+
+### DFlash Draft Model (Available, Not Usable on 32GB VRAM)
+
+- DFlash draft model for Qwen3.5-27B: source `z-lab/Qwen3.5-27B-DFlash` on HuggingFace
+- Cannot fit alongside 27B target model in 32GB VRAM (19GB target + 4.3GB draft = 23.3GB, leaving only ~9GB for KV + compute)
+- Future: When a larger GPU is available (48GB+), DFlash with Qwen3.5-27B should work
+
+### Rebuilding the Spiritbuun fork (turbo4 KV cache)
+
+```bash
+cd <your-llama-cpp-source>
+rm -rf build
+ROCM_PATH=<your-rocm-path> \
+cmake -B build -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 \
+  -DCMAKE_BUILD_TYPE=Release -DGGML_HIP_NO_VMM=OFF \
+  -DROCM_PATH=<your-rocm-path> \
+  -DCMAKE_EXE_LINKER_FLAGS="-L<your-rocm-path>/lib/rocm_sysdeps/lib -Wl,-rpath,<your-rocm-path>/lib/rocm_sysdeps/lib" \
+  -DCMAKE_SHARED_LINKER_FLAGS="-L<your-rocm-path>/lib/rocm_sysdeps/lib -Wl,-rpath,<your-rocm-path>/lib/rocm_sysdeps/lib"
+ROCM_PATH=<your-rocm-path> cmake --build build --target llama-server -j$(nproc)
+```
+
+### Qwen3.6-27B Notes
+
+- Hybrid architecture: Gated DeltaNet + SSM layers (not pure attention)
+- IQ4_NL quantization (15GB) works reliably; Q4_K_M (18GB) produces corrupted output with system prompts
+- turbo4 KV cache works with ROCm 7.14 (was broken on ROCm 7.1 - produced slash output)
+- `--spec-ngram-mod` speculative decoding is NOT compatible with turbo4 KV cache (crashes)
+- `--cache-reuse` is NOT compatible with turbo4 KV cache (silently disabled at startup — log shows "cache_reuse is not supported by this context, it will be disabled"). Removed from runtime flags Aug 2026.
+- `enable_thinking=false` must be passed via `chat_template_kwargs` in API requests
+
+### Starting the server manually (Qwen3.6 era)
+
+```bash
+LD_LIBRARY_PATH=<your-rocm-path>/lib:<your-rocm-path>/lib/rocm_sysdeps/lib:<your-rocm-path>/lib/llvm/lib \
+GPU_MAX_HW_QUEUES=1 \
+<your-llama-server-binary> \
+  --model ~/ai-models/qwen3.6-27b-IQ4_NL-with-MTP.gguf \
+  --alias Qwen3.6-27B \
+  -c 16384 -np 1 -fa on --reasoning-preserve \
+  -ctk turbo4 -ctv turbo4 \
+  --host 0.0.0.0 --port 8080
+```
+
+### Cutting-Edge Techniques Not Yet Available (Aug 2026)
+
+- **Paged KV cache** (`--kv-paged`): 16-token block allocation, 2.5x more concurrent sequences. PR in draft on mainline llama.cpp.
+- **Dynamic KV cache** (`--kv-dynamic`): Starts at 256 cells, grows on demand. PR in draft on mainline.
+- **EAGLE-3**: Draft-model speculative decoding, 2-3x speedup. Needs trained draft model for Qwen3.6 (none exists yet).
+- **DFlash with Qwen3.6**: No DFlash draft model trained for Qwen3.6 family (only Qwen3.5).
+
+### RDNA4 Vulkan Research Review (Aug 8 2026)
+
+Reviewed `docs/temp_r9700tweaks.md` — a 50+ experiment Reddit study on the same
+GPU (Radeon AI PRO R9700, gfx1201) using the **Vulkan** backend (RADV vs AMDVLK).
+
+**Most findings do NOT apply to us** because we use ROCm/HIP, not Vulkan:
+- `rm_kq=1` code change (modifies `ggml-vulkan.cpp`) — irrelevant
+- RADV vs AMDVLK driver selection, `GGML_VK_ALLOW_GRAPHICS_QUEUE`,
+  `GGML_VK_DISABLE_COOPMAT/MMVQ`, Mesa 25.3.6+ — all Vulkan-only
+
+**What we tested and applied:**
+- **PCIe ASPM=performance:** Research found +10.8% decode on 27B dense (Vulkan).
+  We A/B tested on ROCm: baseline 32.12 t/s vs ASPM=performance 32.09 t/s —
+  **no improvement** (within noise). ROCm's direct GPU memory mapping doesn't
+  suffer from PCIe ASPM L1 exit latency like Vulkan's buffer transfers do.
+  Not applied.
+- **`GPU_MAX_HW_QUEUES=1`:** Research found ROCm idle-100%-GPU bug on R9700
+  (95W wasted at idle). We weren't affected (3% idle), but added this env var
+  to the systemd service as a **preventive measure** against future
+  driver/kernel updates triggering it. Zero cost, zero risk.
+- **`--cache-reuse 256` removed:** Was silently disabled by turbo4 KV cache
+  (startup log: "cache_reuse is not supported by this context"). Dead flag,
+  removed from both the base service file and override.conf.
+- **Base systemd file cleaned up:** Removed stale speculative decoding flags
+  (`--spec-type ngram-mod`, `--spec-ngram-mod-*`) that crash with turbo4 +
+  Qwen3.6, fixed binary path, added missing flags to match actual running config.
+
+**What we deliberately did NOT do:**
+- Switch to Vulkan (we match their best-case 32.5 t/s at 32.1 t/s on ROCm,
+  and would lose turbo4 KV cache)
+- Force `power_dpm_force_performance_level=high` (research confirms `auto` is
+  better — we're already on `auto`)
+- Disable ECC (`amdgpu.ras_enable=0`) or runtime PM (`amdgpu.runpm=0`) —
+  fixes for problems we don't have
+
+**Performance note (Sep 2026, measured on the old 64k config):** ~21.5 t/s
+generation for Qwen3.8-27B UD-Q4_K_M with `draft-mtp-adaptive` n=12 at 64k
+ctx. Current config runs n≤16 at 131k ctx — re-measure before quoting.

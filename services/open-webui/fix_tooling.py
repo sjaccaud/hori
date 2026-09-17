@@ -15,7 +15,6 @@ USER_NAME = os.environ.get("OPENWEBUI_USER_NAME", USER)
 USER_HOME = os.environ.get("HOME", "/home/" + USER)
 ALL_QWEN_DEVSTRAL = [
     "qwen-fast",
-    "qwen-long",
     "qwen-think",
     "qwen-balanced",
     "qwen-quality",
@@ -231,17 +230,16 @@ SEARCH_BEHAVIOR_BY_MODEL = {
 # /api/v1/models by patch_openai_model_names.py.
 # Contract: test_web_search_pipeline.py::test_model_display_names_are_short.
 MODEL_NAMES = {
-    "qwen-fast": "Fast Chat 64k",
-    "qwen-long": "Long Docs 128k",
+    "qwen-fast": "Fast Chat 128k",
     "qwen-128k": "Deep Plan 192k",
     "qwen-256k-batch": "Batch Only 256k",
-    "qwen-think": "Think Mode 64k",
+    "qwen-think": "Think Mode 128k",
     "qwen-balanced": "Balanced 128k",
     "qwen-quality": "Max Quality 16k",
     "devstral-coding": "Devstral Code 64k",
-    "qwen-dsh-fast": "Agentic Fast 64k",
-    "qwen-dsh-low": "Agentic Best 64k",
-    "qwen-dsh-medium": "Agentic Mid 64k",
+    "qwen-dsh-fast": "Agentic Fast 128k",
+    "qwen-dsh-low": "Agentic Best 128k",
+    "qwen-dsh-medium": "Agentic Mid 128k",
     "qwen-deepdive": "Deep Dive 128k",
     "qwen-free": "Free Think 128k",
     "nano": "Nano Chat 32k",
@@ -254,7 +252,6 @@ MODEL_ORDER = [
     "nano",
     "qwen-fast",
     "qwen-think",
-    "qwen-long",
     "qwen-128k",
     "qwen-balanced",
     "qwen-quality",
@@ -264,14 +261,15 @@ MODEL_ORDER = [
     "qwen-dsh-low",
     "qwen-deepdive",
     "qwen-free",
-    "qwen-256k-batch",
+    # qwen-256k-batch intentionally absent: API-only alias (not in selector).
+    # A misclick costs a ~12 min 256k prefill plus eviction of the resident
+    # model under --models-max 1. Retired from the selector 2026-09-17.
 ]
 
 # Short use-case hints shown as selector subtitles / in Admin -> Models.
 # Kept canonical here so `apply-model-config` restores them.
 MODEL_DESCRIPTIONS = {
-    "qwen-fast": "Everyday chat and quick planning — the fast default.",
-    "qwen-long": "Long documents and deep analysis (128k ctx).",
+    "qwen-fast": "Everyday chat and long documents — the fast default (128k ctx).",
     "qwen-128k": "Big planning, roadmaps, and audits (192k ctx).",
     "qwen-256k-batch": "Bulk ingestion only — not interactive.",
     "qwen-think": "Shows explicit step-by-step reasoning.",
@@ -296,7 +294,6 @@ MAX_TOKENS = {
     "qwen-think": 16384,
     "qwen-balanced": 8192,
     "qwen-quality": 8192,
-    "qwen-long": 8192,
     "qwen-128k": 16384,
     "qwen-256k-batch": 16384,
     "devstral-coding": 8192,
@@ -321,7 +318,6 @@ TEMPERATURE_BY_MODEL = {
 # so use native for all Qwen aliases. devstral-coding also uses native.
 FUNCTION_CALLING_BY_MODEL = {
     "qwen-fast": "native",
-    "qwen-long": "native",
     "qwen-think": "native",
     "qwen-balanced": "native",
     "qwen-128k": "native",
@@ -343,7 +339,6 @@ FUNCTION_CALLING_BY_MODEL = {
 # the oak-* models are left alone.
 PRESENCE_PENALTY_BY_MODEL = {
     "qwen-fast": 1.5,
-    "qwen-long": 1.5,
     "qwen-128k": 1.5,
     "qwen-256k-batch": 1.5,
     "qwen-quality": 1.0,
@@ -357,14 +352,13 @@ PRESENCE_PENALTY_BY_MODEL = {
 }
 
 # Per-model prompts align with AGENTS.md usage:
-# - qwen-fast: planning/chat
-# - qwen-long/qwen-128k/qwen-256k-batch: long-document analysis
+# - qwen-fast: planning/chat + long docs (absorbed qwen-long 2026-09-15)
+# - qwen-128k/qwen-256k-batch: long-document analysis
 # - qwen-think: reasoning
 # - qwen-balanced: balanced coding/research
 # - qwen-quality/devstral-coding/qwen-dsh-*: coding with local tools
 MODEL_PROMPTS = {
     "qwen-fast": PLANNING_PROMPT,
-    "qwen-long": LONG_PROMPT,
     "qwen-128k": LONG_PROMPT,
     "qwen-256k-batch": LONG_PROMPT,
     "qwen-think": THINK_PROMPT,
@@ -393,7 +387,6 @@ NANO_PROMPT = (
 # - Coding/DSH models: also code_interpreter (toggleable, on by default for quick coding)
 MODEL_DEFAULT_FEATURES = {
     "qwen-fast": ["knowledge", "time", "memory"],
-    "qwen-long": ["knowledge", "time", "memory"],
     "qwen-128k": ["knowledge", "time", "memory"],
     "qwen-think": ["knowledge", "time", "memory"],
     "qwen-balanced": ["knowledge", "time", "memory"],
@@ -423,7 +416,6 @@ META_CAPABILITIES = {
 # too little VRAM headroom); devstral-coding is text-only.
 VISION_MODELS = {
     "qwen-fast",
-    "qwen-long",
     "qwen-128k",
     "qwen-256k-batch",
     "qwen-think",
@@ -552,7 +544,7 @@ class Filter:
 
     class Valves(BaseModel):
         models: str = Field(
-            default="qwen-fast,qwen-long,qwen-think,qwen-balanced,qwen-quality,devstral-coding,qwen-128k,qwen-256k-batch",
+            default="qwen-fast,qwen-think,qwen-balanced,qwen-quality,devstral-coding,qwen-128k,qwen-256k-batch",
             description="Comma-separated model ids to attach local tool servers to.",
         )
         server_tool_ids: str = Field(
@@ -679,8 +671,8 @@ def now() -> int:
     return int(time.time())
 
 
-def _clone_qwen_long(c, source_id: str, target_id: str, description: str):
-    """Create a new Open-WebUI model record by cloning the qwen-long template."""
+def _clone_workspace_model(c, source_id: str, target_id: str, description: str):
+    """Create a new Open-WebUI model record by cloning a workspace template."""
     user_id = "db2358ef-3324-4bf9-95b1-0e2c8a714fad"
     row = c.execute(
         "SELECT id, base_model_id, params, meta FROM model WHERE id = ?", (source_id,)
@@ -730,18 +722,34 @@ def main():
     c = conn.cursor()
 
     # 0. Ensure the long-context Qwen aliases exist before tooling fix runs.
+    # qwen-long was retired 2026-09-15 (qwen-fast now carries 128k ctx): hide
+    # the stale workspace row rather than deleting it so old chats keep their
+    # model label; revivable by flipping is_active back to 1.
+    c.execute(
+        "UPDATE model SET is_active = 0, updated_at = ? WHERE id = 'qwen-long'",
+        (now(),),
+    )
+
     for target, desc in [
         ("qwen-128k", "Planning/long-doc analysis — Qwen3.8-27B-UD-Q4_K_M (Dynamic v3.0), 192k context, q4_0 KV, draft-mtp, vision"),
         ("qwen-256k-batch", "Batch ingestion only — Qwen3.8-27B-UD-Q4_K_M (Dynamic v3.0), 256k context, q4_0 KV, no speculative decode, vision"),
-        ("qwen-deepdive", "Deep research / hypothesis hunting — Qwen3.8-27B-UD-Q4_K_M, 128k context, reasoning on, draft-mtp n=2, vision"),
-        ("qwen-free", "Uncensored ideation — Huihui Qwen3.8-27B-abliterated UD-Q4_K_XL, 128k context, reasoning on, draft-mtp n=2, vision"),
+        ("qwen-deepdive", "Deep research / hypothesis hunting — Qwen3.8-27B-UD-Q4_K_M, 128k context, reasoning on, draft-mtp-adaptive, vision"),
+        ("qwen-free", "Uncensored ideation — Huihui Qwen3.8-27B-abliterated UD-Q4_K_XL, 128k context, reasoning on, draft-mtp-adaptive, vision"),
     ]:
         exists = c.execute("SELECT 1 FROM model WHERE id = ?", (target,)).fetchone()
         if not exists:
-            _clone_qwen_long(c, "qwen-long", target, desc)
+            _clone_workspace_model(c, "qwen-fast", target, desc)
             print(f"created model {target}")
         else:
             print(f"model {target} already exists")
+
+    # qwen-256k-batch retired from the selector 2026-09-17: the alias stays
+    # live on the router for API/batch jobs, but the OWUI row is hidden so a
+    # misclick can't trigger a ~12 min 256k prefill + model eviction.
+    c.execute(
+        "UPDATE model SET is_active = 0, updated_at = ? WHERE id = 'qwen-256k-batch'",
+        (now(),),
+    )
 
     # 1. Update tool_server connection function_name_filter_list
     project_tools_conn = {
@@ -956,13 +964,21 @@ def main():
 
     # 5. Canonical config values: the live DB is the source of truth (it overrides
     # env vars), so write them here to keep `apply` idempotent and prevent drift.
-    #   - task.model.default: cheap title/tag/query tasks belong on the resident
-    #     27B, not the 24B devstral (slower + extra VRAM swap).
+    #   - task.model.default: "" = run title/query/compaction/memory tasks on the
+    #     chat's own model. A fixed alias (e.g. qwen-fast) forces a router
+    #     model-swap on every task call under --models-max 1, evicting the
+    #     resident model and wiping its KV — the next chat turn then re-prefills
+    #     the whole conversation. Same-model tasks are ~free and higher quality
+    #     than the 3B nano sidecar for compaction/query-gen.
+    #   - task.model.params: caps every task call (title/query-gen/compaction)
+    #     at 1024 tokens. Compaction summaries need the headroom (default was
+    #     the model's own max_tokens — up to 16384); titles/queries use ~30-100.
     #   - ui.default_pinned_models: canonical JSON array (was a CSV string from
     #     an older write path).
     #   - web.search.result_count/concurrent_requests: match docker-compose.
     canonical_config = {
-        "task.model.default": "qwen-fast",
+        "task.model.default": "",
+        "task.model.params": {"max_tokens": 1024},
         "ui.default_pinned_models": MODEL_ORDER,
         "ui.model_order_list": MODEL_ORDER,
         "web.search.result_count": 5,

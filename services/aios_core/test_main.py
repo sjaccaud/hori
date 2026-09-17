@@ -510,7 +510,7 @@ def test_admin_api_service_restart_uses_broker(admin_client):
         }
         mock_client_cls.return_value = mock_client
         response = admin_client.post(
-            "/admin/api/service/restart?service=llamacpp&confirm=admin-2026-08-30",
+            "/admin/api/service/restart?service=llamacpp-adaptive&confirm=admin-2026-08-30",
             headers=_admin_headers(),
         )
         assert response.status_code == 200
@@ -519,14 +519,14 @@ def test_admin_api_service_restart_uses_broker(admin_client):
         mock_client_cls.assert_called_once()
         mock_client.call.assert_called_once_with(
             "service_restart",
-            {"service": "llamacpp", "confirmed_by": "admin-2026-08-30"},
+            {"service": "llamacpp-adaptive", "confirmed_by": "admin-2026-08-30"},
         )
 
 
 def test_admin_api_service_stop_requires_confirm(admin_client):
     """Destructive service actions must include a confirmation identity."""
     response = admin_client.post(
-        "/admin/api/service/stop?service=llamacpp", headers=_admin_headers()
+        "/admin/api/service/stop?service=llamacpp-adaptive", headers=_admin_headers()
     )
     assert response.status_code == 422
     data = response.json()
@@ -548,7 +548,7 @@ def test_admin_api_service_stop_uses_broker(admin_client):
         }
         mock_client_cls.return_value = mock_client
         response = admin_client.post(
-            "/admin/api/service/stop?service=llamacpp&confirm=admin-2026-08-30",
+            "/admin/api/service/stop?service=llamacpp-adaptive&confirm=admin-2026-08-30",
             headers=_admin_headers(),
         )
         assert response.status_code == 200
@@ -557,7 +557,7 @@ def test_admin_api_service_stop_uses_broker(admin_client):
         mock_client_cls.assert_called_once()
         mock_client.call.assert_called_once_with(
             "service_stop",
-            {"service": "llamacpp", "confirmed_by": "admin-2026-08-30"},
+            {"service": "llamacpp-adaptive", "confirmed_by": "admin-2026-08-30"},
         )
 
 

@@ -3,10 +3,10 @@
   "vram_threshold_percent": 90,
   "services": [
     {
-      "name": "llamacpp",
+      "name": "llamacpp-adaptive",
       "type": "systemd",
-      "check_command": "systemctl is-active --quiet llamacpp",
-      "restart_command": "sudo systemctl restart llamacpp"
+      "check_command": "systemctl is-active --quiet llamacpp-adaptive",
+      "restart_command": "sudo systemctl restart llamacpp-adaptive"
     },
     {
       "name": "gpu_vram",

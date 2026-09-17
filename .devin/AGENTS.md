@@ -56,7 +56,7 @@ sudo systemctl status aios_core
 sudo journalctl -u aios_core -f    # live logs
 
 # llama-server is a systemd service (port 8080)
-systemctl status llamacpp
+sudo systemctl status llamacpp-adaptive
 
 # Embedding server (port 8082, CPU-only, managed via Docker Compose)
 # BAAI/bge-base-en-v1.5 via sentence-transformers
@@ -121,8 +121,12 @@ untrusted proposer — same principle as HORI's own safety spine.
 
 ## Current Model
 
-Qwen3.6-27B IQ4_NL on llama.cpp (Spiritbuun fork) with TurboQuant turbo4 KV
-cache. See `docs/operations.md` for full configuration.
+Qwen3.8-27B (Unsloth Dynamic v3.0 quants — UD-Q4_K_M default, UD-Q6_K
+balanced, Q8_0 quality) plus Devstral-Small-2-24B, served by the
+`llamacpp-adaptive` router on :8080 with `draft-mtp-adaptive` speculative
+decoding. The live alias/ctx/KV table in `docs/operations.md` is generated
+from `router.ini` by `scripts/gen_router_doc.py` — run it with `--check`
+before trusting hand-written model claims anywhere else.
 
 ## Safety
 

@@ -4,8 +4,8 @@ Description=HORI Memory Consolidation ("Sleep & Dream" cycle)
 # distills each cluster via the LLM, promotes insights to the project/longterm
 # tier, and updates user_model.json + project_state.json.
 # Traces to: docs/roadmap.md Tier 1B, PoC 8.5.
-After=network.target llamacpp.service aios_core.service
-Wants=llamacpp.service
+After=network.target llamacpp-adaptive.service aios_core.service
+Wants=llamacpp-adaptive.service
 
 [Service]
 Type=oneshot

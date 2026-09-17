@@ -1,0 +1,22 @@
+[Unit]
+Description=Llama.cpp ROCm Server (mainline-adaptive-mtp-10)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+LimitMEMLOCK=infinity
+LimitNOFILE=65536
+CPUWeight=800
+IOWeight=800
+Nice=-5
+Environment="LD_LIBRARY_PATH=~/llama-builds/mainline-adaptive-mtp-10/lib:~/rocm-10.0/rocm/core-10.0/lib:~/rocm-10.0/rocm/core-10.0/lib/rocm_sysdeps/lib:~/rocm-10.0/rocm/core-10.0/lib/llvm/lib"
+Environment="LLAMA_ARG_MLOCK=1"
+Environment="GPU_MAX_HW_QUEUES=1"
+ExecStart=~/llama-builds/mainline-adaptive-mtp-10/run-llama.sh
+WorkingDirectory=~/llama-builds/mainline-adaptive-mtp-10
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
