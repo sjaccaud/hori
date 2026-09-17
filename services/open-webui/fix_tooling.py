@@ -245,9 +245,16 @@ MODEL_NAMES = {
     "nano": "Nano Chat 32k",
 }
 
+# Aliases kept in MODEL_NAMES (API-usable rows) but hidden from the
+# interactive selector and ui.model_order_list.
+# qwen-256k-batch retired from the selector 2026-09-17: a misclick costs a
+# ~12 min 256k prefill plus eviction of the resident model under
+# --models-max 1. The router alias stays live for deliberate API use.
+SELECTOR_HIDDEN = {"qwen-256k-batch"}
+
 # Canonical selector order (ui.model_order_list): everyday chat first,
 # then reasoning, long-context docs/planning, quality tiers, coding,
-# agentic variants, and the non-interactive batch preset last.
+# and agentic variants. Covers MODEL_NAMES minus SELECTOR_HIDDEN.
 MODEL_ORDER = [
     "nano",
     "qwen-fast",

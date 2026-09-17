@@ -236,8 +236,11 @@ class TestStaticConfig:
         mod = _load_fix_tooling()
         order = mod.MODEL_ORDER
         assert len(order) == len(set(order)), "MODEL_ORDER has duplicates"
-        assert set(order) == set(mod.MODEL_NAMES), (
-            "MODEL_ORDER must cover every named model exactly once"
+        # Selector-visible models only: MODEL_NAMES includes API-only
+        # aliases (SELECTOR_HIDDEN, e.g. qwen-256k-batch) that stay usable
+        # via /v1/models but are hidden from the interactive selector.
+        assert set(order) == set(mod.MODEL_NAMES) - set(mod.SELECTOR_HIDDEN), (
+            "MODEL_ORDER must cover every selector-visible model exactly once"
         )
         for mid in mod.MODEL_NAMES:
             desc = mod.MODEL_DESCRIPTIONS.get(mid, "")
