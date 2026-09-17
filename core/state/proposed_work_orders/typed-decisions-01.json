@@ -1,0 +1,9 @@
+{
+  "type": "work_order",
+  "id": "typed-decisions-01",
+  "parent_charter_id": "aios-foundation-charter-001",
+  "version": "1.0.0",
+  "description": "Tier-0 typed-decision service (local answer to TypeSafe Jev): POST /decide {text, questions[]} returns per-option probabilities via single-token logprob reads on the nano 3B (:8090). Choice/Score/Bool primitives, explicit 'unknown' option + min-prob abstain/escalation, shared-prefix prompt caching for multi-question passes, JSONL decision log to feed a future isotonic/temperature calibration layer. Advisory only - never inside the safety spine. First consumers: consolidation gating, idea-factory/content-factory triage, voice gate pre-checks.",
+  "status": "backlog",
+  "priority": "medium"
+}
