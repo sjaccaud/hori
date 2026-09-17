@@ -18,8 +18,6 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import requests
-from qdrant_client import QdrantClient
-from qdrant_client.http import models
 
 from services.aios_core.state import (
     MAX_INTERESTS,
@@ -32,7 +30,9 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 EMBED_URL = os.getenv("EMBED_URL", "http://127.0.0.1:8082/v1/embeddings")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
 LLM_API_URL = os.getenv("LLM_API_URL", "http://localhost:8080/v1/chat/completions")
-LLM_MODEL = os.getenv("LLM_MODEL", "Qwen3.8-27B")
+# Router alias, not a raw model name — the installed unit sets
+# LLM_MODEL=qwen-fast; the old default ("Qwen3.8-27B") 400s on the router.
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen-fast")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 USER_MODEL_PATH = PROJECT_ROOT / "core" / "state" / "user_model.json"
@@ -43,6 +43,25 @@ COLLECTION_PROJECT = "aios_project"
 COLLECTION_LONGTERM = "aios_longterm"
 
 DRY_RUN = os.getenv("CONSOLIDATION_DRY_RUN", "false").lower() == "true"
+
+# --- Backend selection ---
+# The script must read/promote through the SAME backend hori.yaml selects —
+# hardcoding Qdrant here while backend=sqlite left new memories invisible
+# to consolidation (the Sep 2026 memory-split finding, same class as the
+# Sherpa audit-path drift). hori.config is authoritative; the env override
+# exists for tests and direct runs.
+def _use_sqlite() -> bool:
+    try:
+        from hori.config import MEMORY_BACKEND
+        return MEMORY_BACKEND == "sqlite"
+    except Exception:
+        return os.getenv("HORI_MEMORY_BACKEND", "qdrant") == "sqlite"
+
+
+USE_SQLITE = _use_sqlite()
+if not USE_SQLITE:
+    from qdrant_client import QdrantClient
+    from qdrant_client.http import models
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,15 +93,85 @@ def call_llm(system_prompt: str, user_prompt: str) -> str:
     return response.json()["choices"][0]["message"]["content"]
 
 
-def fetch_working_memory(client: QdrantClient, limit: int = 500) -> List:
-    """Fetch all points from the working memory tier."""
+class _MemPoint:
+    """Lightweight shim giving sqlite rows the point.id/point.payload
+    shape the cluster/distill code was written against (Qdrant points)."""
+    __slots__ = ("id", "payload")
+
+    def __init__(self, id_: str, payload: Dict[str, Any]):
+        self.id = id_
+        self.payload = payload
+
+
+def _fetch_working_sqlite(limit: int) -> List:
+    from hori import sqlite_memory
+    conn = sqlite_memory._get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, content, role, conversation_id, topics, tone_tags, "
+            "directionality, created_at FROM memories WHERE tier='working' "
+            "ORDER BY created_at LIMIT ?",
+            (limit,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        _MemPoint(r["id"], {
+            "content": r["content"],
+            "role": r["role"],
+            "conversation_id": r["conversation_id"],
+        })
+        for r in rows
+    ]
+
+
+def _fetch_working_qdrant(client, limit: int) -> List:
+    # Exclude already-consolidated points: processed points are marked
+    # consolidated=true so the same clusters aren't re-distilled nightly.
+    flt = models.Filter(must_not=[
+        models.FieldCondition(key="consolidated", match=models.MatchValue(value=True))
+    ])
     result = client.scroll(
         collection_name=COLLECTION_WORKING,
+        scroll_filter=flt,
         limit=limit,
         with_payload=True,
         with_vectors=False,
     )
     return result[0] if result else []
+
+
+def fetch_working_memory(client, limit: int = 500) -> List:
+    """Fetch points from the working memory tier (configured backend)."""
+    if USE_SQLITE:
+        return _fetch_working_sqlite(limit)
+    return _fetch_working_qdrant(client, limit)
+
+
+def _mark_consolidated(client, point_ids: List[str]) -> None:
+    """Archive processed working-memory points so the next run sees only
+    unprocessed input (the docstring's 'archive, don't delete' step —
+    previously unimplemented, so the same top-10 clusters re-distilled
+    every night)."""
+    if not point_ids:
+        return
+    if USE_SQLITE:
+        from hori import sqlite_memory
+        conn = sqlite_memory._get_conn()
+        try:
+            conn.executemany(
+                "UPDATE memories SET tier='archived' WHERE id=?",
+                [(pid,) for pid in point_ids],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    else:
+        client.set_payload(
+            collection_name=COLLECTION_WORKING,
+            payload={"consolidated": True},
+            points=point_ids,
+        )
 
 
 def cluster_by_conversation(points: List) -> Dict[str, List]:
@@ -141,13 +230,31 @@ def distill_cluster(points: List) -> Dict[str, Any]:
 
 
 def promote_to_tier(
-    client: QdrantClient,
+    client,
     distilled: Dict[str, Any],
     source_point_ids: List[str],
     conversation_id: str,
     tier: str = "project",
 ):
     """Embed and upsert a distilled insight into the project or longterm tier."""
+    edges = [{"type": "distilled_from", "target": pid} for pid in source_point_ids]
+
+    if USE_SQLITE:
+        from hori import sqlite_memory
+        point_id = sqlite_memory.store_memory(
+            content=distilled["summary"],
+            role="consolidated",
+            conversation_id=conversation_id,
+            surface="consolidation",
+            tier=tier,
+            topics=distilled.get("topics", []),
+            tone_tags=distilled.get("tone_tags", []),
+            directionality=distilled.get("directionality", ""),
+            edges=edges,
+        )
+        logger.info(f"Promoted distilled insight to sqlite {tier}: {point_id}")
+        return point_id
+
     collection = COLLECTION_PROJECT if tier == "project" else COLLECTION_LONGTERM
     vector = get_embedding(distilled["summary"])
     point_id = str(uuid.uuid4())
@@ -162,7 +269,7 @@ def promote_to_tier(
         "tone_tags": distilled.get("tone_tags", []),
         "directionality": distilled.get("directionality", ""),
         "source_point_ids": source_point_ids,
-        "edges": [{"type": "distilled_from", "target": pid} for pid in source_point_ids],
+        "edges": edges,
     }
 
     client.upsert(
@@ -275,9 +382,12 @@ def consolidate_memory(max_clusters: int = 10):
     Main consolidation cycle: cluster -> distill -> promote -> update state.
     Processes at most max_clusters per run to avoid long blocking times.
     """
-    logger.info(f"Starting Memory Consolidation (max {max_clusters} clusters)")
+    logger.info(
+        f"Starting Memory Consolidation (max {max_clusters} clusters, "
+        f"backend={'sqlite' if USE_SQLITE else 'qdrant'})"
+    )
 
-    client = QdrantClient(url=QDRANT_URL)
+    client = None if USE_SQLITE else QdrantClient(url=QDRANT_URL)
 
     # 1. Fetch working memory
     points = fetch_working_memory(client)
@@ -312,6 +422,8 @@ def consolidate_memory(max_clusters: int = 10):
         else:
             # Promote to project tier (cross-project insights go to longterm in future)
             promote_to_tier(client, distilled, source_ids, conv_id, tier="project")
+            # Archive the source points so the next cycle sees fresh input
+            _mark_consolidated(client, source_ids)
             promoted_count += 1
 
     # 4. Update state files
