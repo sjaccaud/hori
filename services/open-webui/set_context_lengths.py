@@ -15,11 +15,15 @@ def now():
 
 # Context lengths are read from the llama-server router.ini so there is
 # one source of truth. Measured 2026-09-07 on the R9700 (31.9 GiB): qwen35
-# hybrid KV costs ~25.3 KB/token at q4_0, draft-mtp reserves ~1.8 GiB,
-# Devstral f16 KV ~160 KB/token, and the GPU-resident nano server
-# (llama-nano.service, 32k ctx) adds a fixed ~3 GiB alongside whichever
-# preset is loaded. qwen-quality is pinned at 16k: Q8_0 weights + q4_0 KV,
-# no spec, ~26.5 GiB.
+# hybrid KV costs ~25.3 KB/token at q4_0, Devstral f16 KV ~160 KB/token,
+# and the GPU-resident nano server (llama-nano.service, 32k ctx) adds a
+# fixed ~3 GiB alongside whichever preset is loaded. qwen-quality is
+# pinned at 16k: Q8_0 weights + q4_0 KV, no spec, ~26.5 GiB.
+# Correction 2026-09-15: the draft context is NOT a fixed ~1.8 GiB — the
+# MTP draft ctx scales with main ctx, so draft-mtp-adaptive presets cost
+# ~47 KB/token combined (main+draft). Verified live: spec preset @131072 =
+# 28.0 GiB, @196608 = 31.1 GiB total VRAM. Size spec presets accordingly;
+# a spec preset at 262144 ctx would NOT fit (~34+ GiB).
 
 ROUTER_INI = Path.home() / "llama-builds/mainline-adaptive-mtp-10/router.ini"
 
@@ -93,7 +97,6 @@ max_tokens = {
     'qwen-think': 16384,
     'qwen-balanced': 8192,
     'qwen-quality': 8192,
-    'qwen-long': 8192,
     'qwen-128k': 16384,
     'qwen-256k-batch': 16384,
     'devstral-coding': 8192,

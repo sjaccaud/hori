@@ -14,7 +14,6 @@ def now():
 # so Open-WebUI's get_all_models() overrides the base model instead of skipping it.
 WORKSPACE_MODELS = [
     "qwen-fast",
-    "qwen-long",
     "qwen-128k",
     "qwen-256k-batch",
     "qwen-think",
