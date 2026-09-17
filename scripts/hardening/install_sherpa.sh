@@ -4,7 +4,7 @@
 # This script requires sudo. It:
 #   1. Creates the `sherpa` system user (if not exists)
 #   2. Compiles the Go binary (if Go is available) or installs the prebuilt one
-#   3. Installs the binary to /usr/local/bin/hori-sherpa
+#   3. Installs the binary to /usr/local/bin/aios-sherpa
 #   4. Creates /run/sherpa with correct permissions
 #   5. Installs the systemd service file
 #   6. Enables and starts the service
@@ -15,10 +15,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SHERPA_SRC="$PROJECT_DIR/services/sherpa"
-SERVICE_NAME="hori-sherpa"
-SERVICE_SRC="$SHERPA_SRC/hori-sherpa.service"
+SERVICE_NAME="aios-sherpa"
+SERVICE_SRC="$SHERPA_SRC/aios-sherpa.service"
 SERVICE_DST="/etc/systemd/system/${SERVICE_NAME}.service"
-BINARY_DST="/usr/local/bin/hori-sherpa"
+BINARY_DST="/usr/local/bin/aios-sherpa"
 
 echo "=== HORI Sherpa Installer ==="
 echo ""

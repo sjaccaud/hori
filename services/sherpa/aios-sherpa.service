@@ -10,7 +10,7 @@ User=sherpa
 Group=sherpa
 
 # The Sherpa binary is a static Go binary with no dependencies.
-ExecStart=/usr/local/bin/hori-sherpa
+ExecStart=/usr/local/bin/aios-sherpa
 
 # The Sherpa needs to read the audit log (owned by root:aios-worker 0620).
 # The sherpa user is in the root group for this purpose, OR we run as

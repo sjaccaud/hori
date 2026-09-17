@@ -39,9 +39,11 @@ memory:
   qdrant_url: "http://localhost:6333"
   # Collection names. These are schema, not user config — but exposed here
   # for advanced users who want to namespace multiple HORI instances.
-  collection_working: "hori_working"
-  collection_project: "hori_project"
-  collection_longterm: "hori_longterm"
+  # NOTE: scripts/memory_consolidation.py and services/aios_core/intent_graph.py
+  # hardcode the aios_* names — keep these aligned or those consumers split.
+  collection_working: "aios_working"
+  collection_project: "aios_project"
+  collection_longterm: "aios_longterm"
 
 # --- TTS (Text-to-Speech) ---
 tts:
