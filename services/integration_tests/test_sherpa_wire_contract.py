@@ -322,3 +322,73 @@ class TestSherpaWireContract:
         assert "blind guardian" in stderr.lower() or "blind" in cap.get("reason", "").lower(), (
             f"Expected 'blind guardian' in logs or reason, got: {cap.get('reason', '')}\nstderr: {stderr}"
         )
+
+    def test_stale_backlog_does_not_trigger_rate_anomaly(self, sherpa_env):
+        """Replaying an old audit log at startup must NOT fake a rate burst.
+
+        Regression test for the Sep 17 2026 incident: on every boot the
+        Sherpa re-read the entire audit log and stamped each replayed
+        entry with time.Now(), manufacturing "48 calls in 1m0s" from
+        weeks-old history and self-triggering a Level 1 nudge.
+
+        With entry-timestamp attribution, a 5-week-old backlog (the
+        actual age of /var/log/aios/tool_audit.jsonl) must stay Level 0.
+        """
+        audit_path = sherpa_env["audit_path"]
+        stale_ts = time.time() - 35 * 24 * 3600  # 5 weeks ago, like the frozen log
+        with open(audit_path, "w") as f:
+            for i in range(48):
+                entry = {
+                    "timestamp": stale_ts + i,  # spread across 48s, 5 weeks back
+                    "tool_name": "count_files",
+                    "args": {"path": PROJECTS_DIR},
+                    "result": {"count": i},
+                    "success": True,
+                }
+                f.write(json.dumps(entry) + "\n")
+
+        proc = self._start_sherpa()
+        time.sleep(3)
+
+        cap = self._read_cap(sherpa_env["cap_path"])
+        stderr = self._stop_sherpa(proc)
+
+        assert cap["level"] == 0, (
+            f"Stale backlog triggered escalation — replayed entries are still "
+            f"being counted as live calls. Got Level {cap['level']} "
+            f"({cap.get('reason', '')})\nstderr: {stderr}"
+        )
+
+    def test_fresh_entries_after_backlog_still_detected(self, sherpa_env):
+        """Fresh calls appended after a stale backlog must still escalate.
+
+        The stale-timestamp fix must not blind the Sherpa to *new* bursts
+        that arrive at the tail of an old log.
+        """
+        audit_path = sherpa_env["audit_path"]
+        stale_ts = time.time() - 35 * 24 * 3600
+        with open(audit_path, "w") as f:
+            for i in range(10):
+                entry = {
+                    "timestamp": stale_ts + i,
+                    "tool_name": "count_files",
+                    "args": {"path": PROJECTS_DIR},
+                    "result": {"count": i},
+                    "success": True,
+                }
+                f.write(json.dumps(entry) + "\n")
+
+        proc = self._start_sherpa()
+        time.sleep(1)  # let the backlog be processed first
+
+        # Now append a real live burst through the actual AuditLogger
+        write_audit_entries(audit_path, count=25)
+        time.sleep(3)
+
+        cap = self._read_cap(sherpa_env["cap_path"])
+        self._stop_sherpa(proc)
+
+        assert cap["level"] >= 1, (
+            f"Live burst after stale backlog was not detected — got Level "
+            f"{cap['level']}. The timestamp fix may be dropping fresh entries."
+        )

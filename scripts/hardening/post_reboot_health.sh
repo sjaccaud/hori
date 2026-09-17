@@ -12,7 +12,8 @@
 #   1. All 4 critical services are active
 #   2. The tool daemon socket exists and is reachable
 #   3. The Sherpa capability file exists, is fresh, and shows Level 0
-#   4. The Sherpa is NOT skipping audit log entries (not blind)
+#   4. The Sherpa is NOT skipping audit log entries (not blind), AND its
+#      audit path agrees with the daemon's configured path (input is live)
 #   5. The tool daemon can execute a real tool call (end-to-end)
 #   6. The LLM inference server is responding
 #
@@ -123,6 +124,35 @@ else
     SHERPA_HEALTH=$(journalctl -u aios-sherpa --no-pager --since "5 min ago" 2>/dev/null | grep -c "health" || true)
     if [ "$SHERPA_HEALTH" -gt 0 ]; then
         ok "Sherpa health check is running"
+    fi
+fi
+
+# Producer/consumer path agreement — the Aug 8 2026 split: the daemon
+# wrote /var/log/hori/tool_audit.jsonl while the Sherpa read a frozen
+# /var/log/aios/tool_audit.jsonl for 5 weeks. Parse-ratio checks stayed
+# green because a frozen-but-valid file parses fine. This check binds
+# the two paths and verifies the input is actually alive.
+DAEMON_AUDIT=$(systemctl show aios-tool-daemon -p Environment 2>/dev/null \
+    | tr ' ' '\n' | grep -oP 'AIOS_AUDIT_LOG=\K\S+' || true)
+DAEMON_AUDIT="${DAEMON_AUDIT:-/var/log/hori/tool_audit.jsonl}"
+SHERPA_AUDIT=$(journalctl -u aios-sherpa -n 20 --no-pager 2>/dev/null \
+    | grep -oP 'audit log: \K[^,]+' | tail -1 || true)
+
+if [ -z "$SHERPA_AUDIT" ]; then
+    warn "Could not determine Sherpa's audit path from journal — check manually"
+elif [ "$SHERPA_AUDIT" != "$DAEMON_AUDIT" ]; then
+    fail "Audit path split: daemon writes $DAEMON_AUDIT but Sherpa reads $SHERPA_AUDIT"
+else
+    ok "Sherpa audit path matches daemon ($SHERPA_AUDIT)"
+    if [ ! -f "$SHERPA_AUDIT" ]; then
+        warn "Shared audit log $SHERPA_AUDIT doesn't exist yet"
+    else
+        AUDIT_AGE_H=$(( ($(date +%s) - $(stat -c %Y "$SHERPA_AUDIT")) / 3600 ))
+        if [ "$AUDIT_AGE_H" -ge 24 ]; then
+            warn "Audit log silent for ${AUDIT_AGE_H}h — legitimate idle, or dead input?"
+        else
+            ok "Audit log has recent activity (${AUDIT_AGE_H}h ago)"
+        fi
     fi
 fi
 echo ""

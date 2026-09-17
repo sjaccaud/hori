@@ -36,9 +36,13 @@ import (
 // ---------------------------------------------------------------------------
 
 const (
-	// AuditLogPath is the path to the tool daemon's audit log.
-	// The Sherpa reads this as root (aios-worker can append but not read).
-	AuditLogPath = "/var/log/aios/tool_audit.jsonl"
+	// DefaultAuditLogPath is the fallback path to the tool daemon's audit
+	// log. Must match the daemon's HORI_AUDIT_LOG/AIOS_AUDIT_LOG setting —
+	// see aios-tool-daemon.service. post_reboot_health.sh asserts the
+	// producer/consumer paths agree (the Aug 8 2026 path split left the
+	// Sherpa reading a frozen /var/log/aios file for five weeks).
+	// Overridable via HORI_AUDIT_LOG (or legacy AIOS_AUDIT_LOG).
+	DefaultAuditLogPath = "/var/log/hori/tool_audit.jsonl"
 
 	// CapabilityFilePath is where the Sherpa writes the capability level.
 	// The tool daemon polls this file. Defaults to Level 4 if stale.
@@ -68,9 +72,10 @@ const (
 	// file is written by aios-core.
 	UserInactivityTimeout = 30 * time.Minute
 
-	// UserActivityFile is the path to the user activity timestamp file.
-	// aios-core writes to this on every voice/text/web interaction.
-	UserActivityFile = "/run/aios/user_activity"
+	// DefaultUserActivityFile is the path to the user activity timestamp
+	// file. aios-core writes to this on every voice/text/web interaction.
+	// Overridable via HORI_USER_ACTIVITY (or legacy AIOS_USER_ACTIVITY).
+	DefaultUserActivityFile = "/run/hori/user_activity"
 
 	// HealthCheckMinLines is the minimum number of audit lines the Sherpa
 	// must have seen before the skip-ratio health check kicks in. Below
@@ -132,7 +137,12 @@ type Sherpa struct {
 	// the capability file every FreshnessInterval.
 	level       int
 	levelReason string
-	levelMu     sync.RWMutex
+	// levelCause records which trigger raised the level ("rate", "scope",
+	// "inactivity", "health"). Auto-triggered Level 2 reductions decay
+	// back to Level 0 when their condition clears; manually/shutdown-set
+	// levels ("" or "shutdown") never auto-recover.
+	levelCause string
+	levelMu    sync.RWMutex
 
 	// Tool call timestamps for rate anomaly detection
 	callTimestamps []time.Time
@@ -162,8 +172,20 @@ type Sherpa struct {
 	shutdown chan struct{}
 
 	// Configurable paths (for testing)
-	capPath   string
-	auditPath string
+	capPath      string
+	auditPath    string
+	activityPath string
+}
+
+// envOr returns the first non-empty value among the given env vars,
+// or fallback. Mirrors the daemon's HORI_*/AIOS_* convention.
+func envOr(fallback string, keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return fallback
 }
 
 func NewSherpa() *Sherpa {
@@ -208,10 +230,11 @@ func (s *Sherpa) writeCapabilityFile() error {
 	return nil
 }
 
-func (s *Sherpa) setLevel(level int, reason string) {
+func (s *Sherpa) setLevel(level int, cause, reason string) {
 	s.levelMu.Lock()
 	s.level = level
 	s.levelReason = reason
+	s.levelCause = cause
 	s.levelMu.Unlock()
 
 	levelName := levelName(level)
@@ -325,14 +348,24 @@ func (s *Sherpa) healthCheck() {
 		currentLevel := s.level
 		s.levelMu.RUnlock()
 		if currentLevel < Level2Reduced {
-			s.setLevel(Level2Reduced, fmt.Sprintf(
+			s.setLevel(Level2Reduced, "health", fmt.Sprintf(
 				"health: blind guardian — skipping %d/%d audit lines (%.0f%% > %.0f%% threshold)",
 				skipped, total, ratio*100, HealthCheckSkipRatio*100))
 		}
-	} else if skipped > 0 {
-		// Some skips but below threshold — log a summary periodically
-		log.Printf("Sherpa: health OK — %d parsed, %d skipped (%.1f%% skip rate)",
-			parsed, skipped, ratio*100)
+	} else {
+		// Skip ratio is healthy — if we were reduced for blindness, recover.
+		s.levelMu.RLock()
+		if s.level == Level2Reduced && s.levelCause == "health" {
+			s.levelMu.RUnlock()
+			s.setLevel(Level0Normal, "", "vision restored — returning to normal")
+		} else {
+			s.levelMu.RUnlock()
+		}
+		if skipped > 0 {
+			// Some skips but below threshold — log a summary periodically
+			log.Printf("Sherpa: health OK — %d parsed, %d skipped (%.1f%% skip rate)",
+				parsed, skipped, ratio*100)
+		}
 	}
 }
 
@@ -343,19 +376,34 @@ func (s *Sherpa) healthCheck() {
 func (s *Sherpa) processAuditEntry(entry *AuditEntry) {
 	now := time.Now()
 
-	// Track call timestamp for rate anomaly
-	s.callMu.Lock()
-	s.callTimestamps = append(s.callTimestamps, now)
-	// Trim old timestamps
-	cutoff := now.Add(-RateAnomalyWindow)
-	idx := 0
-	for i, ts := range s.callTimestamps {
-		if ts.After(cutoff) {
-			idx = i
-			break
+	// Attribute the call to the entry's own timestamp, not arrival time.
+	// Replayed backlog entries (e.g. a weeks-old log read after restart)
+	// are old history — they must not count as calls happening right now.
+	// (Sep 17 2026: the boot replay of a frozen log manufactured a fake
+	// "48 calls in 1m" burst because every entry was stamped time.Now().)
+	entryTime := now
+	if entry.Timestamp > 0 {
+		sec := int64(entry.Timestamp)
+		candidate := time.Unix(sec, int64((entry.Timestamp-float64(sec))*1e9))
+		// Trust the entry timestamp unless it's absurdly in the future
+		// (>1min ahead of wall clock = broken producer clock).
+		if !candidate.After(now.Add(time.Minute)) {
+			entryTime = candidate
 		}
 	}
-	s.callTimestamps = s.callTimestamps[idx:]
+
+	// Track call timestamp for rate anomaly
+	s.callMu.Lock()
+	s.callTimestamps = append(s.callTimestamps, entryTime)
+	// Trim timestamps outside the window — drop everything if none survive
+	cutoff := now.Add(-RateAnomalyWindow)
+	kept := s.callTimestamps[:0]
+	for _, ts := range s.callTimestamps {
+		if ts.After(cutoff) {
+			kept = append(kept, ts)
+		}
+	}
+	s.callTimestamps = kept
 	callCount := len(s.callTimestamps)
 	s.callMu.Unlock()
 
@@ -366,7 +414,7 @@ func (s *Sherpa) processAuditEntry(entry *AuditEntry) {
 		prefix := getDirPrefix(path)
 
 		s.dirMu.Lock()
-		s.dirPrefixes[prefix] = now
+		s.dirPrefixes[prefix] = entryTime
 		// Trim old entries
 		for k, t := range s.dirPrefixes {
 			if now.Sub(t) > ScopeEscalationWindow {
@@ -380,16 +428,25 @@ func (s *Sherpa) processAuditEntry(entry *AuditEntry) {
 
 		// Check scope escalation
 		if dirCount > ScopeEscalationThreshold {
-			s.setLevel(Level2Reduced, fmt.Sprintf(
+			s.setLevel(Level2Reduced, "scope", fmt.Sprintf(
 				"scope escalation: %d distinct directory prefixes in %v",
 				dirCount, ScopeEscalationWindow))
 			return
+		}
+
+		// Scope contracted — if we were reduced for scope, recover.
+		s.levelMu.RLock()
+		if s.level == Level2Reduced && s.levelCause == "scope" {
+			s.levelMu.RUnlock()
+			s.setLevel(Level0Normal, "", "scope contracted — returning to normal")
+		} else {
+			s.levelMu.RUnlock()
 		}
 	}
 
 	// Check rate anomaly
 	if callCount > RateAnomalyThreshold {
-		s.setLevel(Level1Nudge, fmt.Sprintf(
+		s.setLevel(Level1Nudge, "rate", fmt.Sprintf(
 			"rate anomaly: %d calls in %v (threshold: %d)",
 			callCount, RateAnomalyWindow, RateAnomalyThreshold))
 		return
@@ -404,7 +461,7 @@ func (s *Sherpa) processAuditEntry(entry *AuditEntry) {
 	s.levelMu.RUnlock()
 	if currentLevel == Level1Nudge {
 		// Nudge auto-expires after 5 minutes
-		s.setLevel(Level0Normal, "nudge expired — returning to normal")
+		s.setLevel(Level0Normal, "", "nudge expired — returning to normal")
 	}
 }
 
@@ -436,7 +493,7 @@ func splitPath(p string) []string {
 // ---------------------------------------------------------------------------
 
 func (s *Sherpa) checkUserInactivity() {
-	data, err := os.ReadFile(UserActivityFile)
+	data, err := os.ReadFile(s.activityPath)
 	if err != nil {
 		// If the activity file doesn't exist, assume the user was never
 		// active (or aios-core hasn't started). Don't trigger on this.
@@ -458,9 +515,18 @@ func (s *Sherpa) checkUserInactivity() {
 		currentLevel := s.level
 		s.levelMu.RUnlock()
 		if currentLevel < Level2Reduced {
-			s.setLevel(Level2Reduced, fmt.Sprintf(
+			s.setLevel(Level2Reduced, "inactivity", fmt.Sprintf(
 				"user inactive for %v (threshold: %v)",
 				inactiveFor.Round(time.Minute), UserInactivityTimeout))
+		}
+	} else {
+		// User is active — if we were reduced for inactivity, recover.
+		s.levelMu.RLock()
+		if s.level == Level2Reduced && s.levelCause == "inactivity" {
+			s.levelMu.RUnlock()
+			s.setLevel(Level0Normal, "", "user activity resumed — returning to normal")
+		} else {
+			s.levelMu.RUnlock()
 		}
 	}
 }
@@ -532,7 +598,12 @@ func main() {
 
 	// Allow overriding paths via flags for testing
 	capPath := CapabilityFilePath
-	auditPath := AuditLogPath
+	// The audit path must agree with the daemon's HORI_AUDIT_LOG /
+	// AIOS_AUDIT_LOG — the envs are shared deliberately so a single
+	// deployment config binds producer and consumer. Default matches
+	// aios-tool-daemon.service's configured path.
+	auditPath := envOr(DefaultAuditLogPath, "HORI_AUDIT_LOG", "AIOS_AUDIT_LOG")
+	activityPath := envOr(DefaultUserActivityFile, "HORI_USER_ACTIVITY", "AIOS_USER_ACTIVITY")
 	for i, arg := range os.Args[1:] {
 		_ = i
 		switch arg {
@@ -562,6 +633,7 @@ func main() {
 	sherpa := NewSherpa()
 	sherpa.capPath = capPath
 	sherpa.auditPath = auditPath
+	sherpa.activityPath = activityPath
 
 	// Ensure the capability file directory exists
 	if err := os.MkdirAll(filepath.Dir(capPath), 0750); err != nil {
@@ -577,7 +649,7 @@ func main() {
 		sig := <-sigChan
 		log.Printf("Sherpa: received signal %v", sig)
 		// Before exiting, write Level 4 (fail closed)
-		sherpa.setLevel(Level4FullStop, "Sherpa shutting down — fail closed")
+		sherpa.setLevel(Level4FullStop, "shutdown", "Sherpa shutting down — fail closed")
 		sherpa.writeCapabilityFile()
 		close(sherpa.shutdown)
 	}()
