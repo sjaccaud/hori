@@ -1,0 +1,9 @@
+{
+  "type": "work_order",
+  "id": "typed-decisions-04-calibration-loop",
+  "parent_charter_id": "aios-foundation-charter-001",
+  "version": "1.0.0",
+  "description": "Nightly decision-consolidation job (sibling of aios-consolidation.timer ~03:03): sample logged /decide decisions - confident AND borderline - through qwen-27B as audit oracle; refit isotonic/temperature calibration; auto-tune abstain thresholds against error budget; emit disagreement report + high-value exemplars for S1 prompt injection (eventual distillation input). Wrap with ai-power-manager active --ttl. Requires >=100 logged pairs accumulated from 02/03 before first meaningful run - install early, expect thin data initially.",
+  "status": "backlog",
+  "priority": "medium"
+}

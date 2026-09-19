@@ -1,0 +1,9 @@
+{
+  "type": "work_order",
+  "id": "typed-decisions-05-request-path",
+  "parent_charter_id": "aios-foundation-charter-001",
+  "version": "1.0.0",
+  "description": "Request-path integrations - LAST, only after shadow data justifies thresholds. (1) Voice/chat turn gate {needs_memory? needs_web? needs_tools? trivial?}: skip retrieval prefill (~10s per 10k ctx tokens saved), short-circuit trivial utterances on nano. (2) Front-door preset routing advisory (which qwen-* alias): logged before enforced. (3) Agentic loop-watcher Noul on >=60s cadence - never tighter (idle-flap risk). (4) OWUI untouched: /decide is an optional tool endpoint, never inline proxy, never a model in the selector. Each flag-gated. Watch-list must be wired first: decide p95, abstain rate, swaps/day, idle residency, S2-audit disagreement.",
+  "status": "backlog",
+  "priority": "low"
+}

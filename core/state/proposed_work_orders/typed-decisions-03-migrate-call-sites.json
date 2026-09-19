@@ -1,0 +1,9 @@
+{
+  "type": "work_order",
+  "id": "typed-decisions-03-migrate-call-sites",
+  "parent_charter_id": "aios-foundation-charter-001",
+  "version": "1.0.0",
+  "description": "Consolidation refactor - delete ad-hoc generate-then-parse judgment paths, replace with /decide. Each behind DECIDE_ENABLED flag with old-path fallback (fail-closed). (1) idea-factory triage.py: split scores (nano, typed) from rationale (qwen, keepers only); DELETE JSON_RE + parse_scores silent-drop path. (2) landscape_survey/opportunity_proposer: replace LLM-asserted relevance floats with measured Score distributions. (3) media_pull 'auto' transcribe policy -> Noul. Acceptance: >=3 sites migrated, parse-failure rate zero, per-site flags. Depends on 02 passing its exit criteria.",
+  "status": "backlog",
+  "priority": "medium"
+}
