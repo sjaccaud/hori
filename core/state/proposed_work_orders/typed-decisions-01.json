@@ -4,6 +4,6 @@
   "parent_charter_id": "aios-foundation-charter-001",
   "version": "1.0.0",
   "description": "Tier-0 typed-decision service (local Jev-style primitive; the S1 layer for S1+S2 cascade). FastAPI POST /decide {text, questions:[{id,type:choice|score|noul,options}]} -> per-option probabilities via single-token top_logprobs reads on nano 3B (:8090). Letter-option encoding (A/B/C single tokens - verified live 2026-09-19), explicit 'unknown' option + min_prob abstain contract, 'insufficient_context' as first-class result, shared-prefix caching for multi-question calls, max_input_chars guard on sidecar, JSONL decision log -> ~/.local/share/hori/decisions/ (feeds calibration). Sandboxed aios-decide.service on :8773 (port verified free), loopback-only, event-driven calls only - no polling consumers (ai-power-manager idle-flap risk). Advisory only, never inside safety spine. This chunk: service + adversarial tests + demo curl ONLY - no consumers wired.",
-  "status": "in_progress",
+  "status": "done",
   "priority": "high"
 }
