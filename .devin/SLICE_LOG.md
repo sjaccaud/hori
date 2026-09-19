@@ -11,7 +11,7 @@
 
 **Branch:** `slice/17-thread-consolidation` (baseline rides along; WO-01 service gets its own slice branch)
 
-**Status:** in progress — committed pending open-webui local-tools fix (b0dc9ce); restic manual snapshot running; capturing baselines (make test, router swaps, nano metrics, port map) + per-preset nano VRAM co-residency check. Output: `~/.local/share/hori/baselines/2026-09-19-typed-decisions-00.md`.
+**Status:** DONE 2026-09-19 — snapshot 3b00ebb1 verified + spot-restored; rollback shas recorded (rebrand/hori b1d7842); make test 740 pass; port 8773 free; **nano VRAM-resident under all 13 presets** (worst case qwen-quality 95%, ~1.4 GiB headroom, 11 ms probe). Report: `~/.local/share/hori/baselines/2026-09-19-typed-decisions-00.md`. Next: WO-01 `/decide` service on a new slice branch.
 
 ---
 
