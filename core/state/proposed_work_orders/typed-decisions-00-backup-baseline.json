@@ -4,6 +4,6 @@
   "parent_charter_id": "aios-foundation-charter-001",
   "version": "1.0.0",
   "description": "Pre-implementation safety gate for the typed-decisions series. (1) Manual restic snapshot via ~/scripts/whole-ubuntu-backup.sh - do NOT rely on the 02:00 timer, it predates today's state; verify snapshot listed + spot-restore one file. Repo confirmed healthy 2026-09-19 (auto snapshot f4f3674f, 129.3 GiB, no stale locks). (2) Git: all aios work committed, record HEAD sha of rebrand/hori as rollback point. (3) Capture regression baselines: make test count, router swap count from journalctl -u llamacpp-adaptive, nano :8090/metrics snapshot, ai-power-manager mode + idle residency, ss -tln port map. (4) Verify nano stays VRAM-resident under EACH router preset - spec presets run 28-31 GiB total, so ~3 GiB sidecar may not fit under qwen-128k/quality/256k-batch; if it evicts, /decide silently dies under the big models. Output: baseline report file for post-change diffing.",
-  "status": "backlog",
+  "status": "in_progress",
   "priority": "high"
 }

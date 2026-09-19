@@ -5,6 +5,16 @@
 
 ## Current Slice
 
+### TYPED-DECISIONS WO-00: Backup + regression-baseline gate before building /decide.
+
+**Work order:** `core/state/proposed_work_orders/typed-decisions-00-backup-baseline.json` (commit 634ed66)
+
+**Branch:** `slice/17-thread-consolidation` (baseline rides along; WO-01 service gets its own slice branch)
+
+**Status:** in progress — committed pending open-webui local-tools fix (b0dc9ce); restic manual snapshot running; capturing baselines (make test, router swaps, nano metrics, port map) + per-preset nano VRAM co-residency check. Output: `~/.local/share/hori/baselines/2026-09-19-typed-decisions-00.md`.
+
+---
+
 ### SLICE-17-THREAD-CONSOLIDATION: Nightly loop that folds episodes into thread state, flags stale threads, and mines rule proposals — all LLM output lands in a human review queue, never auto-applied.
 
 **Branch:** `slice/17-thread-consolidation`
