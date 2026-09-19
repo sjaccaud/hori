@@ -15,7 +15,7 @@
 
 **PRD:** `.devin/prd/decide-service.md` · **Work order:** `core/state/proposed_work_orders/typed-decisions-01.json`
 
-**Status:** PLAN done — building via /tdd.
+**Status:** implemented, tested, live-run 2026-09-19. `services/aios_decide/` (decide.py + server.py + aios-decide.service user unit — enabled on :8773, sandboxed like workspace-tools). Tests: 19 unit, 5 adversarial (no xfail — fail-closed + confinement hold). Live curl: real distributions + abstain contract working; JSONL logging to `~/.local/share/hori/decisions/`. Contract gaps found in build: `question` field added (required), `no_answer` result, abstained `prob` = top prob (margin preserved for calibration). No consumers wired (per WO-01 scope).
 
 ---
 

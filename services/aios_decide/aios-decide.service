@@ -1,0 +1,29 @@
+[Unit]
+Description=HORI typed-decision service (/decide on nano sidecar)
+Documentation=https://127.0.0.1:8773/docs
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/Projects/aios/venv/bin/python3 -m services.aios_decide.server
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=%h/Projects/aios
+
+# Hardening: /decide only writes its decision log; everything else in $HOME
+# stays read-only. Advisory service — it fails closed (503) when nano is
+# down rather than fabricating probabilities.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/hori/decisions
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+Environment=DECIDE_HOST=127.0.0.1
+Environment=DECIDE_PORT=8773
+Environment=DECIDE_NANO_URL=http://127.0.0.1:8090
+Environment=DECIDE_LOG_DIR=%h/.local/share/hori/decisions
+
+[Install]
+WantedBy=default.target

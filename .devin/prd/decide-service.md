@@ -29,7 +29,7 @@ POST /decide
 {
   "text": "<subject under judgment>",
   "questions": [
-    {"id": "verdict",  "type": "choice",
+    {"id": "verdict",  "type": "choice", "question": "What should happen to this item?",
      "options": ["keep", "drop", "defer"], "min_prob": 0.5},
     {"id": "relevance","type": "score",  "options": ["1","2","3","4","5"]},
     {"id": "transcribe","type": "noul"}                    // fixed {yes,no,unknown}
@@ -69,6 +69,12 @@ Contract rules:
 - **insufficient_context:** `text` empty/whitespace or below
   `MIN_TEXT_CHARS` → that request returns `decisions` with
   `"result": "insufficient_context"` per question and nano is never called.
+- **no_answer:** if no option letter appears in nano's top_logprobs (the
+  model didn't play along), that question returns
+  `"result": "no_answer"`, `chosen: null`, `abstained: true`.
+- **`question` field:** required string per question — the natural-language
+  question asked about `text`. (The WO sketch elided it; the prompt is
+  meaningless without it.)
 - **max_input_chars:** `text` is truncated at `MAX_INPUT_CHARS` before
   prompt assembly; response sets `"truncated": true`.
 - **Bounds:** `len(questions)` ≤ 16, `len(options)` ≤ 25, `len(id)` ≤ 64,
