@@ -17,6 +17,8 @@
 
 **Status:** implemented, tested, live-run 2026-09-19. `services/aios_decide/` (decide.py + server.py + aios-decide.service user unit — enabled on :8773, sandboxed like workspace-tools). Tests: 19 unit, 5 adversarial (no xfail — fail-closed + confinement hold). Live curl: real distributions + abstain contract working; JSONL logging to `~/.local/share/hori/decisions/`. Contract gaps found in build: `question` field added (required), `no_answer` result, abstained `prob` = top prob (margin preserved for calibration). No consumers wired (per WO-01 scope).
 
+**WO-02 shadow (same branch):** `idea_factory/shadow.py` + hook in `triage.py` + `shadow_report.py` + `test_shadow.py` (5 unittest, pass) — committed in the idea_factory repo (which got `git init` + baseline first — it was unversioned). Live run on 16 real items: 80 question-pairs logged. First data: hard_no 92% agreement, verdict 100% on decided (reject-side only), fit/actionable spearman 0.00 (nano scores inflated), lucrative 100% abstained. Accumulates automatically in the 05:00 batch; report re-run gates WO-03.
+
 ---
 
 ### TYPED-DECISIONS WO-00: Backup + regression-baseline gate before building /decide.

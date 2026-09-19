@@ -4,6 +4,6 @@
   "parent_charter_id": "aios-foundation-charter-001",
   "version": "1.0.0",
   "description": "Shadow-mode validation: idea-factory triage runs /decide typed questions alongside existing qwen-fast verdicts on the same items - log both, change NO behavior. Produces nano-vs-27B agreement dataset = calibration ground truth + proves/kills the S1 filter premise. Acceptance: >=100 logged pairs, per-question-type agreement report, measured abstain rate (alarm if >30%). Exit: numbers decide whether migration (03) is justified. Depends on 01.",
-  "status": "backlog",
+  "status": "done",
   "priority": "high"
 }
