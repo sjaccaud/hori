@@ -33,6 +33,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
@@ -65,6 +66,33 @@ READ_ROOTS = [
     for p in os.environ.get("LOCAL_TOOLS_READ_ROOTS", _DEFAULT_READ_ROOTS).split(":")
     if p
 ]
+
+# Working directory for run_safe_command subprocesses and for resolving
+# relative paths (file args, globs). Defaults to the user's home, NOT the
+# service's own cwd — otherwise bare `git` commands silently operate on
+# whatever repo the service happens to run inside (learned 2026-09-18:
+# `git show origin/main:README.md` returned the aios repo's README to a
+# model asking about an unrelated GitHub project). With cwd=~, bare git
+# commands fail honestly ("not a git repository"); use `git -C <path>`.
+COMMAND_CWD = Path(
+    os.environ.get("LOCAL_TOOLS_CWD", os.path.expanduser("~"))
+).resolve()
+
+
+def _resolve_path(path: str) -> Path:
+    """Resolve a user-supplied path against COMMAND_CWD (not process cwd)."""
+    p = Path(path).expanduser()
+    if not p.is_absolute():
+        p = COMMAND_CWD / p
+    return p.resolve()
+
+
+def _path_under_read_roots(path: str) -> bool:
+    try:
+        p = _resolve_path(path)
+    except (OSError, ValueError):
+        return False
+    return any(p == root or root in p.parents for root in READ_ROOTS)
 
 # Patterns that are always denied for reading.
 READ_DENY_PATTERNS = os.environ.get(
@@ -187,7 +215,8 @@ def _expand_glob_args(argv: list[str]) -> tuple[list[str] | None, str]:
     out: list[str] = []
     for arg in argv:
         if _GLOB_CHARS_RE.search(arg):
-            matches = sorted(glob.glob(arg))
+            pattern = arg if os.path.isabs(arg) else str(COMMAND_CWD / arg)
+            matches = sorted(glob.glob(pattern))
             if not matches:
                 return None, (
                     f"glob pattern matched no files: {arg} "
@@ -231,7 +260,7 @@ def _audit(tool: str, args: dict[str, Any], result: dict[str, Any]) -> None:
 def _is_path_allowed(path: str) -> tuple[bool, str]:
     """Return (allowed, reason)."""
     try:
-        p = Path(path).expanduser().resolve()
+        p = _resolve_path(path)
     except (OSError, ValueError) as e:
         return False, f"invalid path: {e}"
 
@@ -329,7 +358,7 @@ def tool_read_file(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": reason}
 
     try:
-        p = Path(path).expanduser().resolve()
+        p = _resolve_path(path)
         if not p.is_file():
             return {"ok": False, "error": "not a regular file"}
         if _is_binary(p):
@@ -415,10 +444,22 @@ def _validate_command(cmd: list[str]) -> tuple[bool, str]:
         if len(cmd) > 1 and not _validate_command(cmd[1:])[0]:
             return False, f"xargs target command not allowed: {cmd[1:]}"
 
+    sub_idx = 1
+    if base == "git" and len(cmd) > 1 and cmd[1] == "-C":
+        # `git -C <path> <subcommand>`: explicit repo targeting. Needed because
+        # COMMAND_CWD is intentionally not inside a repo. The path must sit
+        # under a read root so `git show HEAD:<file>` can't bypass read_file's
+        # root restrictions.
+        if len(cmd) < 4:
+            return False, "git -C requires a path and a subcommand"
+        if not _path_under_read_roots(cmd[2]):
+            return False, f"git -C path outside allowed read roots: {cmd[2]}"
+        sub_idx = 3
+
     sub_filter = SUBCOMMAND_FILTERS.get(base)
     if sub_filter is not None:
-        if len(cmd) < 2 or cmd[1] not in sub_filter:
-            return False, f"forbidden subcommand for {base}: {cmd[1] if len(cmd) > 1 else '(none)'}"
+        if len(cmd) <= sub_idx or cmd[sub_idx] not in sub_filter:
+            return False, f"forbidden subcommand for {base}: {cmd[sub_idx] if len(cmd) > sub_idx else '(none)'}"
 
     return True, ""
 
@@ -437,7 +478,7 @@ def _resolve_command(cmd: list[str]) -> list[str]:
     return cmd
 
 
-def tool_run_safe_command(args: dict[str, Any]) -> dict[str, Any]:
+def _execute_safe_command(args: dict[str, Any]) -> dict[str, Any]:
     command = args.get("command", "")
     extra_args = args.get("args", []) or []
     if not isinstance(extra_args, list):
@@ -491,6 +532,7 @@ def tool_run_safe_command(args: dict[str, Any]) -> dict[str, Any]:
             text=True,
             timeout=timeout,
             env=os.environ.copy(),
+            cwd=str(COMMAND_CWD),
         )
     except FileNotFoundError:
         return {"ok": False, "error": f"command not found: {cmd[0]}"}
@@ -509,6 +551,37 @@ def tool_run_safe_command(args: dict[str, Any]) -> dict[str, Any]:
         "stdout_truncated": len(proc.stdout) > MAX_OUTPUT,
         "stderr_truncated": len(proc.stderr) > MAX_OUTPUT,
     }
+
+
+# Duplicate-call guard: runaway tool loops burn iterations re-issuing the
+# exact same call (seen 2026-09-18: git ls-remote x5 in one turn). Results
+# are still executed fresh every time — never cached/stale — but a repeat
+# that produces byte-identical output is annotated so the model knows to
+# move on instead of retrying.
+_RECENT_CALLS: "OrderedDict[str, str]" = OrderedDict()
+_RECENT_CALLS_MAX = 256
+
+
+def tool_run_safe_command(args: dict[str, Any]) -> dict[str, Any]:
+    key = json.dumps(
+        {"command": args.get("command"), "args": args.get("args")},
+        sort_keys=True,
+        default=str,
+    )
+    result = _execute_safe_command(args)
+    signature = json.dumps(result, sort_keys=True, default=str)
+
+    if _RECENT_CALLS.get(key) == signature:
+        result["duplicate"] = True
+        result["note"] = (
+            "identical call already ran and produced identical output — "
+            "do not retry it; adjust the approach or answer with what you have"
+        )
+    _RECENT_CALLS[key] = signature
+    _RECENT_CALLS.move_to_end(key)
+    while len(_RECENT_CALLS) > _RECENT_CALLS_MAX:
+        _RECENT_CALLS.popitem(last=False)
+    return result
 
 
 def _run(cmd: list[str], timeout: int = 5) -> tuple[str, int]:
@@ -752,7 +825,11 @@ OPENAPI_SPEC: dict[str, Any] = {
                     "Run a safe, read-only diagnostic command. Shell-free "
                     "runner: no pipes |, chaining ; &&, $(), or find -exec; "
                     "glob chars (* ? [ ]) in arguments are expanded "
-                    "automatically. Use find -name/-maxdepth or explicit paths."
+                    "automatically. Commands run in the user's home "
+                    "directory. For git, target the repo explicitly: "
+                    "git -C <path> <subcommand> (allowed: status, log, diff, "
+                    "show, branch, remote, tag, ls-files, ls-remote). "
+                    "Identical repeat calls are flagged — do not retry them."
                 ),
                 "requestBody": {
                     "required": True,

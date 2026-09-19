@@ -338,3 +338,62 @@ def test_run_safe_command_docker_drops_ambiguous_subcommands():
     ]:
         result = jlt.tool_run_safe_command({"command": cmd})
         assert not result["ok"], f"should have denied {cmd}: {result}"
+
+
+def test_run_safe_command_cwd_is_not_a_repo():
+    """Commands run from COMMAND_CWD (~), not the service's own repo cwd —
+    bare `git` must fail honestly instead of returning wrong-repo data."""
+    result = jlt.tool_run_safe_command({"command": "git status"})
+    assert not result["ok"]
+    assert "not a git repository" in result["stderr"]
+
+
+def test_run_safe_command_git_dash_C_targets_repo_under_read_roots():
+    """`git -C <path>` runs read-only subcommands on repos under read roots."""
+    home = os.path.expanduser("~")
+    result = jlt.tool_run_safe_command({"command": f"git -C {home}/Projects/aios status"})
+    assert result["ok"], result
+    assert "not a git repository" not in result["stderr"]
+
+
+def test_run_safe_command_git_dash_C_rejects_outside_and_mutations():
+    home = os.path.expanduser("~")
+    for cmd in [
+        "git -C /var/lib status",                    # outside read roots
+        f"git -C {home}/Projects/aios push origin main",  # mutation via -C
+        "git -C",                                     # missing path+subcommand
+    ]:
+        result = jlt.tool_run_safe_command({"command": cmd})
+        assert not result["ok"], f"should have denied {cmd}: {result}"
+
+
+def test_run_safe_command_relative_glob_resolves_against_command_cwd(tmp_path, monkeypatch):
+    """Relative globs expand where the command actually runs (COMMAND_CWD)."""
+    monkeypatch.setattr(jlt, "COMMAND_CWD", tmp_path)
+    (tmp_path / "probe-file.zzz").write_text("x")
+    result = jlt.tool_run_safe_command({"command": "ls", "args": ["*.zzz"]})
+    assert result["ok"], result
+    assert "probe-file.zzz" in result["stdout"]
+
+
+def test_run_safe_command_identical_repeat_is_annotated():
+    """A repeat call with identical output gets a 'do not retry' marker."""
+    jlt._RECENT_CALLS.clear()
+    args = {"command": "ls", "args": ["/nonexistent-path-dup-test"]}
+    first = jlt.tool_run_safe_command(args)
+    assert not first["ok"]
+    assert "duplicate" not in first
+    second = jlt.tool_run_safe_command(args)
+    assert second.get("duplicate") is True
+    assert "do not retry" in second["note"]
+
+
+def test_run_safe_command_no_duplicate_flag_when_output_changes(tmp_path):
+    """Same call, different output = legitimate re-check, no annotation."""
+    jlt._RECENT_CALLS.clear()
+    args = {"command": "ls", "args": [str(tmp_path)]}
+    jlt.tool_run_safe_command(args)
+    (tmp_path / "newfile.txt").write_text("x")
+    second = jlt.tool_run_safe_command(args)
+    assert "duplicate" not in second
+    assert "newfile.txt" in second["stdout"]
