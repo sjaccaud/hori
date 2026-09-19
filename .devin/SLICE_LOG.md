@@ -5,6 +5,20 @@
 
 ## Current Slice
 
+### SLICE-18-DECIDE-SERVICE: Tier-0 typed-decision service — POST /decide returns per-option probabilities via single-token top_logprobs reads on nano (:8090). S1 layer of the S1+S2 cascade.
+
+**Branch:** `slice/18-decide-service` (off slice/17 HEAD — inherits the WO files; rebase onto rebrand/hori after slice-17 merges)
+
+**Demo criterion:** `aios-decide.service` live on `127.0.0.1:8773`; `curl /decide` with a multi-question request returns calibrated-looking per-option probabilities + abstain behavior, and a JSONL line lands in `~/.local/share/hori/decisions/`.
+
+**Safety boundary:** advisory only, never in the spine; fail-closed 503 when nano is down (never fabricates); log writes confined to the decisions dir; loopback-only bind; no consumers wired.
+
+**PRD:** `.devin/prd/decide-service.md` · **Work order:** `core/state/proposed_work_orders/typed-decisions-01.json`
+
+**Status:** PLAN done — building via /tdd.
+
+---
+
 ### TYPED-DECISIONS WO-00: Backup + regression-baseline gate before building /decide.
 
 **Work order:** `core/state/proposed_work_orders/typed-decisions-00-backup-baseline.json` (commit 634ed66)
