@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-09-10",
+  "generated": "2026-09-22",
   "note": "Script library for the HORI/AIOS rig. Entries are hand-curated; add new scripts here when created. runnable=false rows are reference-only (installers, sudo-only, hooks, destructive). probes feed the status column.",
   "categories": {
     "ai-stack": "Inference, OWUI, models, benchmarks",
@@ -9,7 +9,8 @@
     "power": "Idle power management",
     "network": "WoL, SSH hardening",
     "backup": "restic/system backups and recovery media",
-    "system": "One-shot fixes, installers, sysctl"
+    "system": "One-shot fixes, installers, sysctl",
+    "krill": "krill_harvester — paper-trading daemon ops"
   },
   "scripts": [
     {
@@ -924,6 +925,101 @@
       "tags": [
         "panel",
         "systemd"
+      ]
+    },
+    {
+      "id": "krill-status",
+      "name": "krill_status.sh",
+      "path": "~/Projects/krill_harvester/scripts/krill_status.sh",
+      "category": "krill",
+      "what": "Status dashboard — service health, DEFCON level, paper P&L, recent audit tail, trade count.",
+      "why": "One-glance ops check; runs unprivileged at reduced depth, sudo for audit log + supervisor socket.",
+      "created": "2026-09-22",
+      "kind": "script",
+      "runnable": true,
+      "probe": {
+        "type": "systemd",
+        "unit": "krill_harvester.service",
+        "scope": "system"
+      },
+      "tags": [
+        "krill",
+        "status",
+        "defcon",
+        "pnl"
+      ]
+    },
+    {
+      "id": "krill-funnel-check",
+      "name": "funnel_check.sh",
+      "path": "~/Projects/krill_harvester/scripts/funnel_check.sh",
+      "category": "krill",
+      "what": "Weekly funnel digest — journalctl-only counts: catalysts, nano-filtered vs to-model per source, errors, denials, kraken_pairs deltas. Writes ~/.local/state/krill/funnel-<date>.md + desktop notification.",
+      "why": "Anti-mothballing check-in; cron Thursdays 08:30. Prints the audit-pull + counterfactual steps when to-model traffic flows.",
+      "created": "2026-09-22",
+      "kind": "script",
+      "runnable": true,
+      "tags": [
+        "krill",
+        "funnel",
+        "cron",
+        "digest",
+        "nano"
+      ]
+    },
+    {
+      "id": "krill-deploy",
+      "name": "deploy.sh",
+      "path": "~/Projects/krill_harvester/scripts/deploy.sh",
+      "category": "krill",
+      "what": "Canonical production deploy — rsyncs src to /opt/krill_harvester (preserving audit.jsonl/state.db), rebuilds supervisor, reinstalls units, daemon-reload.",
+      "why": "Idempotent; the only supported path to push repo code to the live daemon. Requires sudo.",
+      "created": "2026-09-22",
+      "kind": "script",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "krill-supervisor.service",
+        "scope": "system"
+      },
+      "tags": [
+        "krill",
+        "deploy",
+        "sudo",
+        "systemd"
+      ]
+    },
+    {
+      "id": "krill-verify-secops",
+      "name": "verify_secops.sh",
+      "path": "~/Projects/krill_harvester/scripts/verify_secops.sh",
+      "category": "krill",
+      "what": "SecOps posture verifier — llama bind, secrets perms, egress, DEFCON isolation. Read-only; exits 0 on all HARD checks.",
+      "why": "Run after host or config changes; sudo enables filesystem-perm checks.",
+      "created": "2026-09-22",
+      "kind": "script",
+      "runnable": true,
+      "tags": [
+        "krill",
+        "secops",
+        "audit"
+      ]
+    },
+    {
+      "id": "krill-pii-check",
+      "name": "pii_check.sh",
+      "path": "~/Projects/krill_harvester/scripts/pii_check.sh",
+      "category": "krill",
+      "what": "PII scrubber — scans staged files against patterns + local allowlist before commit/push.",
+      "why": "Pre-commit hook; run manually before pushing anything new. Strips emails, tailnet names, home paths, tokens.",
+      "created": "2026-09-22",
+      "kind": "hook",
+      "runnable": true,
+      "tags": [
+        "krill",
+        "pii",
+        "secrets",
+        "hook"
       ]
     }
   ]
