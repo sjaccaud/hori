@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-project-tools check-project-tools install-workspace-tools check-workspace-tools install-state-snapshot check-state-snapshot install-llama-nano check-llama-nano install-script-panel check-script-panel
+.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-project-tools check-project-tools install-workspace-tools check-workspace-tools install-state-snapshot check-state-snapshot check-deployment install-llama-nano check-llama-nano install-script-panel check-script-panel
 
 # Default target
 test: test-all
@@ -133,6 +133,12 @@ install-state-snapshot:
 # Run the snapshot generator once and show what would be injected.
 check-state-snapshot:
 	@./services/open-webui/state_snapshot.py && cat "$${HOME}/.local/state/aios/state-snapshot.md"
+
+# Deployment contract: assert live units/endpoints/OWUI-DB match declared
+# intent (the layer unit tests can't see). Also runs inside every snapshot
+# and services/integration_tests/test_deployment_contract.py.
+check-deployment:
+	@./services/open-webui/deployment_contract.py
 
 # Install and start the nano SLM server (Llama-3.2-3B) on 127.0.0.1:8090.
 # Registered in Open-WebUI as a second OpenAI base URL; shows as "Nano Chat".

@@ -19,6 +19,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -147,6 +148,21 @@ def _resources() -> str:
     return " · ".join(x for x in (mem_s, disk_s, vram_s) if x)
 
 
+def _deployment_contract() -> str:
+    """Run the deployment contract and return its one-line verdict. Checks
+    the previous snapshot's age among other things, so a stalled timer
+    shows up as FAIL here on the next successful run."""
+    script = Path(__file__).with_name("deployment_contract.py")
+    try:
+        p = subprocess.run(
+            [sys.executable, str(script), "--oneline"],
+            capture_output=True, text=True, timeout=45,
+        )
+        return p.stdout.strip() or "deployment_contract=ERROR (no output)"
+    except Exception as e:
+        return f"deployment_contract=ERROR ({e})"
+
+
 def _threads() -> list[str]:
     rows = []
     if not THREADS_DIR.is_dir():
@@ -191,6 +207,7 @@ def render() -> str:
         f"user:    {_systemctl('user', SERVICES_USER)}",
         f"docker:  {_docker_states()}",
         _hori_state_tools(),
+        _deployment_contract(),
         f"resources: {_resources()}",
         "",
         "## aios HEAD",
