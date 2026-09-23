@@ -77,24 +77,30 @@ install-open-webui-service:
 	@systemctl --user daemon-reload
 
 # Install and start the Open-WebUI local-tools OpenAPI server on 127.0.0.1:8766.
+# Lives as a SYSTEM unit (local-tools-adaptive.service); the repo file is a
+# template — %i -> user, %h -> home are substituted at install time.
 install-local-tools:
-	@echo "🔗 Installing local-tools systemd user service..."
-	@mkdir -p "$${HOME}/.config/systemd/user"
-	@cp ./services/open-webui/local-tools.service "$${HOME}/.config/systemd/user/local-tools.service"
-	@systemctl --user daemon-reload
-	@systemctl --user enable --now local-tools
+	@echo "🔗 Installing local-tools-adaptive systemd service..."
+	@sed -e "s|%i|$$USER|g" -e "s|%h|$$HOME|g" \
+		./services/open-webui/local-tools-adaptive.service | \
+		sudo tee /etc/systemd/system/local-tools-adaptive.service > /dev/null
+	@sudo systemctl daemon-reload
+	@sudo systemctl enable --now local-tools-adaptive
 
 # Quick health check for the local-tools server.
 check-local-tools:
 	@./venv/bin/python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8766/health').read().decode())"
 
 # Install and start the project-creation tools server on 127.0.0.1:8769.
+# Lives as a SYSTEM unit (project-tools-adaptive.service); same %i/%h
+# template substitution as local-tools-adaptive.
 install-project-tools:
-	@echo "🔗 Installing project-tools systemd user service..."
-	@mkdir -p "$${HOME}/.config/systemd/user"
-	@cp ./services/open-webui/project-tools.service "$${HOME}/.config/systemd/user/project-tools.service"
-	@systemctl --user daemon-reload
-	@systemctl --user enable --now project-tools
+	@echo "🔗 Installing project-tools-adaptive systemd service..."
+	@sed -e "s|%i|$$USER|g" -e "s|%h|$$HOME|g" \
+		./services/open-webui/project-tools-adaptive.service | \
+		sudo tee /etc/systemd/system/project-tools-adaptive.service > /dev/null
+	@sudo systemctl daemon-reload
+	@sudo systemctl enable --now project-tools-adaptive
 
 # Quick health check for the project-tools server.
 check-project-tools:

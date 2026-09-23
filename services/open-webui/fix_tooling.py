@@ -518,6 +518,41 @@ WORKSPACE_TOOLS_CONNECTION = {
     "info": {"id": "workspace-tools", "name": "Workspace Tools"},
 }
 
+# Project-scaffolding tools (propose/confirm/rollback_create_project) are
+# planning-time tools, not chat tools — keep them off the always-on set so
+# they stop occupying grammar slots in every fast-chat request.
+PROJECT_TOOL_MODELS = {
+    "qwen-128k",
+    "qwen-deepdive",
+    "qwen-dsh-fast",
+    "qwen-dsh-low",
+    "qwen-dsh-medium",
+}
+
+# Read-only HORI state tools (threads/episodes/memory) via the mcpo bridge
+# behind the :8775 allowlist filter. get_status is deliberately absent — it
+# is owned by local-tools so the model sees exactly one status tool.
+HORI_STATE_CONNECTION = {
+    "url": "http://127.0.0.1:8775",
+    "path": "openapi.json",
+    "type": "openapi",
+    "auth_type": "none",
+    "headers": {},
+    "key": "",
+    "config": {
+        "enable": True,
+        "function_name_filter_list": (
+            "thread_list,thread_read,episode_search,memory_search"
+        ),
+    },
+    "spec_type": "url",
+    "info": {
+        "id": "hori-state",
+        "name": "HORI State",
+        "description": "Read-only rig/agent state: threads, episodes, memory",
+    },
+}
+
 
 def workspace_server_tool_ids_for(model_id: str) -> list[str]:
     """Extra server tool ids attached only to explicitly write-enabled models."""
@@ -555,8 +590,16 @@ class Filter:
             description="Comma-separated model ids to attach local tool servers to.",
         )
         server_tool_ids: str = Field(
-            default="server:local-tools,server:project-tools",
+            default="server:local-tools,server:hori-state",
             description="Comma-separated 'server:<id>' tool_ids to attach (server-side execution).",
+        )
+        project_models: str = Field(
+            default="qwen-128k,qwen-deepdive,qwen-dsh-fast,qwen-dsh-low,qwen-dsh-medium",
+            description="Comma-separated model ids that also get project-creation tools.",
+        )
+        project_tool_ids: str = Field(
+            default="server:project-tools",
+            description="Comma-separated 'server:<id>' tool_ids attached to project_models.",
         )
         write_models: str = Field(
             default="qwen-deepdive",
@@ -623,6 +666,14 @@ class Filter:
                 else "server:local-tools"
             )
             server_ids = {t.strip() for t in server_tool_ids.split(",") if t.strip()}
+            project_models = {
+                m.strip()
+                for m in (getattr(self.valves, "project_models", "") or "").split(",")
+                if m.strip()
+            }
+            if model_id in project_models:
+                proj_ids = getattr(self.valves, "project_tool_ids", "") or ""
+                server_ids.update(t.strip() for t in proj_ids.split(",") if t.strip())
             write_models = {
                 m.strip()
                 for m in (getattr(self.valves, "write_models", "") or "").split(",")
@@ -767,12 +818,24 @@ def main():
         },
         "info": {"id": "project-tools", "name": "Project Tools"},
     }
+    # Drop the stale hand-written local-tools workspace script: its spec
+    # advertised get_status but the Tools class never implemented it (and it
+    # calls pre-rename endpoints /run/safe_command, /read/file), so enabling
+    # it in a chat hijacked the call -> 'Tools' object has no attribute
+    # 'get_status' -> empty assistant reply. Id pattern keeps this PII-free.
+    c.execute("DELETE FROM tool WHERE id LIKE '%-local-tools'")
+
     row = c.execute("SELECT value FROM config WHERE key='tool_server.connections'").fetchone()
     if row:
         conns = json.loads(row[0])
-        # Ensure project-tools/workspace-tools are present and local-tools is clean.
+        # Ensure project-tools/workspace-tools/hori-state are present and
+        # local-tools is clean.
         urls = {conn_cfg.get('url', '') for conn_cfg in conns}
-        for tool_conn in (project_tools_conn, WORKSPACE_TOOLS_CONNECTION):
+        for tool_conn in (
+            project_tools_conn,
+            WORKSPACE_TOOLS_CONNECTION,
+            HORI_STATE_CONNECTION,
+        ):
             if tool_conn['url'] not in urls:
                 conns.append(tool_conn)
         for conn_cfg in conns:
@@ -791,6 +854,14 @@ def main():
                 conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info']['id'] = 'project-tools'
                 conn_cfg['info']['name'] = 'Project Tools'
+            elif url == HORI_STATE_CONNECTION['url']:
+                conn_cfg['config'] = conn_cfg.get('config', {})
+                conn_cfg['config']['enable'] = True
+                conn_cfg['config']['function_name_filter_list'] = (
+                    HORI_STATE_CONNECTION['config']['function_name_filter_list']
+                )
+                conn_cfg['info'] = conn_cfg.get('info', {})
+                conn_cfg['info'].update(HORI_STATE_CONNECTION['info'])
             elif url == WORKSPACE_TOOLS_CONNECTION['url']:
                 conn_cfg['config'] = conn_cfg.get('config', {})
                 conn_cfg['config']['enable'] = True
@@ -827,6 +898,7 @@ def main():
                         },
                         project_tools_conn,
                         WORKSPACE_TOOLS_CONNECTION,
+                        HORI_STATE_CONNECTION,
                     ],
                     ensure_ascii=False,
                 ),
@@ -912,7 +984,9 @@ def main():
             json.dumps(
                 {
                     "models": ",".join(ALL_QWEN_DEVSTRAL),
-                    "server_tool_ids": "server:local-tools,server:project-tools",
+                    "server_tool_ids": "server:local-tools,server:hori-state",
+                    "project_models": ",".join(sorted(PROJECT_TOOL_MODELS)),
+                    "project_tool_ids": "server:project-tools",
                     "write_models": ",".join(sorted(WORKSPACE_WRITE_MODELS)),
                     "write_server_tool_ids": "server:workspace-tools",
                 },
