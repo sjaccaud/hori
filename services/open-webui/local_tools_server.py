@@ -94,11 +94,18 @@ def _path_under_read_roots(path: str) -> bool:
         return False
     return any(p == root or root in p.parents for root in READ_ROOTS)
 
-# Patterns that are always denied for reading.
+# Patterns that are always denied for reading — via read_file AND (as of
+# 2026-09-23) via run_safe_command path arguments, which previously let
+# `cat`/`grep`/`find` walk straight past this list.
 READ_DENY_PATTERNS = os.environ.get(
     "LOCAL_TOOLS_READ_DENY_PATTERNS",
     "**/.env,**/.env.*,**/secrets.env,**/secrets.json,**/*_secret*,"
-    "**/.ssh/**,**/.gnupg/**,/etc/shadow,/etc/sudoers*,/etc/gshadow",
+    "**/.ssh/**,**/.gnupg/**,/etc/shadow,/etc/sudoers*,/etc/gshadow,"
+    # Credential-bearing dotfiles/configs found under the read roots:
+    "**/.config/mcpo/**,**/.config/gh/**,**/.ollama/**,**/.aws/**,"
+    "**/.kube/**,**/.docker/**,**/.netrc,**/.git-credentials,**/hosts.yml,"
+    "**/*.pem,**/*.key,**/*.token,**/id_rsa*,**/id_ed25519*,"
+    "**/id_ecdsa*,**/id_dsa*",
 ).split(",")
 
 CORE_COMMANDS = frozenset(
@@ -116,8 +123,18 @@ CORE_COMMANDS = frozenset(
 # Commands that can fetch from the network or touch mutable state.
 # Set LOCAL_TOOLS_EXTENDED_COMMANDS=0 to disable them for stricter sessions.
 EXTENDED_COMMANDS = frozenset(
-    "docker,git,huggingface-cli,hf,yt-dlp,pandoc,ffprobe,ffmpeg,ollama,sunshine".split(",")
+    "docker,git,huggingface-cli,hf,yt-dlp,pandoc,ffprobe,ollama,sunshine".split(",")
 )
+# ffmpeg removed 2026-09-23: its output operand is an arbitrary file write
+# (persistence via ~/.config/systemd/user etc.) — ffprobe stays for
+# inspection. Per-command arg denials for the remaining writers:
+COMMAND_ARG_DENY = {
+    "sed": frozenset({"-i", "--in-place"}),
+    "pandoc": frozenset({"-o", "--output"}),
+    "yt-dlp": frozenset({"-o", "--output", "-P", "--paths"}),
+    "huggingface-cli": frozenset({"--local-dir"}),
+    "hf": frozenset({"--local-dir"}),
+}
 
 def _allowed_commands() -> frozenset[str]:
     """Compute the command allowlist from environment overrides."""
@@ -162,13 +179,15 @@ SUBCOMMAND_FILTERS: dict[str, frozenset[str] | None] = {
         {"list", "search", "info", "ps", "remotes", "history", "permissions"}
     ),
     "snap": frozenset({"list"}),
+    # 'inspect' deliberately absent: it dumps container env, and several
+    # containers carry tokens in env (aios_embedding WEBUI_SECRET_KEY,
+    # n8n N8N_API_KEY) — leaks them to any caller of this tool.
     "docker": frozenset(
         {
             "ps",
             "images",
             "info",
             "logs",
-            "inspect",
             "stats",
             "top",
         }
@@ -408,6 +427,49 @@ def _has_shell_meta(s: str) -> bool:
     return bool(_SHELL_METACHAR_RE.search(s))
 
 
+def _arg_looks_pathy(arg: str) -> bool:
+    """Heuristic: does this argv token name a filesystem path?"""
+    if "://" in arg:  # URLs (yt-dlp, git ls-remote, hf) are not paths
+        return False
+    return arg.startswith(("/", "~", ".")) or "/" in arg
+
+
+def _check_command_path_args(cmd: list[str]) -> tuple[bool, str]:
+    """Apply read_file's root/deny policy to run_safe_command path args.
+
+    Previously unchecked: `cat ~/.config/mcpo/hori.json` happily returned
+    the MCP bearer token even though read_file would have denied it.
+    Pathy args (absolute, ~, dot-relative, or containing a slash, incl.
+    --opt=path forms) must resolve under READ_ROOTS and miss
+    READ_DENY_PATTERNS; bare names still get the deny-pattern check so
+    `cat id_ed25519`-style relative reads stay honest.
+    """
+    for arg in cmd[1:]:
+        cands = [arg]
+        if "=" in arg:
+            cands.append(arg.split("=", 1)[1])
+        for cand in cands:
+            if not cand:
+                continue
+            try:
+                resolved = _resolve_path(cand)
+            except (OSError, ValueError):
+                if _arg_looks_pathy(cand):
+                    return False, f"invalid path argument: {cand}"
+                continue
+            for pat in READ_DENY_PATTERNS:
+                # resolved + "/" also catches the denied dir itself:
+                # '**/.ssh/**' needs a trailing child to match otherwise.
+                if pat and (
+                    fnmatch.fnmatch(str(resolved), pat)
+                    or fnmatch.fnmatch(str(resolved) + "/", pat)
+                ):
+                    return False, f"path matches deny pattern: {cand}"
+            if _arg_looks_pathy(cand) and not _path_under_read_roots(cand):
+                return False, f"path outside allowed read roots: {cand}"
+    return True, ""
+
+
 def _validate_command(cmd: list[str]) -> tuple[bool, str]:
     if not cmd:
         return False, "empty command"
@@ -429,6 +491,16 @@ def _validate_command(cmd: list[str]) -> tuple[bool, str]:
             )
         if arg in FORBIDDEN_ARGS:
             return False, f"forbidden argument: {arg}"
+
+    arg_deny = COMMAND_ARG_DENY.get(base)
+    if arg_deny:
+        for arg in cmd[1:]:
+            if arg in arg_deny or any(arg.startswith(f + "=") for f in arg_deny):
+                return False, f"forbidden argument for {base}: {arg}"
+
+    ok, reason = _check_command_path_args(cmd)
+    if not ok:
+        return False, reason
 
     # find-specific filters
     if base == "find":
@@ -454,6 +526,9 @@ def _validate_command(cmd: list[str]) -> tuple[bool, str]:
             return False, "git -C requires a path and a subcommand"
         if not _path_under_read_roots(cmd[2]):
             return False, f"git -C path outside allowed read roots: {cmd[2]}"
+        git_ok, git_reason = _is_path_allowed(cmd[2])
+        if not git_ok:
+            return False, f"git -C path denied: {git_reason}"
         sub_idx = 3
 
     sub_filter = SUBCOMMAND_FILTERS.get(base)

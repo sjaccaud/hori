@@ -195,7 +195,8 @@ def test_run_safe_command_output_is_capped():
 
 
 def test_run_safe_command_returns_stderr_and_exit_code():
-    result = jlt.tool_run_safe_command({"command": "ls /nonexistent-path-12345"})
+    # Nonexistent path under a read root: passes path validation, fails at exec.
+    result = jlt.tool_run_safe_command({"command": "ls /tmp/nonexistent-path-12345"})
     assert not result["ok"]
     assert result["exit_code"] != 0
     assert "No such file" in result["stderr"] or "No such file" in result["stdout"]
