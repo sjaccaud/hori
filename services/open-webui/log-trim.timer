@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly log trim for append-only diagnostic logs
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

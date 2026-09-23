@@ -1,0 +1,6 @@
+[Unit]
+Description=Trim append-only diagnostic logs (weekly)
+
+[Service]
+Type=oneshot
+ExecStart=%h/Projects/aios/scripts/log-trim.sh

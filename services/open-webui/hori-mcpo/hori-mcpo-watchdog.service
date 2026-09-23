@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart hori-mcpo when its MCP tool spec went empty
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/mcpo/hori-mcpo-watchdog.sh

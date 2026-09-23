@@ -1,0 +1,12 @@
+[Unit]
+Description=Read-only allowlist proxy for hori-mcpo (8775 -> 8774)
+After=hori-mcpo.service
+Requires=hori-mcpo.service
+
+[Service]
+ExecStart=/usr/bin/python3 %h/.config/mcpo/hori-filter.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

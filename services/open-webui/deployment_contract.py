@@ -124,6 +124,20 @@ def check_hori_state_tools() -> tuple[bool, str]:
     return True, f"{n} paths"
 
 
+def check_mcpo_auth() -> tuple[bool, str]:
+    """:8774 exposes write-capable hori tools — unauthenticated direct
+    access must be rejected (mcpo --api-key/--strict-auth, 2026-09-23)."""
+    try:
+        urllib.request.urlopen("http://127.0.0.1:8774/hori/openapi.json", timeout=4)
+        return False, "mcpo spec served WITHOUT auth — write tools exposed"
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return True, "unauthenticated access rejected (401)"
+        return False, f"unexpected status {e.code}"
+    except Exception as e:
+        return False, f"probe error: {e}"
+
+
 def check_local_tools_status() -> tuple[bool, str]:
     # get_status proxies aios-core /system/state (15s upstream timeout) —
     # ~6s is normal, so the contract budget is 20s.
@@ -237,6 +251,7 @@ CHECKS = [
     ("units", check_units),
     ("endpoints", check_endpoints),
     ("hori_state_tools", check_hori_state_tools),
+    ("mcpo_auth", check_mcpo_auth),
     ("local_tools_status", check_local_tools_status),
     ("snapshot_fresh", check_snapshot_fresh),
     ("owui_db_hygiene", check_owui_db_hygiene),

@@ -1,0 +1,9 @@
+[Unit]
+Description=Check hori-mcpo tool spec every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
