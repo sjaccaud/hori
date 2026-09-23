@@ -1,0 +1,10 @@
+[Unit]
+Description=AIOS state snapshot refresh (5 min cadence)
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

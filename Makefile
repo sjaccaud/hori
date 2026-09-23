@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-project-tools check-project-tools install-workspace-tools check-workspace-tools install-llama-nano check-llama-nano install-script-panel check-script-panel
+.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-project-tools check-project-tools install-workspace-tools check-workspace-tools install-state-snapshot check-state-snapshot install-llama-nano check-llama-nano install-script-panel check-script-panel
 
 # Default target
 test: test-all
@@ -117,6 +117,22 @@ install-workspace-tools:
 # Quick health check for the workspace-tools server.
 check-workspace-tools:
 	@./venv/bin/python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8771/health').read().decode())"
+
+# Install the 5-minute state-snapshot timer. state_snapshot.py renders
+# services/llama/hori-tools/threads into a small markdown file and pushes
+# it into the OWUI volume, where the tool-server inlet filter injects it
+# as a system message in every request — deterministic state delivery,
+# replacing the retired knowledge-sync approach.
+install-state-snapshot:
+	@echo "🔗 Installing aios-state-snapshot systemd user timer..."
+	@mkdir -p "$${HOME}/.config/systemd/user"
+	@cp ./services/open-webui/aios-state-snapshot.service ./services/open-webui/aios-state-snapshot.timer "$${HOME}/.config/systemd/user/"
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now aios-state-snapshot.timer
+
+# Run the snapshot generator once and show what would be injected.
+check-state-snapshot:
+	@./services/open-webui/state_snapshot.py && cat "$${HOME}/.local/state/aios/state-snapshot.md"
 
 # Install and start the nano SLM server (Llama-3.2-3B) on 127.0.0.1:8090.
 # Registered in Open-WebUI as a second OpenAI base URL; shows as "Nano Chat".

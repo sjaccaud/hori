@@ -1,11 +1,19 @@
-"""Sync local system state into Open-WebUI's knowledge base.
+"""Sync curated stable documents into Open-WebUI's knowledge base.
 
-Reads canonical local files (AGENTS.md, router.ini, benchmark results) and
-produces a single Markdown document that is uploaded to an Open-WebUI
-knowledge collection. Open-WebUI can then retrieve this document when
-answering questions about the local model stack, benchmarks, and tweaks.
+Only the project-decisions path remains: it renders curated architecture/
+roadmap/decision sources into a Markdown document uploaded to the
+"Project Decisions & Architecture" knowledge collection — stable
+reference material where RAG retrieval is appropriate.
 
-Traces to: .devin/prd/system-state-kb-sync.md
+RETIRED (2026-09-23): the system-state path (render_system_state_md /
+sync into "Local Benchmarks") — a synced document can never be trusted
+for "what's our status" questions: nothing automated the sync (docs went
+stale immediately) and retrieval is probabilistic. Current state is now
+delivered by services/open-webui/state_snapshot.py (5-min timer) whose
+output the tool-server inlet filter injects into every request — see the
+open-webui rule file. Do not re-add a knowledge-based state mechanism.
+
+Traces to: .devin/prd/system-state-kb-sync.md (historical)
 """
 
 import io
@@ -13,16 +21,6 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 import requests
-
-
-def _default_allow_list() -> list[Path]:
-    home = Path.home()
-    return [
-        home / "Projects/benchmarks/qwen3",
-        home / "llama-builds/spiritbuun-714/router.ini",
-        home / "AGENTS.md",
-        _default_project_decisions_path(),
-    ]
 
 
 def _default_project_decisions_path() -> Path:
@@ -62,73 +60,6 @@ def _validate_path(path: Path, allow_list: Iterable[Path]) -> None:
         if allowed_resolved.is_dir() and resolved.is_relative_to(allowed_resolved):
             return
     raise ValueError(f"Path {path} is outside the configured allow-list.")
-
-
-def render_system_state_md(
-    benchmark_dir: Optional[Path] = None,
-    agents_path: Optional[Path] = None,
-    router_path: Optional[Path] = None,
-    project_decisions_path: Optional[Path] = None,
-    allow_list: Optional[Iterable[Path]] = None,
-) -> str:
-    """Return a markdown synthesis of the current model stack and benchmarks."""
-    home = Path.home()
-    if benchmark_dir is None:
-        benchmark_dir = home / "Projects/benchmarks/qwen3"
-    if agents_path is None:
-        agents_path = home / "AGENTS.md"
-    if router_path is None:
-        router_path = home / "llama-builds/spiritbuun-714/router.ini"
-    if allow_list is None:
-        allow_list = _default_allow_list()
-
-    to_validate = [benchmark_dir, agents_path, router_path]
-    if project_decisions_path is not None:
-        to_validate.append(project_decisions_path)
-    for p in to_validate:
-        _validate_path(p, allow_list)
-
-    parts = ["# AIOS System State\n\n"]
-
-    if agents_path.exists():
-        parts.append("## AGENTS.md\n\n")
-        parts.append(agents_path.read_text(encoding="utf-8", errors="replace"))
-        parts.append("\n\n")
-
-    if router_path.exists():
-        parts.append("## Router Presets (router.ini)\n\n```ini\n")
-        parts.append(router_path.read_text(encoding="utf-8", errors="replace"))
-        parts.append("\n```\n\n")
-
-    if benchmark_dir.exists():
-        parts.append("## Latest Benchmark Results\n\n")
-        data_files = sorted(
-            p
-            for p in benchmark_dir.iterdir()
-            if p.is_file() and p.suffix in {".csv", ".jsonl", ".md", ".txt"}
-        )
-        if not data_files:
-            parts.append("_No benchmark result files found._\n")
-        for p in data_files:
-            parts.append(f"### {p.name}\n\n")
-            if p.suffix == ".csv":
-                parts.append(p.read_text(encoding="utf-8", errors="replace"))
-            elif p.suffix == ".jsonl":
-                for line in p.read_text(
-                    encoding="utf-8", errors="replace"
-                ).splitlines():
-                    if line.strip():
-                        parts.append(f"- {line.strip()}\n")
-            else:
-                parts.append(p.read_text(encoding="utf-8", errors="replace"))
-            parts.append("\n\n")
-
-    if project_decisions_path is not None and project_decisions_path.exists():
-        parts.append("## Project Decisions\n\n")
-        parts.append(project_decisions_path.read_text(encoding="utf-8", errors="replace"))
-        parts.append("\n\n")
-
-    return "".join(parts)
 
 
 def render_project_decisions_md(
@@ -288,16 +219,6 @@ def upsert_knowledge_file(
     _add_file_to_knowledge(token, base_url, knowledge_id, file_id)
 
     return file_meta
-
-
-def sync() -> str:
-    """Render and upsert the system state."""
-    project_decisions_path = _default_project_decisions_path()
-    if not project_decisions_path.exists():
-        project_decisions_path = None
-    markdown = render_system_state_md(project_decisions_path=project_decisions_path)
-    file_meta = upsert_knowledge_file(markdown)
-    return file_meta["id"]
 
 
 def sync_project_decisions() -> str:

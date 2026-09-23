@@ -1,0 +1,10 @@
+[Unit]
+Description=Generate AIOS state snapshot for OWUI prompt injection
+# oneshot; driven by aios-state-snapshot.timer (every 5 min).
+# Writes ~/.local/state/aios/state-snapshot.md and pushes it into the
+# open_webui_aios container volume where the tool-server filter reads it.
+
+[Service]
+Type=oneshot
+ExecStart=%h/Projects/aios/services/open-webui/state_snapshot.py
+TimeoutStartSec=60

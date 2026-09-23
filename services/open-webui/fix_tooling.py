@@ -609,6 +609,14 @@ class Filter:
             default="server:workspace-tools",
             description="Comma-separated write-capable 'server:<id>' tool_ids for write_models.",
         )
+        state_file: str = Field(
+            default="/app/backend/data/aios-state-snapshot.md",
+            description="Snapshot file injected as a system message into every allowed model request (written by aios-state-snapshot.timer on the host).",
+        )
+        state_max_age_s: int = Field(
+            default=900,
+            description="Snapshots older than this many seconds are injected with a STALE warning instead of a clean header.",
+        )
         debug: bool = Field(
             default=True,
             description="Write debug lines to /app/backend/data/tool_server_filter_debug.log",
@@ -704,6 +712,48 @@ class Filter:
                 if tool_id not in top_level:
                     top_level.append(tool_id)
             body["tool_ids"] = top_level
+
+            # Inject the generated AIOS state snapshot as a system message —
+            # deterministic delivery, unlike knowledge/RAG retrieval. Written
+            # by aios-state-snapshot.timer on the host (services/open-webui/
+            # state_snapshot.py). A stale file is still injected but flagged;
+            # a missing file is skipped silently (generator never ran).
+            try:
+                import os as _os
+                import time as _t2
+
+                state_path = getattr(self.valves, "state_file", "") or \
+                    "/app/backend/data/aios-state-snapshot.md"
+                max_age = int(getattr(self.valves, "state_max_age_s", 0) or 0)
+                age = int(_t2.time() - _os.path.getmtime(state_path))
+                with open(state_path, encoding="utf-8") as _f:
+                    snapshot = _f.read()[:4000]
+
+                stale = max_age and age > max_age
+                header = (
+                    "[AIOS state snapshot — generated on host %ds ago%s. "
+                    "Authoritative for 'current state' questions; call "
+                    "get_status for live detail beyond this snapshot.]\n"
+                    % (age, " — STALE, snapshot generator may be down" if stale else "")
+                )
+                msgs = body.get("messages") or []
+                msgs = [
+                    m for m in msgs
+                    if not (
+                        m.get("role") == "system"
+                        and "[AIOS state snapshot" in (m.get("content") or "")
+                    )
+                ]
+                inject_at = 0
+                while (
+                    inject_at < len(msgs)
+                    and msgs[inject_at].get("role") == "system"
+                ):
+                    inject_at += 1
+                msgs.insert(inject_at, {"role": "system", "content": header + snapshot})
+                body["messages"] = msgs
+            except Exception:
+                pass
 
             log.info(
                 "TOOL_SERVER_FILTER: injected %r for %r (tool_ids=%r)",
