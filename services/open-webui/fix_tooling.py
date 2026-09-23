@@ -732,8 +732,11 @@ class Filter:
                 stale = max_age and age > max_age
                 header = (
                     "[AIOS state snapshot — generated on host %ds ago%s. "
-                    "Authoritative for 'current state' questions; call "
-                    "get_status for live detail beyond this snapshot.]\n"
+                    "This ALREADY satisfies the current-state check: do NOT "
+                    "re-probe with run_safe_command to rediscover services, "
+                    "loaded model, workstreams, or resources listed here. "
+                    "Call get_status only for live detail beyond it, or "
+                    "run_safe_command for things it does not cover.]\n"
                     % (age, " — STALE, snapshot generator may be down" if stale else "")
                 )
                 msgs = body.get("messages") or []
