@@ -960,10 +960,10 @@ async def get_topic_clusters():
 
 @app.post("/system/graph/rebuild")
 async def rebuild_graph():
-    """Rebuild the intent graph from Qdrant memory."""
+    """Rebuild the intent graph from memory (active backend)."""
     from .intent_graph import IntentGraph
     ig = IntentGraph()
-    ig.build_from_qdrant()
+    ig.build()
     ig.save()
     return {"status": "rebuilt", "stats": ig.get_stats()}
 

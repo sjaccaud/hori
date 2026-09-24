@@ -29,16 +29,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from qdrant_client import QdrantClient  # kept for fallback; not used when SQLite backend is active
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GRAPH_PATH = PROJECT_ROOT / "core" / "state" / "intent_graph.json"
-
-QDRANT_URL = "http://localhost:6333"
-COLLECTIONS = ["aios_working", "aios_project", "aios_longterm"]
 
 
 @dataclass
@@ -59,7 +54,7 @@ class GraphEdge:
 
 
 class IntentGraph:
-    """Knowledge graph built from Qdrant memory payloads."""
+    """Knowledge graph built from memory payloads (active backend)."""
 
     def __init__(self):
         self.nodes: Dict[str, GraphNode] = {}
@@ -85,13 +80,14 @@ class IntentGraph:
                     e.weight += 1
                     break
 
-    def build_from_qdrant(self):
+    def build(self):
         """Scan all memory points and build the graph from edges + topics.
 
-        Works with both Qdrant and SQLite backends — uses the memory
-        module's scroll_all() which dispatches to the active backend.
+        Backend-agnostic: memory.scroll_all() dispatches to sqlite or
+        qdrant per hori.yaml memory.backend.
         """
         from .memory import scroll_all
+
         total_points = 0
 
         for payload in scroll_all():
@@ -275,9 +271,9 @@ class IntentGraph:
 
 
 def build_graph():
-    """Build and save the intent graph from Qdrant."""
+    """Build and save the intent graph from the active memory backend."""
     graph = IntentGraph()
-    graph.build_from_qdrant()
+    graph.build()
     graph.save()
 
     stats = graph.get_stats()
