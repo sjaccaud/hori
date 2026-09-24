@@ -42,7 +42,7 @@ TOOL_USAGE = (
     "workspace, show the manifest to the user, and only call "
     "confirm_workspace_write after explicit user approval. Directories and .md "
     "files only; no overwrite or delete.\n"
-    "- For questions about the CURRENT state of the system — downloads, files on disk, running services/processes, disk usage, or which models exist — you MUST call run_safe_command, read_file, or get_status BEFORE answering. "
+    "- For questions about the CURRENT state of the system — running services, loaded model, workstreams, GPU/VRAM/disk — an 'AIOS state snapshot' is injected into your context and ALREADY answers them; cite it directly. Call get_status or run_safe_command only for live detail the snapshot does not cover or when its freshness matters. "
     "Never answer current-state questions from attached knowledge or memory alone, even when it looks relevant; it may be stale.\n"
     "- The offline model archive lives at /mnt/4TB/model-archive (categories: llm/, vlm/, stt/, slm/, tts/, embedding/). For 'haul', 'stash', 'the downloads', or similar, check /mnt/4TB/model-archive and /opt/ai-models with run_safe_command (ls/find/du) first.\n"
     "- run_safe_command is shell-free: no pipes |, chaining ; &&, $(), or find -exec. Glob chars (* ? [ ]) in paths are expanded automatically. Commands run in your home directory — use git -C <path> <subcommand> for repo operations. If a call fails, read the error and adjust once — do not retry the same shape; identical repeat calls are flagged as duplicates.\n"
