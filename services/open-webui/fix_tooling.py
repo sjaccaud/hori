@@ -738,9 +738,13 @@ class Filter:
                     "Quote these values VERBATIM — never infer model "
                     "architectures, versions, service names, or numbers "
                     "not listed; if a detail is absent, say it is not in "
-                    "the snapshot. Call get_status only for live detail "
-                    "beyond it, or run_safe_command for what it does not "
-                    "cover.]\\n"
+                    "the snapshot. For current-state questions (status, "
+                    "loaded model, services, rig, workstreams) this block "
+                    "is the COMPLETE answer — no tool calls at all: do "
+                    "not search knowledge, memory, chats, or files; "
+                    "retrieved docs describe the past, not the present. "
+                    "get_status is only for live detail beyond this "
+                    "block.]\\n"
                     % (age, " — STALE, snapshot generator may be down" if stale else "")
                 )
                 msgs = body.get("messages") or []
