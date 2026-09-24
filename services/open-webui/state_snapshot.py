@@ -110,6 +110,28 @@ def _llama() -> str:
     return f"llama={h} loaded_model={loaded}"
 
 
+def _rig() -> list[str]:
+    """Hardware + topology facts. The snapshot must literally state the
+    GPU count and name the router — models otherwise confabulate rig
+    details from RAG fragments (iGPU mentions, multi-GPU bench posts)."""
+    cards = []
+    out = _run(["rocm-smi", "--showproductname", "--json"], timeout=5)
+    try:
+        for v in json.loads(out).values():
+            if isinstance(v, dict):
+                name = (v.get("Card Series") or "").strip()
+                if name:
+                    cards.append(name)
+    except Exception:
+        pass
+    gpu = f"{len(cards)}x {cards[0]}" if cards else "?x Radeon AI Pro R9700"
+    return [
+        f"rig: {gpu} (single GPU — iGPU disabled) · 7800X3D · 64Gi DDR5",
+        "router: llamacpp-adaptive @127.0.0.1:8080 (one model resident,"
+        " swaps on demand) · nano sidecar @:8090",
+    ]
+
+
 def _hori_state_tools() -> str:
     spec = _http("http://127.0.0.1:8775/openapi.json", 3)
     if spec is None:
@@ -203,6 +225,7 @@ def render() -> str:
         f"generated: {ts}",
         "",
         _llama(),
+        *_rig(),
         f"systemd: {_systemctl('system', SERVICES_SYSTEM)}",
         f"user:    {_systemctl('user', SERVICES_USER)}",
         f"docker:  {_docker_states()}",
