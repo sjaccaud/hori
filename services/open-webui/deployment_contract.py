@@ -282,6 +282,38 @@ def _canon_constants() -> dict:
     return {k: ns[k] for k in CANON_CONSTANTS if k in ns}
 
 
+def check_mcp_scope() -> tuple[bool, str]:
+    """The mcpo upstream token must be read-scoped: write tools
+    (memory_store, episode_append) must not appear in the served
+    catalog. If the admin bearer ever lands back in hori.json, this
+    fails instead of silently re-exposing writes."""
+    env = Path.home() / ".config/mcpo/mcpo.env"
+    key = None
+    try:
+        for line in env.read_text().splitlines():
+            if line.startswith("MCPO_API_KEY="):
+                key = line.split("=", 1)[1].strip().strip('"')
+    except OSError as e:
+        return False, f"mcpo.env unreadable: {e}"
+    if not key:
+        return False, "mcpo.env missing MCPO_API_KEY"
+    req = urllib.request.Request(
+        "http://127.0.0.1:8774/hori/openapi.json",
+        headers={"Authorization": f"Bearer {key}"},
+    )
+    try:
+        spec = json.loads(urllib.request.urlopen(req, timeout=8).read())
+    except Exception as e:
+        return False, f"mcpo openapi unreachable: {e}"
+    names = {p.rsplit("/", 1)[-1] for p in spec.get("paths", {})}
+    leaked = names & {"memory_store", "episode_append"}
+    if leaked:
+        return False, f"write tools exposed upstream: {sorted(leaked)}"
+    if not names:
+        return False, "upstream catalog empty"
+    return True, f"upstream catalog read-scoped ({len(names)} tools)"
+
+
 def check_builtin_tools() -> tuple[bool, str]:
     """Every model's stored meta.builtinTools must match canonical
     (META_BUILTINTOOLS + web_search per WEB_SEARCH_MODELS). An OWUI upgrade
@@ -324,6 +356,7 @@ CHECKS = [
     ("endpoints", check_endpoints),
     ("hori_state_tools", check_hori_state_tools),
     ("mcpo_auth", check_mcpo_auth),
+    ("mcp_scope", check_mcp_scope),
     ("local_tools_status", check_local_tools_status),
     ("snapshot_fresh", check_snapshot_fresh),
     ("owui_db_hygiene", check_owui_db_hygiene),

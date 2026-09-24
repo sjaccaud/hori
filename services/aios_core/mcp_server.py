@@ -10,8 +10,12 @@ Traces to:
 
 SECURITY:
   - Tailnet-only: the endpoint is not exposed via Funnel.
-  - Admin bearer token: the same token used for /admin/api. Fail-closed
-    if the token is not configured.
+  - Scoped bearer tokens, fail-closed when none are configured:
+    the admin token (also used for /admin/api) gets all tools; the
+    read-scoped token (AIOS_MCP_READ_TOKEN / hori.yaml mcp.read_token)
+    authenticates for MCP only and cannot invoke write tools
+    (memory_store, episode_append). Scope binds to the SSE session at
+    connect time.
   - `read_file` and `run_safe_command` are delegated to the existing
     local-tools server (127.0.0.1:8766), inheriting its allowlists and
     command filtering.
@@ -59,29 +63,66 @@ def _admin_token() -> Optional[str]:
     return expected
 
 
-def _require_admin_token(authorization: Optional[str]) -> None:
-    """Fail-closed admin token validation.
+def _mcp_read_token() -> Optional[str]:
+    """Return the configured read-scoped MCP token, or None.
 
-    Raises HTTPException 401 or 403 for missing/invalid tokens. This is the
-    same boundary used for /admin/api/* in main.py.
+    Order: env var, then hori.config.MCP_READ_TOKEN. Mirrors _admin_token.
     """
-    expected = _admin_token()
+    expected = os.environ.get("AIOS_MCP_READ_TOKEN") or os.environ.get(
+        "HORI_MCP_READ_TOKEN"
+    )
     if not expected:
-        # If the admin token is not configured at all, the privileged
-        # surface is disabled.
-        raise HTTPException(status_code=403, detail="Admin API disabled (admin token not set)")
+        try:
+            from hori.config import MCP_READ_TOKEN
+
+            expected = MCP_READ_TOKEN
+        except (ImportError, AttributeError):
+            expected = None
+    return expected or None
+
+
+def _resolve_scope(authorization: Optional[str]) -> str:
+    """Resolve a bearer token to its MCP scope: "admin" or "read".
+
+    Fail-closed: raises 401 for missing/malformed credentials, 403 for
+    unknown tokens, and 403 when no token is configured at all. The admin
+    token keeps full access (all MCP tools + /admin/api); the read token
+    authenticates for MCP only and may not invoke write tools.
+    """
+    admin = _admin_token()
+    read = _mcp_read_token()
+    if not admin and not read:
+        # If no token is configured at all, the privileged surface is
+        # disabled.
+        raise HTTPException(status_code=403, detail="MCP disabled (no tokens configured)")
 
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
 
     token = authorization[7:]
-    if not hmac.compare_digest(token, expected):
-        raise HTTPException(status_code=403, detail="Invalid admin token")
+    if admin and hmac.compare_digest(token, admin):
+        return "admin"
+    if read and hmac.compare_digest(token, read):
+        return "read"
+    raise HTTPException(status_code=403, detail="Invalid token")
 
 
-def mcp_auth_dependency(authorization: Optional[str] = Header(None)) -> None:
-    """FastAPI dependency for MCP endpoints."""
-    _require_admin_token(authorization)
+def mcp_auth_dependency(authorization: Optional[str] = Header(None)) -> str:
+    """FastAPI dependency for MCP endpoints. Returns the token's scope."""
+    return _resolve_scope(authorization)
+
+
+# Tools a read-scoped token may NOT invoke. Everything else in the catalog
+# is read-only by design (or already constrained by local-tools policy).
+_WRITE_TOOLS = frozenset({"memory_store", "episode_append"})
+
+
+def _tools_for_scope(scope: str) -> List[mcp_types.Tool]:
+    """Return the tool catalog visible to a scope."""
+    tools = list_mcp_tools()
+    if scope == "admin":
+        return tools
+    return [t for t in tools if t.name not in _WRITE_TOOLS]
 
 
 def _tool(name: str, description: str, schema: dict[str, Any]) -> mcp_types.Tool:
@@ -414,9 +455,11 @@ async def call_mcp_tool(name: str, arguments: dict[str, Any]) -> mcp_types.CallT
         return _tool_error(f"Tool {name!r} failed: {exc}")
 
 
-# Live SSE sessions: session_id -> asyncio.Queue of JSON-RPC responses.
-# Aios-core runs as a single uvicorn worker, so a module-level dict is safe.
-_mcp_sessions: Dict[str, asyncio.Queue] = {}
+# Live SSE sessions: session_id -> {"queue": asyncio.Queue, "scope": str}.
+# Scope is bound at SSE-connect time so a session cannot be escalated by a
+# later POST carrying a broader token. Aios-core runs as a single uvicorn
+# worker, so a module-level dict is safe.
+_mcp_sessions: Dict[str, Dict[str, Any]] = {}
 
 
 async def _mcp_event_stream(session_id: str, queue: asyncio.Queue) -> Any:
@@ -453,7 +496,9 @@ def _mcp_error(msg_id: Any, code: int, message: str) -> Dict[str, Any]:
     return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
 
 
-async def _handle_mcp_message(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+async def _handle_mcp_message(
+    msg: Dict[str, Any], scope: str = "admin"
+) -> Optional[Dict[str, Any]]:
     """Dispatch a single JSON-RPC message and return the response, or None for notifications."""
     method = msg.get("method")
     msg_id = msg.get("id")
@@ -474,11 +519,16 @@ async def _handle_mcp_message(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return _mcp_response(msg_id, {})
 
     if method == "tools/list":
-        tools = [t.model_dump(by_alias=True) for t in list_mcp_tools()]
+        tools = [t.model_dump(by_alias=True) for t in _tools_for_scope(scope)]
         return _mcp_response(msg_id, {"tools": tools})
 
     if method == "tools/call":
         name = params.get("name")
+        if scope != "admin" and name in _WRITE_TOOLS:
+            return _mcp_error(
+                msg_id, -32603,
+                f"Tool {name!r} not permitted for token scope {scope!r}",
+            )
         arguments = params.get("arguments") or {}
         result = await call_mcp_tool(name, arguments)
         return _mcp_response(msg_id, result.model_dump(by_alias=True))
@@ -488,27 +538,33 @@ async def _handle_mcp_message(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 async def mcp_sse_endpoint(
     request: Request,
-    _admin_auth: None = Depends(mcp_auth_dependency),
+    scope: str = Depends(mcp_auth_dependency),
 ):
     """GET /mcp/sse — establish an SSE session.
 
     Returns an SSE stream. The first event tells the client where to POST
-    JSON-RPC messages. Subsequent events carry JSON-RPC responses.
+    JSON-RPC messages. Subsequent events carry JSON-RPC responses. The
+    connecting token's scope is bound to the session.
     """
     session_id = str(uuid.uuid4())
     queue: asyncio.Queue = asyncio.Queue()
-    _mcp_sessions[session_id] = queue
+    _mcp_sessions[session_id] = {"queue": queue, "scope": scope}
     return EventSourceResponse(_mcp_event_stream(session_id, queue))
 
 
 async def mcp_messages_endpoint(
     request: Request,
-    _admin_auth: None = Depends(mcp_auth_dependency),
+    _auth: str = Depends(mcp_auth_dependency),
 ):
-    """POST /mcp/messages?session_id=... — submit a JSON-RPC message."""
+    """POST /mcp/messages?session_id=... — submit a JSON-RPC message.
+
+    Any valid token may POST, but the SESSION's bound scope (set at
+    SSE-connect time) decides what the message may do — a broader token on
+    the POST cannot escalate a narrower session.
+    """
     session_id = request.query_params.get("session_id")
-    queue = _mcp_sessions.get(session_id)
-    if queue is None:
+    session = _mcp_sessions.get(session_id)
+    if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     body = await request.body()
@@ -517,8 +573,8 @@ async def mcp_messages_endpoint(
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}") from exc
 
-    response = await _handle_mcp_message(msg)
+    response = await _handle_mcp_message(msg, scope=session["scope"])
     if response is not None:
-        await queue.put(response)
+        await session["queue"].put(response)
 
     return Response(status_code=202)

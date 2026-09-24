@@ -8,6 +8,7 @@ import json
 import os
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from services.aios_core.main import app
@@ -23,6 +24,132 @@ def admin_token():
         os.environ.pop("AIOS_ADMIN_TOKEN", None)
     else:
         os.environ["AIOS_ADMIN_TOKEN"] = old
+
+
+@pytest.fixture
+def read_token(admin_token, monkeypatch):
+    """A read-scoped MCP token alongside the admin token."""
+    monkeypatch.setenv("AIOS_MCP_READ_TOKEN", "test-read-token")
+    yield "test-read-token"
+
+
+def test_resolve_scope_admin_read_and_rejects(read_token):
+    """Token->scope resolution: admin full, read restricted, garbage denied."""
+    from services.aios_core.mcp_server import _resolve_scope
+
+    assert _resolve_scope("Bearer test-admin-token") == "admin"
+    assert _resolve_scope("Bearer test-read-token") == "read"
+    with pytest.raises(HTTPException) as exc:
+        _resolve_scope("Bearer wrong-token")
+    assert exc.value.status_code == 403
+    with pytest.raises(HTTPException) as exc:
+        _resolve_scope(None)
+    assert exc.value.status_code == 401
+    with pytest.raises(HTTPException) as exc:
+        _resolve_scope("Basic dGVzdA==")
+    assert exc.value.status_code == 401
+
+
+def test_tools_list_scoped_excludes_writes(read_token):
+    """tools/list under a read-scoped session must not offer write tools."""
+    from services.aios_core.mcp_server import _handle_mcp_message, list_mcp_tools
+
+    admin_resp = asyncio.run(_handle_mcp_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    ))
+    read_resp = asyncio.run(_handle_mcp_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+        scope="read",
+    ))
+    admin_names = {t["name"] for t in admin_resp["result"]["tools"]}
+    read_names = {t["name"] for t in read_resp["result"]["tools"]}
+    assert len(admin_names) == len(list_mcp_tools())
+    assert {"memory_store", "episode_append"} <= admin_names
+    assert {"memory_store", "episode_append"}.isdisjoint(read_names)
+    assert {"thread_read", "episode_search", "memory_search"} <= read_names
+
+
+def test_tools_call_write_denied_under_read_scope(read_token, monkeypatch):
+    """A read-scoped session cannot invoke write tools — the call is
+    refused before dispatch, and admin scope is unaffected."""
+    from services.aios_core import mcp_server
+    from services.aios_core.mcp_server import _handle_mcp_message
+
+    for tool in ("memory_store", "episode_append"):
+        resp = asyncio.run(_handle_mcp_message(
+            {"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+             "params": {"name": tool, "arguments": {}}},
+            scope="read",
+        ))
+        assert "error" in resp, f"{tool} not denied under read scope"
+        assert tool in resp["error"]["message"]
+
+    # Admin scope still dispatches writes (mock the store so nothing writes).
+    called = []
+    monkeypatch.setattr(mcp_server, "store_memory",
+                        lambda **kw: called.append(kw) or "p1")
+    resp = asyncio.run(_handle_mcp_message(
+        {"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+         "params": {"name": "memory_store", "arguments": {
+             "content": "x", "role": "user", "conversation_id": "c"}}},
+        scope="admin",
+    ))
+    assert "result" in resp
+    assert len(called) == 1
+
+
+def test_session_scope_cannot_be_escalated(read_token):
+    """A session created under a read token stays read-scoped even when a
+    later POST presents the admin token — scope binds to the session."""
+    from services.aios_core import mcp_server
+    from services.aios_core.mcp_server import _handle_mcp_message
+
+    session_id = "sess-read"
+    mcp_server._mcp_sessions[session_id] = {
+        "queue": asyncio.Queue(), "scope": "read"}
+    try:
+        session = mcp_server._mcp_sessions[session_id]
+        resp = asyncio.run(_handle_mcp_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "episode_append", "arguments": {}}},
+            scope=session["scope"],
+        ))
+        assert "error" in resp
+    finally:
+        mcp_server._mcp_sessions.pop(session_id, None)
+
+
+def test_mcp_messages_enforces_session_scope(read_token):
+    """End-to-end: POST /mcp/messages on a read session refuses write
+    tools; an admin bearer on the same session does NOT escalate it."""
+    from services.aios_core import mcp_server
+
+    client = TestClient(app)
+    mcp_server._mcp_sessions["s1"] = {
+        "queue": asyncio.Queue(), "scope": "read"}
+    try:
+        body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "episode_append", "arguments": {}}}
+        r = client.post("/mcp/messages?session_id=s1",
+                        headers={"Authorization": "Bearer test-read-token"},
+                        json=body)
+        assert r.status_code == 202
+        msg = mcp_server._mcp_sessions["s1"]["queue"].get_nowait()
+        assert "error" in msg
+
+        r = client.post("/mcp/messages?session_id=s1",
+                        headers={"Authorization": "Bearer test-admin-token"},
+                        json=body)
+        assert r.status_code == 202
+        msg = mcp_server._mcp_sessions["s1"]["queue"].get_nowait()
+        assert "error" in msg
+
+        r = client.post("/mcp/messages?session_id=s1",
+                        headers={"Authorization": "Bearer wrong-token"},
+                        json=body)
+        assert r.status_code == 403
+    finally:
+        mcp_server._mcp_sessions.pop("s1", None)
 
 
 def test_list_mcp_tools_returns_core_tools(admin_token):

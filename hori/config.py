@@ -81,6 +81,7 @@ def _apply_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
         "HORI_SAFETY_EVENTS_LOG": ("paths", "safety_events_log"),
         "HORI_TOOL_SOCKET": ("paths", "tool_socket"),
         "HORI_ADMIN_TOKEN": ("admin", "token"),
+        "HORI_MCP_READ_TOKEN": ("mcp", "read_token"),
         "HORI_ALLOWED_READ_PATHS": ("paths", "allowed_read_paths"),
         # Legacy env var compatibility (existing systemd services use these)
         "LLM_API_URL": ("llm", "api_url"),
@@ -211,6 +212,12 @@ ALLOWED_READ_PATHS = config["paths"].get("allowed_read_paths", [])
 
 # Admin
 ADMIN_TOKEN = config["admin"]["token"]
+
+# Read-scoped MCP token: authenticates /mcp/* only, cannot invoke write
+# tools (memory_store, episode_append) and is NOT valid for /admin/api.
+# Consumers that only need reads (e.g. the mcpo->OWUI bridge) should use
+# this instead of the admin bearer.
+MCP_READ_TOKEN = (config.get("mcp") or {}).get("read_token")
 
 # Notifications
 TELEGRAM_BOT_TOKEN = config["notifications"]["telegram_bot_token"]
