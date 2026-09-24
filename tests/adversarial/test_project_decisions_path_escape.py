@@ -10,7 +10,7 @@ before the safety is implemented and pass once the safety is built, per
 Pillar VII.
 
 Defends: the local file read surface for project-decisions in
-services.open_webui.system_state_sync.
+services.kb_sync.system_state_sync.
 """
 
 from pathlib import Path
@@ -20,7 +20,7 @@ import pytest
 
 def test_render_project_decisions_rejects_source_outside_allow_list(tmp_path):
     """A malicious source path outside the allow-list must raise ValueError."""
-    from services.open_webui.system_state_sync import render_project_decisions_md
+    from services.kb_sync.system_state_sync import render_project_decisions_md
 
     good = tmp_path / "good.md"
     good.write_text("# good\n")

@@ -1,4 +1,4 @@
-"""Unit tests for services.open_webui.system_state_sync.
+"""Unit tests for services.kb_sync.system_state_sync.
 
 Only the curated project-decisions sync remains — the system-state
 document path was retired 2026-09-23 (replaced by the injected
@@ -10,7 +10,7 @@ def test_upsert_knowledge_file_creates_collection_and_uploads():
     """upsert_knowledge_file signs in and uploads a knowledge file."""
     from unittest.mock import MagicMock, patch
 
-    from services.open_webui.system_state_sync import upsert_knowledge_file
+    from services.kb_sync.system_state_sync import upsert_knowledge_file
 
     def fake_post(url, *args, **kwargs):
         response = MagicMock()
@@ -45,10 +45,10 @@ def test_upsert_knowledge_file_creates_collection_and_uploads():
         return response
 
     with patch(
-        "services.open_webui.system_state_sync.requests.post", side_effect=fake_post
+        "services.kb_sync.system_state_sync.requests.post", side_effect=fake_post
     ):
         with patch(
-            "services.open_webui.system_state_sync.requests.get", side_effect=fake_get
+            "services.kb_sync.system_state_sync.requests.get", side_effect=fake_get
         ):
             result = upsert_knowledge_file("# markdown")
 
@@ -58,7 +58,7 @@ def test_upsert_knowledge_file_creates_collection_and_uploads():
 
 def test_render_project_decisions_md_concatenates_sources(tmp_path):
     """render_project_decisions_md combines source files under per-source headings."""
-    from services.open_webui.system_state_sync import render_project_decisions_md
+    from services.kb_sync.system_state_sync import render_project_decisions_md
 
     source_a = tmp_path / "a.md"
     source_a.write_text("# Alpha\n")
@@ -80,14 +80,14 @@ def test_sync_project_decisions_renders_and_upserts():
     """sync_project_decisions renders and returns the uploaded file id."""
     from unittest.mock import patch
 
-    from services.open_webui.system_state_sync import sync_project_decisions
+    from services.kb_sync.system_state_sync import sync_project_decisions
 
     with patch(
-        "services.open_webui.system_state_sync.render_project_decisions_md",
+        "services.kb_sync.system_state_sync.render_project_decisions_md",
         return_value="# decisions",
     ):
         with patch(
-            "services.open_webui.system_state_sync.upsert_knowledge_file",
+            "services.kb_sync.system_state_sync.upsert_knowledge_file",
             return_value={"id": "file-99", "filename": "project-decisions.md"},
         ) as fake_upsert:
             result = sync_project_decisions()
@@ -101,7 +101,7 @@ def test_find_knowledge_parses_dict_response():
     """_find_knowledge must find a collection inside a dict {'items': [...]}."""
     from unittest.mock import MagicMock, patch
 
-    from services.open_webui.system_state_sync import _find_knowledge
+    from services.kb_sync.system_state_sync import _find_knowledge
 
     response = MagicMock()
     response.raise_for_status = MagicMock()
@@ -113,7 +113,7 @@ def test_find_knowledge_parses_dict_response():
     }
 
     with patch(
-        "services.open_webui.system_state_sync.requests.get",
+        "services.kb_sync.system_state_sync.requests.get",
         return_value=response,
     ):
         found = _find_knowledge("TOKEN", "http://127.0.0.1:3000", "Local Benchmarks")
@@ -125,7 +125,7 @@ def test_find_file_in_collection_parses_dict_response():
     """_find_file_in_collection must find a file inside a dict {'items': [...]}."""
     from unittest.mock import MagicMock, patch
 
-    from services.open_webui.system_state_sync import _find_file_in_collection
+    from services.kb_sync.system_state_sync import _find_file_in_collection
 
     response = MagicMock()
     response.raise_for_status = MagicMock()
@@ -137,7 +137,7 @@ def test_find_file_in_collection_parses_dict_response():
     }
 
     with patch(
-        "services.open_webui.system_state_sync.requests.get",
+        "services.kb_sync.system_state_sync.requests.get",
         return_value=response,
     ):
         found = _find_file_in_collection(

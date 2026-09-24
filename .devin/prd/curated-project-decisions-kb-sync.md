@@ -8,7 +8,7 @@
 
 ## 2. Interface contract
 
-Public surface in `services/open_webui/system_state_sync.py`:
+Public surface in `services/kb_sync/system_state_sync.py`:
 
 ```python
 def render_project_decisions_md(
@@ -41,8 +41,8 @@ def sync_project_decisions() -> str:
 CLI entry points (for timers / post-doc-change hooks):
 
 ```bash
-python -c "from services.open_webui.system_state_sync import sync; sync()"
-python -c "from services.open_webui.system_state_sync import sync_project_decisions; sync_project_decisions()"
+python -c "from services.kb_sync.system_state_sync import sync; sync()"
+python -c "from services.kb_sync.system_state_sync import sync_project_decisions; sync_project_decisions()"
 ```
 
 ## 3. Safety classification
@@ -54,7 +54,7 @@ python -c "from services.open_webui.system_state_sync import sync_project_decisi
 
 ## 4. Test contract
 
-- **Unit test:** `services/open_webui/test_system_state_sync.py`
+- **Unit test:** `services/kb_sync/test_system_state_sync.py`
   - Proves `render_project_decisions_md` concatenates a list of source files under per-source headings.
   - Proves `render_project_decisions_md` raises `ValueError` when a source is outside the allow-list.
   - Proves `render_system_state_md` includes the `project_decisions_path` content when provided.
@@ -66,7 +66,7 @@ python -c "from services.open_webui.system_state_sync import sync_project_decisi
 
 ## 5. Module placement
 
-- **Module:** `services/open_webui/system_state_sync.py`
+- **Module:** `services/kb_sync/system_state_sync.py`
 - **Why:** Co-locates with the existing Open-WebUI knowledge-sync adapter. The renderer and uploader for project decisions reuse the same path validation, sign-in, collection-lookup, and file-replacement primitives already built for `aios-system-state.md`.
 - **Deep module boundary:** all source-file reading, Markdown assembly, and Open-WebUI REST details live behind the public functions in section 2. Callers only use `sync()` and `sync_project_decisions()`.
 
