@@ -1151,6 +1151,9 @@ def main():
             "file_context": True,
         },
         "default_feature_ids": ["memory"],
+        # OWUI defaults every unlisted builtinTools category to True — without
+        # this map nano inherits the full grammar despite the "no tools" design.
+        "builtinTools": {k: False for k in META_BUILTINTOOLS},
     }
     c.execute(
         "INSERT OR REPLACE INTO model (id, user_id, base_model_id, name, params, meta, updated_at, created_at, is_active) "

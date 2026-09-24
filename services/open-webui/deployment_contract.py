@@ -65,6 +65,8 @@ EXPECTED_CANON_KEYS = {
     "WORKSPACE_WRITE_MODELS": "write_models",
 }
 
+CANON_CONSTANTS = {"META_BUILTINTOOLS", "WEB_SEARCH_MODELS"}
+
 
 def _run(cmd: list[str], timeout: int = 8, **kw) -> tuple[str, int]:
     try:
@@ -226,8 +228,10 @@ def check_filter_valves() -> tuple[bool, str]:
     valves = json.loads(rows[0][0] or "{}")
     content, active, is_global = rows[0][1], rows[0][2], rows[0][3]
     bad = []
-    if not active or not is_global:
-        bad.append("filter inactive/not global")
+    # is_global=1 is what runs it for every request; is_active tracks the
+    # (unused) per-user toggle and is legitimately 0 on this stack.
+    if not is_global:
+        bad.append("filter not global")
     for canon_name, valve_key in EXPECTED_CANON_KEYS.items():
         live = {x.strip() for x in (valves.get(valve_key) or "").split(",") if x.strip()}
         if live != canon[canon_name]:
@@ -247,6 +251,74 @@ def check_filter_valves() -> tuple[bool, str]:
     return True, "valves match canonical + injection live"
 
 
+def _canon_constants() -> dict:
+    """Two-pass: literal_eval simple assigns first, then eval expressions
+    (e.g. `set(ALL_QWEN_DEVSTRAL) - {"x"}`) against that namespace."""
+    tree = ast.parse(
+        (REPO / "services/open-webui/fix_tooling.py").read_text()
+    )
+    assigns = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    assigns.append((t.id, node.value))
+    ns = {}
+    pending = []
+    for name, value in assigns:
+        try:
+            ns[name] = ast.literal_eval(value)
+        except (ValueError, SyntaxError):
+            pending.append((name, value))
+    for name, value in pending:
+        try:
+            ns[name] = eval(
+                compile(ast.Expression(value), "<canon>", "eval"),
+                {"__builtins__": {"set": set, "list": list, "dict": dict}},
+                ns,
+            )
+        except Exception:
+            pass
+    return {k: ns[k] for k in CANON_CONSTANTS if k in ns}
+
+
+def check_builtin_tools() -> tuple[bool, str]:
+    """Every model's stored meta.builtinTools must match canonical
+    (META_BUILTINTOOLS + web_search per WEB_SEARCH_MODELS). An OWUI upgrade
+    that adds categories or flips defaults shows up here instead of
+    silently re-bloating the grammar."""
+    canon = _canon_constants()
+    if len(canon) != len(CANON_CONSTANTS):
+        return False, "could not parse builtinTools canonical constants"
+    base = canon["META_BUILTINTOOLS"]
+    armed = set(canon["WEB_SEARCH_MODELS"])
+    try:
+        rows = _owui_sql("SELECT id, meta, is_active FROM model")
+    except RuntimeError as e:
+        return False, str(e)
+    bad = []
+    for mid, meta_json, active in rows:
+        if not active:
+            continue
+        meta = json.loads(meta_json or "{}")
+        live = meta.get("builtinTools") or {}
+        expect = dict(base)
+        expect["web_search"] = mid in armed
+        # nano is deliberately tool-free: every category must be False.
+        if mid == "nano":
+            expect = {k: False for k in expect}
+        diffs = [
+            f"{k}={live.get(k)}(want {v})"
+            for k, v in expect.items()
+            if live.get(k) != v
+        ] + [f"{k} unexpected" for k in live if k not in expect]
+        if diffs:
+            bad.append(f"{mid}: {', '.join(diffs[:3])}")
+    if bad:
+        return False, "; ".join(bad[:4])
+    return True, f"{len(rows)} models match canonical builtinTools"
+
+
 CHECKS = [
     ("units", check_units),
     ("endpoints", check_endpoints),
@@ -256,6 +328,7 @@ CHECKS = [
     ("snapshot_fresh", check_snapshot_fresh),
     ("owui_db_hygiene", check_owui_db_hygiene),
     ("filter_valves", check_filter_valves),
+    ("builtin_tools", check_builtin_tools),
 ]
 
 

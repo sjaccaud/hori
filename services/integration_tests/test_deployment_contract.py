@@ -10,6 +10,7 @@ that was tested-but-never-invoked, and the mcpo boot race that silently
 removed all hori-state tools for ~30h.
 """
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -21,6 +22,13 @@ CONTRACT = (
     Path(__file__).resolve().parents[2]
     / "services/open-webui/deployment_contract.py"
 )
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("deployment_contract", CONTRACT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def _run_contract() -> list[dict]:
@@ -48,3 +56,54 @@ def test_all_checks_pass(contract_results):
         f"{r['name']}: {r['detail']}" for r in contract_results if not r["ok"]
     ]
     assert not failures, "deployment contract failures:\n" + "\n".join(failures)
+
+
+def test_builtin_tools_check_flags_drift(monkeypatch):
+    """Deliberate builtinTools drift must fail and name the model —
+    this is the 'OWUI upgrade re-bloats the grammar' tripwire."""
+    mod = _load_module()
+    canon = mod._canon_constants()
+    armed = canon["WEB_SEARCH_MODELS"]
+
+    def meta_for(mid, **overrides):
+        m = dict(canon["META_BUILTINTOOLS"])
+        m["web_search"] = mid in armed
+        m.update(overrides)
+        return json.dumps({"builtinTools": m})
+
+    rows = [
+        ("qwen-fast", meta_for("qwen-fast"), 1),
+        ("qwen-think", meta_for("qwen-think", tasks=True, surprise_cat=True), 1),
+    ]
+    monkeypatch.setattr(mod, "_owui_sql", lambda q: rows)
+    ok, detail = mod.check_builtin_tools()
+    assert not ok
+    assert "qwen-think" in detail
+    assert "qwen-fast" not in detail
+
+    monkeypatch.setattr(
+        mod, "_owui_sql", lambda q: [(m, meta_for(m), 1) for m in ("a", "b")]
+    )
+    ok, _ = mod.check_builtin_tools()
+    assert ok
+
+
+def test_builtin_tools_nano_expects_all_false(monkeypatch):
+    mod = _load_module()
+    canon = mod._canon_constants()
+    all_false = {k: False for k in canon["META_BUILTINTOOLS"]}
+    monkeypatch.setattr(
+        mod,
+        "_owui_sql",
+        lambda q: [("nano", json.dumps({"builtinTools": all_false}), 1)],
+    )
+    ok, _ = mod.check_builtin_tools()
+    assert ok
+    leaky = dict(all_false, time=True)
+    monkeypatch.setattr(
+        mod,
+        "_owui_sql",
+        lambda q: [("nano", json.dumps({"builtinTools": leaky}), 1)],
+    )
+    ok, detail = mod.check_builtin_tools()
+    assert not ok and "nano" in detail
