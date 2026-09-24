@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-project-tools check-project-tools install-workspace-tools check-workspace-tools install-state-snapshot check-state-snapshot check-deployment install-llama-nano check-llama-nano install-script-panel check-script-panel
+.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-project-tools check-project-tools install-workspace-tools check-workspace-tools install-state-snapshot check-state-snapshot check-deployment install-kb-sync check-kb-sync install-llama-nano check-llama-nano install-script-panel check-script-panel
 
 # Default target
 test: test-all
@@ -139,6 +139,22 @@ check-state-snapshot:
 # and services/integration_tests/test_deployment_contract.py.
 check-deployment:
 	@./services/open-webui/deployment_contract.py
+
+# Install the weekly curated-knowledge sync. kb_sync refreshes the stable
+# "Project Decisions & Architecture" collection (manifesto/safety/roadmap/
+# project-decisions) — durable reference docs where RAG is the right
+# substrate. The service takes a few minutes (embedding ~117 chunks).
+install-kb-sync:
+	@echo "🔗 Installing kb-sync systemd user timer..."
+	@mkdir -p "$${HOME}/.config/systemd/user"
+	@cp ./services/open-webui/kb-sync.service ./services/open-webui/kb-sync.timer "$${HOME}/.config/systemd/user/"
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now kb-sync.timer
+
+# Verify the weekly sync timer is armed and show its next run.
+check-kb-sync:
+	@systemctl --user is-enabled kb-sync.timer
+	@systemctl --user list-timers kb-sync.timer --no-pager
 
 # Install and start the nano SLM server (Llama-3.2-3B) on 127.0.0.1:8090.
 # Registered in Open-WebUI as a second OpenAI base URL; shows as "Nano Chat".

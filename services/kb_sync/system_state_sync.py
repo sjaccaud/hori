@@ -99,6 +99,7 @@ def _signin(base_url: str, admin_email: str, admin_password: str) -> str:
     r = requests.post(
         f"{base_url}/api/v1/auths/signin",
         json={"email": admin_email, "password": admin_password},
+        timeout=30,
     )
     r.raise_for_status()
     return r.json()["token"]
@@ -106,7 +107,9 @@ def _signin(base_url: str, admin_email: str, admin_password: str) -> str:
 
 def _find_knowledge(token: str, base_url: str, collection_name: str) -> Optional[str]:
     r = requests.get(
-        f"{base_url}/api/v1/knowledge/", headers={"Authorization": f"Bearer {token}"}
+        f"{base_url}/api/v1/knowledge/",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
     )
     r.raise_for_status()
     data = r.json()
@@ -127,6 +130,7 @@ def _create_knowledge(token: str, base_url: str, collection_name: str) -> str:
         f"{base_url}/api/v1/knowledge/create",
         json={"name": collection_name, "description": "", "data": {"status": True}},
         headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
     )
     r.raise_for_status()
     return r.json()["id"]
@@ -138,6 +142,7 @@ def _find_file_in_collection(
     r = requests.get(
         f"{base_url}/api/v1/knowledge/{knowledge_id}/files",
         headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
     )
     r.raise_for_status()
     data = r.json()
@@ -157,6 +162,7 @@ def _delete_file(token: str, base_url: str, file_id: str) -> None:
     r = requests.delete(
         f"{base_url}/api/v1/files/{file_id}",
         headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
     )
     r.raise_for_status()
 
@@ -168,6 +174,7 @@ def _upload_file(token: str, base_url: str, filename: str, markdown: str) -> dic
             "file": (filename, io.BytesIO(markdown.encode("utf-8")), "text/markdown")
         },
         headers={"Authorization": f"Bearer {token}"},
+        timeout=600,
     )
     r.raise_for_status()
     return r.json()
@@ -178,6 +185,7 @@ def _process_file(token: str, base_url: str, file_id: str) -> None:
         f"{base_url}/api/v1/retrieval/process/file",
         json={"file_id": file_id},
         headers={"Authorization": f"Bearer {token}"},
+        timeout=600,
     )
     r.raise_for_status()
 
@@ -189,6 +197,8 @@ def _add_file_to_knowledge(
         f"{base_url}/api/v1/knowledge/{knowledge_id}/file/add",
         json={"file_id": file_id},
         headers={"Authorization": f"Bearer {token}"},
+        # Adding to the collection triggers its embedding pass (~2min).
+        timeout=600,
     )
     r.raise_for_status()
 

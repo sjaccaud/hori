@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync curated project-decisions doc into OWUI knowledge (weekly)
+# Multi-minute job: OWUI re-embeds ~117 chunks on upload (~4-5 min total).
+# Keep the timeout generous or the run gets killed mid-embed.
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/aios
+Environment=PYTHONPATH=%h/Projects/aios
+ExecStart=%h/Projects/aios/venv/bin/python3 -c "from services.kb_sync.system_state_sync import sync_project_decisions; print(sync_project_decisions())"
+TimeoutStartSec=900
