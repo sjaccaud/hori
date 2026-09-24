@@ -246,6 +246,12 @@ def check_filter_valves() -> tuple[bool, str]:
             bad.append(f"{key} drifted")
     if "state_file" not in (content or ""):
         bad.append("filter lacks snapshot injection")
+    # A stored filter that doesn't compile loads as zero — injection dies
+    # silently while every other check still passes.
+    try:
+        compile(content or "", "<tool_server_filter>", "exec")
+    except SyntaxError as e:
+        bad.append(f"filter source broken: {e.msg} (line {e.lineno})")
     if bad:
         return False, "; ".join(bad)
     return True, "valves match canonical + injection live"

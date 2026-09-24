@@ -736,7 +736,7 @@ class Filter:
                     "re-probe with run_safe_command to rediscover services, "
                     "loaded model, workstreams, or resources listed here. "
                     "Call get_status only for live detail beyond it, or "
-                    "run_safe_command for things it does not cover.]\n"
+                    "run_safe_command for things it does not cover.]\\n"
                     % (age, " — STALE, snapshot generator may be down" if stale else "")
                 )
                 msgs = body.get("messages") or []
@@ -1030,6 +1030,9 @@ def main():
                 server_tool_id = "server:" + conn_cfg.get("info", {}).get("id", "local-tools")
                 break
 
+    # Refuse to write a filter that can't load — OWUI swallows plugin
+    # SyntaxErrors at request time, so the check must happen here.
+    compile(TOOL_SERVER_FILTER_SOURCE, "<tool_server_filter>", "exec")
     c.execute(
         "UPDATE function SET content = ?, is_global = 1, valves = ?, updated_at = ? WHERE id = ?",
         (
