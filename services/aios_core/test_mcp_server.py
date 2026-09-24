@@ -167,6 +167,10 @@ def test_fetch_url_blocks_non_public_targets(read_token):
         "file:///etc/passwd",
         "gopher://127.0.0.1/x",
         "not-a-url",
+        # Internal names refused before resolution — no DNS needed.
+        "http://device.tail0000.ts.net:3443/",
+        "http://printer.local/",
+        "http://nas.lan/share",
     ):
         assert _fetch_url_blocked(url) is not None, url
 

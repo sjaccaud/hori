@@ -26,6 +26,7 @@ SECURITY:
 """
 
 import asyncio
+import contextlib
 import hmac
 import json
 import logging
@@ -330,16 +331,20 @@ async def _tool_search_web(query: str, max_results: int = 5) -> List[Dict[str, A
     ]
 
 
-def _fetch_url_blocked(url: str) -> Optional[str]:
-    """Return an error string if url is not safe to fetch (SSRF guard),
-    else None.
+# Internal-name suffixes — tailnet, mDNS, common LAN/corp TLDs. Refused
+# before resolution so internal names fail even if DNS rewrites them.
+# Same policy as idea_factory.netguard — keep the two guards aligned.
+_BAD_HOST_SUFFIXES = (".ts.net", ".local", ".internal", ".lan", ".home",
+                      ".corp", ".localhost", ".test", ".example")
+_BAD_HOSTS = {"localhost"}
 
-    Blocks non-http(s) schemes and any host resolving to a loopback,
-    private, link-local, reserved, multicast, or unspecified address.
-    Called on every redirect hop too, so a public URL cannot bounce the
-    request to an internal target. Residual: DNS rebinding between the
-    check and connect is accepted — the direct loopback/redirect holes
-    are what this closes.
+
+def _resolve_public(url: str) -> tuple[Optional[list], Optional[str]]:
+    """Resolve and validate url → ([ips], None) or (None, error).
+
+    Refuses non-http(s) schemes, internal host names, and any host that
+    resolves to a non-globally-routable address (is_global covers
+    loopback/private/link-local/reserved/multicast/CGNAT).
     """
     import ipaddress
     import socket
@@ -348,34 +353,76 @@ def _fetch_url_blocked(url: str) -> Optional[str]:
     try:
         parsed = urlparse(url)
     except Exception:
-        return "invalid URL"
+        return None, "invalid URL"
     if parsed.scheme not in ("http", "https"):
-        return "only http/https URLs are allowed"
-    host = parsed.hostname
+        return None, "only http/https URLs are allowed"
+    host = (parsed.hostname or "").lower()
     if not host:
-        return "invalid URL"
+        return None, "invalid URL"
+    if host in _BAD_HOSTS or host.endswith(_BAD_HOST_SUFFIXES):
+        return None, f"blocked: internal host name {host}"
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
-        return f"cannot resolve host: {host}"
+        return None, f"cannot resolve host: {host}"
+    ips = []
     for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if (
-            ip.is_private or ip.is_loopback or ip.is_link_local
-            or ip.is_reserved or ip.is_multicast or ip.is_unspecified
-        ):
-            return f"blocked: {host} resolves to non-public address {ip}"
-    return None
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return None, f"unparseable address for {host}"
+        if not ip.is_global:
+            return None, f"blocked: {host} resolves to non-public address {ip}"
+        ips.append(str(ip))
+    return (ips, None) if ips else (None, f"no addresses for {host}")
+
+
+def _fetch_url_blocked(url: str) -> Optional[str]:
+    """Cheap pre-check wrapper: error string if url is unsafe, else None."""
+    return _resolve_public(url)[1]
+
+
+@contextlib.contextmanager
+def _pinned_dns(host: str, ips: list):
+    """Answer getaddrinfo(host) with the pre-validated IPs only, for the
+    duration of the block — the connection uses the SAME addresses the
+    check approved, closing the resolve→connect rebind window (TOCTOU).
+
+    Process-global patch: other hosts pass through, and concurrent pins
+    for the same host can only substitute each other's validated IPs —
+    worst case is still a public, validated target. Ported from
+    idea_factory.netguard._pinned_dns; keep aligned.
+    """
+    import socket
+
+    orig = socket.getaddrinfo
+
+    def fake(h, port, *a, **kw):
+        if h == host:
+            out = []
+            for ip in ips:
+                fam = socket.AF_INET6 if ":" in ip else socket.AF_INET
+                sa = (ip, port, 0, 0) if fam == socket.AF_INET6 else (ip, port)
+                out.append((fam, socket.SOCK_STREAM, 6, "", sa))
+            return out
+        return orig(h, port, *a, **kw)
+
+    socket.getaddrinfo = fake
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = orig
 
 
 async def _tool_fetch_url(url: str) -> Dict[str, Any]:
     """Fetch a URL and return the response body as text.
 
-    Direct HTTP GET capped at 200 KB, SSRF-guarded per hop: redirects are
-    followed manually (max 5) and each target is re-validated against
-    _fetch_url_blocked before the request is sent.
+    Direct GET capped at 200 KB, SSRF-guarded per hop: redirects are
+    followed manually (max 5) and each target is resolved, validated,
+    and DNS-pinned before the request is sent.
     """
     import httpx
+    from urllib.parse import urlparse
 
     MAX_BYTES = 200_000
     TIMEOUT = 20.0
@@ -384,12 +431,14 @@ async def _tool_fetch_url(url: str) -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             for _ in range(5):
-                blocked = _fetch_url_blocked(current)
-                if blocked:
-                    return {"ok": False, "url": url, "error": blocked}
-                resp = await client.get(
-                    current, timeout=TIMEOUT, follow_redirects=False
-                )
+                ips, err = _resolve_public(current)
+                if err:
+                    return {"ok": False, "url": url, "error": err}
+                host = (urlparse(current).hostname or "").lower()
+                with _pinned_dns(host, ips):
+                    resp = await client.get(
+                        current, timeout=TIMEOUT, follow_redirects=False
+                    )
                 if resp.is_redirect:
                     location = resp.headers.get("location")
                     if not location:
