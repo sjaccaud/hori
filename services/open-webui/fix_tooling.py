@@ -735,8 +735,12 @@ class Filter:
                     "This ALREADY satisfies the current-state check: do NOT "
                     "re-probe with run_safe_command to rediscover services, "
                     "loaded model, workstreams, or resources listed here. "
-                    "Call get_status only for live detail beyond it, or "
-                    "run_safe_command for things it does not cover.]\\n"
+                    "Quote these values VERBATIM — never infer model "
+                    "architectures, versions, service names, or numbers "
+                    "not listed; if a detail is absent, say it is not in "
+                    "the snapshot. Call get_status only for live detail "
+                    "beyond it, or run_safe_command for what it does not "
+                    "cover.]\\n"
                     % (age, " — STALE, snapshot generator may be down" if stale else "")
                 )
                 msgs = body.get("messages") or []

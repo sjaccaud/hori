@@ -105,6 +105,16 @@ def _llama() -> str:
         for m in models.get("data", []):
             if m.get("status", {}).get("value") == "loaded":
                 loaded = m.get("id", "?")
+                # The alias alone invites architecture confabulation —
+                # resolve the real gguf + ctx from the launch args.
+                args = m["status"].get("args") or []
+                for i, a in enumerate(args):
+                    if a == "--model" and i + 1 < len(args):
+                        gguf = args[i + 1].rsplit("/", 1)[-1].removesuffix(".gguf")
+                        if "mmproj" not in gguf:
+                            loaded += f" [{gguf}]"
+                    if a == "--ctx-size" and i + 1 < len(args):
+                        loaded += f" [ctx {args[i + 1]}]"
                 break
     h = "ok" if (health or {}).get("status") == "ok" else "DOWN"
     return f"llama={h} loaded_model={loaded}"
