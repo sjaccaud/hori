@@ -330,24 +330,79 @@ async def _tool_search_web(query: str, max_results: int = 5) -> List[Dict[str, A
     ]
 
 
+def _fetch_url_blocked(url: str) -> Optional[str]:
+    """Return an error string if url is not safe to fetch (SSRF guard),
+    else None.
+
+    Blocks non-http(s) schemes and any host resolving to a loopback,
+    private, link-local, reserved, multicast, or unspecified address.
+    Called on every redirect hop too, so a public URL cannot bounce the
+    request to an internal target. Residual: DNS rebinding between the
+    check and connect is accepted — the direct loopback/redirect holes
+    are what this closes.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return "invalid URL"
+    if parsed.scheme not in ("http", "https"):
+        return "only http/https URLs are allowed"
+    host = parsed.hostname
+    if not host:
+        return "invalid URL"
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return f"cannot resolve host: {host}"
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+        ):
+            return f"blocked: {host} resolves to non-public address {ip}"
+    return None
+
+
 async def _tool_fetch_url(url: str) -> Dict[str, Any]:
     """Fetch a URL and return the response body as text.
 
-    Tries a direct HTTP GET first, capped at 200 KB. If the page is HTML
-    and a readable conversion is available in the future, it can be added
-    here. Jina Reader is avoided to keep the surface self-hosted.
+    Direct HTTP GET capped at 200 KB, SSRF-guarded per hop: redirects are
+    followed manually (max 5) and each target is re-validated against
+    _fetch_url_blocked before the request is sent.
     """
     import httpx
 
     MAX_BYTES = 200_000
     TIMEOUT = 20.0
 
+    current = url
     async with httpx.AsyncClient() as client:
         try:
-            resp = await client.get(url, timeout=TIMEOUT, follow_redirects=True)
-            resp.raise_for_status()
-            text = resp.text[:MAX_BYTES]
-            return {"ok": True, "url": url, "content": text}
+            for _ in range(5):
+                blocked = _fetch_url_blocked(current)
+                if blocked:
+                    return {"ok": False, "url": url, "error": blocked}
+                resp = await client.get(
+                    current, timeout=TIMEOUT, follow_redirects=False
+                )
+                if resp.is_redirect:
+                    location = resp.headers.get("location")
+                    if not location:
+                        break
+                    current = str(httpx.URL(current).join(location))
+                    continue
+                resp.raise_for_status()
+                return {
+                    "ok": True,
+                    "url": str(resp.url),
+                    "content": resp.text[:MAX_BYTES],
+                }
+            return {"ok": False, "url": url, "error": "too many redirects"}
         except httpx.HTTPStatusError as exc:
             return {"ok": False, "url": url, "error": f"HTTP {exc.response.status_code}"}
         except Exception as exc:

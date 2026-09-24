@@ -152,6 +152,65 @@ def test_mcp_messages_enforces_session_scope(read_token):
         mcp_server._mcp_sessions.pop("s1", None)
 
 
+def test_fetch_url_blocks_non_public_targets(read_token):
+    """SSRF guard: loopback/link-local/reserved/metadata endpoints must
+    be refused before any request is made."""
+    from services.aios_core.mcp_server import _fetch_url_blocked
+
+    for url in (
+        "http://127.0.0.1:6333/collections",
+        "http://localhost:9090/metrics",
+        "http://169.254.169.254/latest/meta-data",
+        "http://[::1]:5680/admin",
+        "http://10.0.0.4/internal",
+        "http://192.168.1.1/router",
+        "file:///etc/passwd",
+        "gopher://127.0.0.1/x",
+        "not-a-url",
+    ):
+        assert _fetch_url_blocked(url) is not None, url
+
+    # A literal public IP needs no DNS and must pass.
+    assert _fetch_url_blocked("http://93.184.216.34/") is None
+
+
+def test_fetch_url_redirect_to_private_blocked(read_token, monkeypatch):
+    """A public URL that redirects to a private target must be refused
+    at the redirect hop — the private request is never sent."""
+    from services.aios_core import mcp_server
+
+    calls = []
+
+    class FakeResp:
+        def __init__(self, status=302, location=None, text=""):
+            self.status_code = status
+            self.headers = {"location": location} if location else {}
+            self.text = text
+            self.url = "http://93.184.216.34/"
+            self.is_redirect = location is not None
+
+        def raise_for_status(self):
+            pass
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def get(self, url, timeout=None, follow_redirects=False):
+            calls.append(url)
+            return FakeResp(302, "http://127.0.0.1:5680/admin")
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    result = asyncio.run(mcp_server._tool_fetch_url("http://93.184.216.34/"))
+    assert result["ok"] is False
+    assert "127.0.0.1" not in calls  # private hop never requested
+    assert len(calls) == 1
+
+
 def test_list_mcp_tools_returns_core_tools(admin_token):
     """list_mcp_tools() must expose the tools in the interface contract."""
     tools = list_mcp_tools()
@@ -316,11 +375,13 @@ def test_call_tool_search_web_and_fetch_url(admin_token, monkeypatch):
     assert len(data) == 1
     assert data[0]["title"] == "SearXNG test"
 
-    # fetch_url hits the live aios_core /health endpoint on 127.0.0.1:5680.
+    # fetch_url used to hit the live /health endpoint on 127.0.0.1:5680 —
+    # the SSRF guard now refuses loopback targets, which is the contract.
     result = asyncio.run(call_mcp_tool("fetch_url", {"url": "http://127.0.0.1:5680/health"}))
     assert result.is_error is False
-    text = result.content[0].text
-    assert "status" in text
+    data = json.loads(result.content[0].text)
+    assert data["ok"] is False
+    assert "non-public" in data["error"]
 
 
 def test_call_tool_memory_search_and_store(admin_token, monkeypatch):
