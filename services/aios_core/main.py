@@ -232,8 +232,10 @@ async def admin_gate_status(_admin_auth: None = Depends(_check_admin_auth)):
     import json as _json
     from collections import Counter as _Counter
 
-    tool_audit_log = "/var/log/aios/tool_audit.jsonl"
-    safety_events_log = "/var/log/aios/safety_events.jsonl"
+    from hori.config import SAFETY_EVENTS_LOG
+
+    tool_audit_log = "/var/log/hori/tool_audit.jsonl"
+    safety_events_log = SAFETY_EVENTS_LOG
 
     def _read_jsonl(path):
         entries = []
@@ -738,12 +740,14 @@ async def admin_view_logs(log_type: str, lines: int = 50, _admin_auth: None = De
     """
     import asyncio as _asyncio
 
+    from hori.config import SAFETY_EVENTS_LOG
+
     log_configs = {
         "aios-core": (["journalctl", "-u", "aios_core", "--no-pager", "-n", str(lines)], None),
         "sherpa": (["journalctl", "-u", "aios-sherpa", "--no-pager", "-n", str(lines)], None),
         "tool-daemon": (["journalctl", "-u", "aios-tool-daemon", "--no-pager", "-n", str(lines)], None),
-        "safety": (None, "/var/log/aios/safety_events.jsonl"),
-        "tool-audit": (None, "/var/log/aios/tool_audit.jsonl"),
+        "safety": (None, SAFETY_EVENTS_LOG),
+        "tool-audit": (None, "/var/log/hori/tool_audit.jsonl"),
     }
 
     if log_type not in log_configs:

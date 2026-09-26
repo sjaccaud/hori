@@ -26,10 +26,14 @@ TRACES TO:
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 
 from hori.config import SAFETY_EVENTS_LOG
+
+_log = logging.getLogger(__name__)
+_warned_write_failure = False
 
 
 def log_safety_event(
@@ -71,11 +75,14 @@ def log_safety_event(
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except OSError:
-        # If we can't write to the log (e.g., /var/log/aios doesn't exist
+    except OSError as e:
+        # If we can't write to the log (e.g., /var/log/hori doesn't exist
         # in dev), silently skip. The interception still happens — we
-        # just can't measure it.
-        pass
+        # just can't measure it. Warn once per process so drops are visible.
+        global _warned_write_failure
+        if not _warned_write_failure:
+            _warned_write_failure = True
+            _log.warning("safety event log write failed (%s); events dropping silently", e)
 
 
 def verify_and_log(
