@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-09-22",
+  "generated": "2026-09-25",
   "note": "Script library for the HORI/AIOS rig. Entries are hand-curated; add new scripts here when created. runnable=false rows are reference-only (installers, sudo-only, hooks, destructive). probes feed the status column.",
   "categories": {
     "ai-stack": "Inference, OWUI, models, benchmarks",
@@ -194,6 +194,118 @@
       "tags": [
         "health",
         "read-only"
+      ]
+    },
+    {
+      "id": "post-reboot-health",
+      "name": "post_reboot_health.sh",
+      "path": "~/Projects/aios/scripts/hardening/post_reboot_health.sh",
+      "category": "aios-dev",
+      "what": "Functional safety-spine check: 8 core services + NRestarts flap detection, tool-daemon socket + real e2e tool call, Sherpa capability freshness + audit-path agreement, llama /health, workspace dir, docker + krill advisory tiers.",
+      "why": "The Aug 8 and Sep 25 incidents were silent because 'is-active' lies — crash-loops and a blind Sherpa looked fine. This verifies function, not process state.",
+      "created": "2026-08-08",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "probe": {
+        "type": "systemd",
+        "unit": "hori-boot-health.service",
+        "scope": "system"
+      },
+      "schedule": "at boot (~90s in) via hori-boot-health.service",
+      "notes": "Needs root (tool socket + audit log read). Probe reflects the LAST boot check: green=passed, red=failed.",
+      "tags": [
+        "health",
+        "safety-spine",
+        "sudo"
+      ]
+    },
+    {
+      "id": "notify-health",
+      "name": "notify_health.sh",
+      "path": "~/Projects/aios/scripts/hardening/notify_health.sh",
+      "category": "aios-dev",
+      "what": "Wrapper: runs post_reboot_health.sh and pushes the result to telegram + ntfy + desktop notify — pass AND fail. ExecStart of hori-boot-health.service.",
+      "why": "The health check used to be manual-only; a spine outage at boot went unnoticed for 90min on 2026-09-25. Now it always tells you.",
+      "created": "2026-09-25",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "probe": {
+        "type": "systemd",
+        "unit": "hori-boot-health.service",
+        "scope": "system"
+      },
+      "notes": "Reads notify creds from /etc/hori/notify.env or idea_factory notify.conf. Exit code propagates to the unit.",
+      "tags": [
+        "health",
+        "notify",
+        "sudo"
+      ]
+    },
+    {
+      "id": "notify-health-selftest",
+      "name": "notify_health.sh --selftest",
+      "path": "~/Projects/aios/scripts/hardening/notify_health.sh",
+      "category": "aios-dev",
+      "what": "Fires a test notification on telegram + ntfy + desktop without running the health check.",
+      "why": "One-click 'are my alert channels alive' probe.",
+      "created": "2026-09-25",
+      "kind": "script",
+      "runnable": true,
+      "interpreter": "bash",
+      "args": [
+        "--selftest"
+      ],
+      "timeout": 30,
+      "tags": [
+        "health",
+        "notify",
+        "test"
+      ]
+    },
+    {
+      "id": "install-boot-health",
+      "name": "install_boot_health.sh",
+      "path": "~/Projects/aios/scripts/hardening/install_boot_health.sh",
+      "category": "aios-dev",
+      "what": "Installs + enables hori-boot-health.service (the boot-time spine check + notifier).",
+      "why": "One-time installer; rerun after editing the unit file.",
+      "created": "2026-09-25",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "probe": {
+        "type": "systemd",
+        "unit": "hori-boot-health.service",
+        "scope": "system"
+      },
+      "tags": [
+        "install",
+        "sudo"
+      ]
+    },
+    {
+      "id": "hori-boot-health-svc",
+      "name": "hori-boot-health.service",
+      "path": "~/Projects/aios/services/systemd/hori-boot-health.service",
+      "category": "aios-dev",
+      "what": "Boot oneshot: runs the spine health check ~90s after boot and notifies pass/fail. RemainAfterExit so unit state carries the last result.",
+      "why": "Closes the 'nobody ran the manual check' gap that hid the 2026-09-25 CHDIR outage.",
+      "created": "2026-09-25",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "hori-boot-health.service",
+        "scope": "system"
+      },
+      "schedule": "every boot",
+      "notes": "Panel dot = last check result (green pass / red fail / grey before first run). Manual: sudo systemctl start hori-boot-health.service.",
+      "tags": [
+        "health",
+        "systemd",
+        "safety-spine"
       ]
     },
     {

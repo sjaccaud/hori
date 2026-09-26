@@ -9,13 +9,24 @@
 # but the safety spine was non-functional.
 #
 # This script checks:
-#   1. All 4 critical services are active
+#   1. All critical services are active (and not flapping — crash-loopers
+#      sit in "activating" forever and never show in `systemctl --failed`)
 #   2. The tool daemon socket exists and is reachable
 #   3. The Sherpa capability file exists, is fresh, and shows Level 0
 #   4. The Sherpa is NOT skipping audit log entries (not blind), AND its
 #      audit path agrees with the daemon's configured path (input is live)
 #   5. The tool daemon can execute a real tool call (end-to-end)
 #   6. The LLM inference server is responding
+#   7. /tmp/hori-workspace exists (daemon needs it at namespace setup)
+#   8. Docker stack containers are running (advisory, warn-only)
+#   9. Auxiliary daemons are running (advisory, warn-only)
+#
+# 2026-09-25 incident addendum: `chmod 750` on the repo owner's home broke CHDIR for
+# aios-worker + root-broker services — both crash-looped ~90min undetected
+# because nothing ran this check. Coverage added: system-root-broker,
+# llama-nano-adaptive, local-tools-adaptive, project-tools-adaptive, and
+# NRestarts flap detection. hori-boot-health.service now runs this at boot
+# and notifies pass/fail via scripts/hardening/notify_health.sh.
 #
 # Usage: sudo scripts/hardening/post_reboot_health.sh
 #        (sudo needed to read the audit log and tool socket)
@@ -44,11 +55,24 @@ echo ""
 
 # --- 1. Service status ---
 echo "--- 1. Service Status ---"
-for svc in aios_core aios-sherpa aios-tool-daemon llamacpp-adaptive; do
+SERVICES="aios_core aios-sherpa aios-tool-daemon system-root-broker
+          llamacpp-adaptive llama-nano-adaptive local-tools-adaptive
+          project-tools-adaptive"
+for svc in $SERVICES; do
     if systemctl is-active --quiet "$svc" 2>/dev/null; then
         ok "$svc is active"
     else
-        fail "$svc is NOT active"
+        fail "$svc is NOT active (state: $(systemctl is-active "$svc" 2>/dev/null || echo missing))"
+    fi
+done
+
+# Flap detection: a restart-looping unit can read "active" in a lucky
+# instant. NRestarts counts auto-restarts since last manual start — a
+# healthy boot leaves these at 0.
+for svc in $SERVICES; do
+    N=$(systemctl show "$svc" -p NRestarts --value 2>/dev/null || echo 0)
+    if [ "${N:-0}" -gt 5 ]; then
+        warn "$svc has auto-restarted $N times — flapping (invisible to 'systemctl --failed')"
     fi
 done
 echo ""
@@ -194,7 +218,16 @@ echo ""
 
 # --- 6. LLM inference server ---
 echo "--- 6. LLM Inference Server ---"
-if curl -s --max-time 5 http://127.0.0.1:8080/health 2>/dev/null | grep -q "ok"; then
+# Retry once — a cold boot may still be loading the model.
+LLAMA_OK=0
+for attempt in 1 2; do
+    if curl -s --max-time 5 http://127.0.0.1:8080/health 2>/dev/null | grep -q "ok"; then
+        LLAMA_OK=1
+        break
+    fi
+    sleep 12
+done
+if [ "$LLAMA_OK" -eq 1 ]; then
     ok "llama-server is healthy (responded to /health)"
 else
     fail "llama-server is not responding to /health"
@@ -208,6 +241,33 @@ if [ -d "/tmp/hori-workspace" ]; then
 else
     fail "/tmp/hori-workspace missing — tool daemon will crash on restart"
 fi
+echo ""
+
+# --- 8. Docker stack (advisory — degraded function, not spine) ---
+echo "--- 8. Docker Stack (advisory) ---"
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    for c in qdrant_aios searchrouter_aios aios_embedding open_webui_aios; do
+        state=$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null || echo "missing")
+        if [ "$state" = "true" ]; then
+            ok "container $c running"
+        else
+            warn "container $c not running (state: $state)"
+        fi
+    done
+else
+    warn "docker unreachable — container checks skipped"
+fi
+echo ""
+
+# --- 9. Auxiliary daemons (advisory — project services, not spine) ---
+echo "--- 9. Auxiliary Services (advisory) ---"
+for svc in krill_harvester krill-supervisor; do
+    if systemctl is-active --quiet "$svc" 2>/dev/null; then
+        ok "$svc is active"
+    else
+        warn "$svc is not active (state: $(systemctl is-active "$svc" 2>/dev/null || echo missing))"
+    fi
+done
 echo ""
 
 # --- Summary ---

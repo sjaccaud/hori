@@ -1,0 +1,23 @@
+[Unit]
+Description=HORI post-boot functional health check + notify
+Documentation=file://docs/operations.md
+Wants=network-online.target
+After=network-online.target aios_core.service aios-sherpa.service aios-tool-daemon.service system-root-broker.service llamacpp-adaptive.service llama-nano-adaptive.service local-tools-adaptive.service project-tools-adaptive.service
+
+[Service]
+Type=oneshot
+# Runs the functional check (scripts/hardening/post_reboot_health.sh),
+# then notifies pass/fail via telegram + ntfy + desktop (notify_health.sh).
+# The check's exit code propagates: on spine failure this unit lands in
+# `systemctl --failed` — a persistent flag, not just a transient ping.
+ExecStart=@@REPO_ROOT@@/scripts/hardening/notify_health.sh
+# RemainAfterExit so unit state carries the result: active=last check
+# passed, failed=spine broken (also surfaces in `systemctl --failed` and
+# the script panel's systemd probe).
+RemainAfterExit=yes
+# No restart: a oneshot that ran once and reported is done for this boot.
+# notify_health.sh self-throttles (~90s uptime gate) so manual runs via
+# `systemctl start` skip the settle-wait.
+
+[Install]
+WantedBy=multi-user.target

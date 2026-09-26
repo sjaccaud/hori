@@ -58,6 +58,7 @@ SCAN_DIRS = [
     ("~/Games/Heroic/Scripts", "Heroic scripts", ("*.sh", "*.py")),
     ("~/llama-builds", "llama-builds", ("*/*.sh", "*/*.py")),
     ("~/Projects/aios/scripts", "aios/scripts", ("*.sh", "*.py")),
+    ("~/Projects/aios/scripts/hardening", "aios/hardening", ("*.sh", "*.py")),
     ("~/Projects/aios/services", "aios services", ("*/*.sh", "*/*.py")),
 ]
 SCAN_SKIP_PREFIXES = ("test_", "conftest")
