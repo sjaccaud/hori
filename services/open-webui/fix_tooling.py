@@ -1043,7 +1043,7 @@ def main():
     # SyntaxErrors at request time, so the check must happen here.
     compile(TOOL_SERVER_FILTER_SOURCE, "<tool_server_filter>", "exec")
     c.execute(
-        "UPDATE function SET content = ?, is_global = 1, valves = ?, updated_at = ? WHERE id = ?",
+        "UPDATE function SET content = ?, is_global = 1, is_active = 1, valves = ?, updated_at = ? WHERE id = ?",
         (
             TOOL_SERVER_FILTER_SOURCE.strip(),
             json.dumps(
