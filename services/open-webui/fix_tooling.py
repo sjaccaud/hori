@@ -34,7 +34,7 @@ TOOL_USAGE = (
     "- get_status ({USER_NAME} Local Tools) is the right tool for 'what is my system status?', 'are my services running?', or quick GPU/VRAM/disk summaries.\n"
     "- read_file and run_safe_command ({USER_NAME} Local Tools) are the right tools for inspecting the host filesystem and reading exact file content.\n"
     "- For project/directory surveys, 'list my projects', or questions that need current filesystem state, prefer run_safe_command (ls, tree, find, du, etc.) and read_file. "
-    "Only call query_knowledge_files for conceptual/historical questions that are likely covered in the attached knowledge collections; do NOT call query_knowledge_files, view_knowledge_file, search_memories, search_chats, or search_notes for status questions.\n"
+    "For workstream/project state — 'where did we leave X', 'what is open on Y', recent decisions — the hori-state tools (thread_list, thread_read, episode_search) are the authoritative source; prefer them over guessing.\n"
     "- For small known files, you may call read_file up to 4 times in parallel. For large outputs or exploration, issue one focused call, read the result, then decide the next step.\n"
     "- read_file auto-summarizes files larger than its max_bytes cap via the local nano model (the result has summarized=true); pass summarize=false or an explicit max_bytes when you need exact raw content.\n"
     "- Workspace write tools (when attached) are confirmation-gated: call "
@@ -42,8 +42,7 @@ TOOL_USAGE = (
     "workspace, show the manifest to the user, and only call "
     "confirm_workspace_write after explicit user approval. Directories and .md "
     "files only; no overwrite or delete.\n"
-    "- For questions about the CURRENT state of the system — running services, loaded model, workstreams, GPU/VRAM/disk — an 'AIOS state snapshot' is injected into your context and ALREADY answers them; cite it directly. Call get_status or run_safe_command only for live detail the snapshot does not cover or when its freshness matters. "
-    "Never answer current-state questions from attached knowledge or memory alone, even when it looks relevant; it may be stale.\n"
+    "- For questions about the CURRENT state of the system — running services, loaded model, workstreams, GPU/VRAM/disk — an 'AIOS state snapshot' is injected into your context and ALREADY answers them; cite it directly. Call get_status or run_safe_command only for live detail the snapshot does not cover or when its freshness matters.\n"
     "- The offline model archive lives at /mnt/4TB/model-archive (categories: llm/, vlm/, stt/, slm/, tts/, embedding/). For 'haul', 'stash', 'the downloads', or similar, check /mnt/4TB/model-archive and /opt/ai-models with run_safe_command (ls/find/du) first.\n"
     "- run_safe_command is shell-free: no pipes |, chaining ; &&, $(), or find -exec. Glob chars (* ? [ ]) in paths are expanded automatically. Commands run in your home directory — use git -C <path> <subcommand> for repo operations. If a call fails, read the error and adjust once — do not retry the same shape; identical repeat calls are flagged as duplicates.\n"
     "- The router holds one model at a time; switching presets (e.g. from qwen-fast to devstral-coding) unloads the current model and aborts any in-flight chat or tool loop. Finish or wait for the current reply before switching models.\n"
@@ -55,18 +54,16 @@ TOOL_USAGE = (
 PLANNING_PROMPT = ((
     "You are a helpful planning and research assistant running on {USER_NAME}'s local Ubuntu workstation.\n\n"
     "You have access to the following local tools:\n"
-    "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
     "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
     "- run_safe_command ({USER_NAME} Local Tools server): run a safe read-only command like inxi, rocm-smi, lscpu, lsusb, ps, df, systemctl, journalctl, dmesg, etc.\n\n"
     "When the user asks about {USER_NAME}'s projects, hardware, preferences, local files, system status, or background, use these local tools first. "
     "Use get_status for 'what is my system status?' or 'are my services running?'. "
-    "Use query_knowledge_files for conceptual questions that may be covered in the knowledge collections, "
-    "and read_file or run_safe_command when you need exact current system values.\n\n"
+    "Use read_file or run_safe_command when you need exact current system values.\n\n"
     "Only use web search if the user explicitly asks for external/fresh information (e.g. 'latest news', 'what does the internet say', 'current events'), "
     "or if local tools cannot answer after a genuine attempt. "
-    "When web search results or knowledge are provided, cite them with [id].\n\n"
+    "When web search results are provided, cite them with [id].\n\n"
     "Be concise, accurate, and avoid unnecessary preamble. "
     "Do not output code unless the user explicitly asks for it."
 ) + TOOL_USAGE).format(USER_NAME=USER_NAME)
@@ -74,7 +71,6 @@ PLANNING_PROMPT = ((
 LONG_PROMPT = ((
     "You are a helpful document analysis and research assistant running on {USER_NAME}'s local Ubuntu workstation.\n\n"
     "You have access to the following local tools:\n"
-    "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
     "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
@@ -89,7 +85,6 @@ LONG_PROMPT = ((
 THINK_PROMPT = ((
     "You are a helpful reasoning and research assistant running on {USER_NAME}'s local Ubuntu workstation.\n\n"
     "You have access to the following local tools:\n"
-    "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
     "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
@@ -105,7 +100,6 @@ THINK_PROMPT = ((
 BALANCED_PROMPT = ((
     "You are a helpful software engineering and research assistant running on {USER_NAME}'s local Ubuntu workstation.\n\n"
     "You have access to the following local tools:\n"
-    "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
     "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
@@ -127,7 +121,6 @@ DEEPDIVE_PROMPT = ((
     "connecting dots across many sources: finding non-obvious relationships, building "
     "competing hypotheses, and stress-testing them before reporting.\n\n"
     "You have access to the following local tools:\n"
-    "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
     "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
@@ -159,7 +152,6 @@ IDEATION_PROMPT = ((
     "These weights are abliterated (refusal direction removed): engage ideas directly without "
     "moralizing or reflexive hedging, while staying rigorous and honest.\n\n"
     "You have access to the following local tools:\n"
-    "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- get_current_timestamp: get the current date and time.\n"
     "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
     "- read_file ({USER_NAME} Local Tools server): read a file from allowed host paths.\n"
@@ -176,7 +168,6 @@ IDEATION_PROMPT = ((
 CODING_PROMPT = ((
     "You are an expert software engineering, coding, and research assistant running on {USER_NAME}'s local Ubuntu workstation.\n\n"
     "You have access to the following local tools:\n"
-    "- query_knowledge_files: search attached knowledge collections for local docs, benchmarks, decisions, and {USER_NAME}'s notes.\n"
     "- execute_code: run Python/shell code in the Open-WebUI sandbox for calculations and small transformations.\n"
     "- get_current_timestamp: get the current date and time.\n"
     "- get_status ({USER_NAME} Local Tools server): fetch a concise system status snapshot (services, GPU/VRAM, disk, loaded model).\n"
@@ -185,10 +176,9 @@ CODING_PROMPT = ((
     "When the user asks about {USER_NAME}'s projects, hardware, preferences, local files, system status, or background, use these local tools first. "
     "Use get_status for 'what is my system status?' or 'are my services running?'. "
     "Read files directly with read_file or run_safe_command when you need exact content. "
-    "Use query_knowledge_files for conceptual questions that may be covered in the knowledge collections.\n\n"
     "Only use web search if the user explicitly asks for external/fresh information (e.g. 'latest news', 'what does the internet say', 'current events'), "
     "or if local tools cannot answer after a genuine attempt. "
-    "When web search results or knowledge are provided, cite them with [id].\n\n"
+    "When web search results are provided, cite them with [id].\n\n"
     "Be concise, accurate, and avoid unnecessary preamble. "
     "Do not preface answers with meta-commentary about sources unless the user asks."
 ) + TOOL_USAGE).format(USER_NAME=USER_NAME)
@@ -390,29 +380,34 @@ NANO_PROMPT = (
 # Per-model default features:
 # - Web search and code interpreter are available (capabilities/builtinTools) but OFF by default
 #   so the assistant doesn't call out to the internet or run code unless you explicitly toggle it.
-# - Non-coding models: knowledge, time, memory, local tools
-# - Coding/DSH models: also code_interpreter (toggleable, on by default for quick coding)
+# - 2026-09-26 trim: knowledge + memory REMOVED everywhere. Both are
+#   probabilistic retrieval surfaces that pulled wrong-domain/stale docs into
+#   prompts (the "dementia" failure mode — 09-23 wrong-domain retrieval loop).
+#   Continuity is carried by the deterministic layer instead: state snapshot
+#   injection + hori-state thread tools (thread_list/thread_read/episode_search).
+# - Non-coding models: time; Coding/DSH models: also code_interpreter
 MODEL_DEFAULT_FEATURES = {
-    "qwen-fast": ["knowledge", "time", "memory"],
-    "qwen-128k": ["knowledge", "time", "memory"],
-    "qwen-think": ["knowledge", "time", "memory"],
-    "qwen-balanced": ["knowledge", "time", "memory"],
-    "qwen-256k-batch": ["knowledge", "time", "memory"],
-    "qwen-quality": ["knowledge", "time", "code_interpreter", "memory"],
-    "devstral-coding": ["knowledge", "time", "code_interpreter", "memory"],
-    "qwen-dsh-fast": ["knowledge", "time", "code_interpreter", "memory"],
-    "qwen-dsh-low": ["knowledge", "time", "code_interpreter", "memory"],
-    "qwen-dsh-medium": ["knowledge", "time", "code_interpreter", "memory"],
-    "qwen-deepdive": ["knowledge", "time", "memory"],
-    "qwen-free": ["knowledge", "time", "memory"],
+    "qwen-fast": ["time"],
+    "qwen-128k": ["time"],
+    "qwen-think": ["time"],
+    "qwen-balanced": ["time"],
+    "qwen-256k-batch": ["time"],
+    "qwen-quality": ["time", "code_interpreter"],
+    "devstral-coding": ["time", "code_interpreter"],
+    "qwen-dsh-fast": ["time", "code_interpreter"],
+    "qwen-dsh-low": ["time", "code_interpreter"],
+    "qwen-dsh-medium": ["time", "code_interpreter"],
+    "qwen-deepdive": ["time"],
+    "qwen-free": ["time"],
 }
 
 # Capabilities = what the UI is allowed to show/offer for a model.
-# All toggles (web_search, code_interpreter, builtin_tools) are available by default.
+# memory/knowledge capabilities OFF — hides the dead toggles AND stops any
+# residual memory/RAG injection; builtinTools below is the hard grammar gate.
 META_CAPABILITIES = {
     "web_search": True,
-    "knowledge": True,
-    "memory": True,
+    "knowledge": False,
+    "memory": False,
     "builtin_tools": True,
     "code_interpreter": True,
     "time": True,
@@ -436,7 +431,7 @@ VISION_MODELS = {
 
 # Default feature toggles for auto-discovered / fallback models.
 # Web search and code interpreter are OFF by default; the user toggles them when needed.
-META_DEFAULT_FEATURES = ["knowledge", "time", "memory"]
+META_DEFAULT_FEATURES = ["time"]
 
 # Models that get the builtin search_web / fetch_url tools (model decides when
 # to search via native function calling). Piloted on qwen-dsh-low 2026-09-07,
@@ -449,17 +444,20 @@ WEB_SEARCH_MODELS = set(ALL_QWEN_DEVSTRAL) - {"qwen-256k-batch"}
 
 # Builtin tool categories: Open-WebUI defaults EVERY unlisted category to True,
 # so anything not explicitly disabled is injected into the tool list. Keep the
-# useful read/knowledge tools; disable the workspace/social categories that only
+# useful read tools; disable the workspace/social categories that only
 # serve as tool-misfire bait on small local models (e.g. update_task loops).
 # web_search stays OFF for all models except WEB_SEARCH_MODELS.
+# 2026-09-26: knowledge/memory/chats OFF — the retrieval safaris (search_chats
+# pulling stale cross-chat docs, memory×7 looping, knowledge×5 on dead
+# collections) were the brittleness source. files stays on (manual attach).
 META_BUILTINTOOLS = {
-    "knowledge": True,
+    "knowledge": False,
     "time": True,
     "code_interpreter": True,
     "web_search": False,
-    "memory": True,
+    "memory": False,
     "files": True,
-    "chats": True,
+    "chats": False,
     "user_input": False,
     "subagents": False,
     "image_generation": False,
@@ -999,6 +997,9 @@ def main():
         }
         meta["default_feature_ids"] = default_features_for(mid)
         meta["builtinTools"] = {**meta.get("builtinTools", {}), **builtin_tools_for(mid)}
+        # Strip model-attached knowledge collections — they auto-inject stale
+        # docs into EVERY message (8 collections were on all 12 models 2026-09-26).
+        meta["knowledge"] = []
 
         # Canonical use-case descriptions (selector subtitle / admin list)
         meta["description"] = MODEL_DESCRIPTIONS.get(mid) or meta.get(
@@ -1161,7 +1162,7 @@ def main():
             "status_updates": False,
             "file_context": True,
         },
-        "default_feature_ids": ["memory"],
+        "default_feature_ids": [],
         # OWUI defaults every unlisted builtinTools category to True — without
         # this map nano inherits the full grammar despite the "no tools" design.
         "builtinTools": {k: False for k in META_BUILTINTOOLS},
