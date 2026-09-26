@@ -13,10 +13,11 @@ Group=aios-worker
 WorkingDirectory=%h/Projects/hori
 Environment=PYTHONPATH=.
 Environment=AIOS_AUDIT_LOG=/var/log/hori/tool_audit.jsonl
-# Config: aios-worker has home=/nonexistent, so point XDG_CONFIG_HOME
-# to the real config location. ProtectHome=read-only allows reading this.
-# The install script replaces %h with the actual home dir.
-Environment=XDG_CONFIG_HOME=%h/.config
+# Config: aios-worker has home=/nonexistent and cannot traverse the
+# user's ~/.config (0700). Canonical shared config is /etc/hori/hori.yaml
+# (root:aios-worker 0640). XDG_CONFIG_HOME=/etc makes config.py read
+# /etc/hori/hori.yaml. Loaded before Landlock applies, so no rule needed.
+Environment=XDG_CONFIG_HOME=/etc
 # Allowed read paths: the tool daemon runs as aios-worker (home=/nonexistent)
 # so ~/Projects in the default config expands wrong. Set absolute paths here.
 # The install script replaces %h with the real home dir.
