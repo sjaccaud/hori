@@ -30,6 +30,7 @@ HOST_OUT = HOME / ".local/state/aios/state-snapshot.md"
 CONTAINER_PATH = "/app/backend/data/aios-state-snapshot.md"
 CONTAINER = "open_webui_aios"
 AIOS_REPO = HOME / "Projects/aios"
+PROJECTS_DIR = HOME / "Projects"
 
 SERVICES_SYSTEM = [
     "llamacpp-adaptive",
@@ -228,6 +229,23 @@ def _git_head() -> str:
     return out or "unavailable"
 
 
+def _git_dirty() -> str:
+    """Uncommitted work under ~/Projects — the always-commit tripwire.
+    Clean repos stay silent so the line costs nothing when hygiene is
+    good; dirty ones report file count + age of HEAD."""
+    dirty = []
+    for gitdir in sorted(PROJECTS_DIR.glob("*/.git")):
+        repo = gitdir.parent
+        out = _run(["git", "-C", str(repo), "status", "--porcelain"], timeout=8)
+        n = sum(1 for l in out.splitlines() if l.strip())
+        if n:
+            head = _run(
+                ["git", "-C", str(repo), "log", "-1", "--format=%cr"], timeout=5
+            ).strip()
+            dirty.append(f"{repo.name}:{n}f(HEAD {head or '?'})")
+    return "git_dirty: " + (" · ".join(dirty) if dirty else "none")
+
+
 def render() -> str:
     ts = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     lines = [
@@ -242,6 +260,7 @@ def render() -> str:
         _hori_state_tools(),
         _deployment_contract(),
         f"resources: {_resources()}",
+        _git_dirty(),
         "",
         "## aios HEAD",
         _git_head(),
