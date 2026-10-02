@@ -1,5 +1,29 @@
 # PRD — /decide Shadow Triage (WO-02, part of SLICE-18)
 
+## Status — 2026-10-02 (WO-03 resolution)
+
+Distilled model trained, evaluated, **deployed as the production decide
+backend**. The `:8096` llama-decide service now serves the r8 QLoRA
+adapter (`idea_factory/distill/`); `:8773` aios-decide unchanged.
+
+Holdout (248 items, fresh replay vs qwen teacher + vs the prior
+Sep-28 prod backend):
+
+| metric | old prod backend | r8 distill |
+|---|---|---|
+| hard_no agreement | 13% (54% false-veto) | 97% (0.8% FP) |
+| hard_no recall | 56% | 44% (4/9 — thin sample) |
+| score abstain | 88–94% | 4–23% |
+| verdict agreement | 37% | 84% |
+| fit spearman | +0.13 | +0.74 |
+
+WO-03 landed in **advisory** form, not gate-replacement: `decide_verdict`
+columns on `items`/`candidates` record the sidecar verdict per triaged
+item; the digest renders it (`decide:` chip, ⚠ on promote↔reject/hard-no
+disagreements, floor marker where decide says `promote` on a killed
+item). Soak posture: observe the flags for a few weeks before any
+call-site migration — veto recall is still the watch item.
+
 ## 1. Intent trace
 
 - **Pillar I — Tiered Reasoning:** this is the experiment that proves or
