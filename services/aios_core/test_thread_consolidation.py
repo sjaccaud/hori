@@ -4,6 +4,7 @@ Traces to .devin/prd/thread-consolidation.md section 4.
 """
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -71,8 +72,12 @@ def test_detect_stale_flags_sessions_without_episodes(tmp_path):
                     "cwd": "/home/user/Projects/aios"}),
     ]) + "\n")
 
+    # now is injected — fixtures are dated 2026-09-15, so pinning now
+    # keeps the 7-day window deterministic (real now makes this a
+    # time-bomb test).
+    now = datetime(2026, 9, 16, tzinfo=timezone.utc)
     stale = tc.detect_stale(root, log, days=7,
-                            cwd_map={"aios": "hori"})
+                            cwd_map={"aios": "hori"}, now=now)
     # cwd maps to 'hori' which HAS a recent episode -> not stale
     assert stale == []
 
@@ -81,7 +86,7 @@ def test_detect_stale_flags_sessions_without_episodes(tmp_path):
         "ts": "2026-09-15T10:00:00+00:00", "tool": "devin-cli",
         "session_id": "a", "reason": "eof",
         "cwd": "/home/user/Projects/llm-stack"}) + "\n")
-    stale = tc.detect_stale(root, log, days=7)
+    stale = tc.detect_stale(root, log, days=7, now=now)
     assert len(stale) == 1
     assert stale[0]["thread"] == "llm-stack"
     assert stale[0]["sessions"] == 1
