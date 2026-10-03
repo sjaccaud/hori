@@ -320,6 +320,50 @@ def check_mcp_scope() -> tuple[bool, str]:
     return True, f"upstream catalog read-scoped ({len(names)} tools)"
 
 
+def check_compat_api_closed() -> tuple[bool, str]:
+    """The OpenAI/Ollama-compat surface (/openai/*, /ollama/*) bypasses
+    ALL filters including snapshot injection — it's for external API
+    clients, and nothing on this box consumes it. It must stay
+    unreachable: ENABLE_API_KEYS=false means no credential can exist,
+    and the api_key table must stay empty. Three reopen vectors, one
+    check: a key row appearing, env drift re-enabling key issuance, or
+    an unauthenticated request getting past 401."""
+    bad = []
+    try:
+        rows = _owui_sql("SELECT COUNT(*) FROM api_key")
+        if rows and rows[0][0]:
+            bad.append(f"{rows[0][0]} api_key row(s) present")
+    except RuntimeError as e:
+        bad.append(str(e))
+    out, rc = _run(
+        ["docker", "exec", OWUI_CONTAINER, "printenv", "ENABLE_API_KEYS"]
+    )
+    if rc != 0 or out.strip().lower() != "false":
+        bad.append(f"ENABLE_API_KEYS={out.strip() or 'unset'}")
+    # Unauthenticated POST must be refused — 401/403 both fine; a 2xx
+    # would mean the filter-bypassing surface is wide open.
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:3000/openai/chat/completions",
+            data=b"{}", headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=4) as r:
+            if r.status < 400:
+                bad.append(f"unauthenticated /openai POST answered {r.status}")
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            pass  # refused, as required
+        elif e.code == 404:
+            pass  # surface not even mounted — also fine
+        else:
+            bad.append(f"/openai POST returned {e.code}")
+    except Exception as e:
+        bad.append(f"probe error: {e}")
+    if bad:
+        return False, "; ".join(bad)
+    return True, "compat surface unreachable (no keys, keys disabled, 401)"
+
+
 def check_builtin_tools() -> tuple[bool, str]:
     """Every model's stored meta.builtinTools must match canonical
     (META_BUILTINTOOLS + web_search per WEB_SEARCH_MODELS). An OWUI upgrade
@@ -350,6 +394,12 @@ def check_builtin_tools() -> tuple[bool, str]:
             for k, v in expect.items()
             if live.get(k) != v
         ] + [f"{k} unexpected" for k in live if k not in expect]
+        # Phase A (2026-09-26) stripped knowledge collections off every
+        # model — auto-injected stale docs were confabulation fuel. A
+        # re-attached collection must fail here, not reappear silently.
+        knowledge = meta.get("knowledge") or []
+        if knowledge:
+            diffs.append(f"knowledge re-attached: {knowledge[:2]}")
         if diffs:
             bad.append(f"{mid}: {', '.join(diffs[:3])}")
     if bad:
@@ -368,6 +418,7 @@ CHECKS = [
     ("owui_db_hygiene", check_owui_db_hygiene),
     ("filter_valves", check_filter_valves),
     ("builtin_tools", check_builtin_tools),
+    ("compat_api_closed", check_compat_api_closed),
 ]
 
 

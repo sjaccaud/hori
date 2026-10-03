@@ -5,6 +5,22 @@
 
 ## Current Slice
 
+### SLICE-20-OWUI-CONTRACT-GUARDS: close out the three OWUI open items as deployment-contract assertions — no new behavior, just drift tripwires.
+
+**Branch:** `slice/20-owui-contract-guards` (off slice/19 HEAD)
+
+**Demo criterion:** `python3 services/open-webui/deployment_contract.py` shows `compat_api_closed` PASS and the extended `builtin_tools` check covering `meta.knowledge`.
+
+**What it resolves:** the open-webui thread's three flagged items. Live probing 2026-10-03 found the documented "/v1/* bypasses filters" concern was wrong in detail — `/v1/*` doesn't exist as an API surface in this OWUI version (SPA fallback: GET→index.html, POST→405). The real compat routers are `/openai/*` and `/ollama/*` — they DO bypass inlet filters but are unreachable: `ENABLE_API_KEYS=false`, zero `api_key` rows, unauthenticated POST → 401, and nothing on the box consumes them (clients hit llama router :8080). kb-sync timer already disabled; collection unattached since Phase A.
+
+**Changes:** `check_compat_api_closed` (three reopen vectors — key row appears, ENABLE_API_KEYS drifts, unauthenticated POST non-4xx); `builtin_tools` now also fails if `meta.knowledge` re-attaches to an active model (Phase A's stale-doc fix needs a drift guard, same as builtinTools). Rule file `~/.devin/rules/open-webui.md` corrected (stale pre-Phase-A "Kept" list) + compat-API resolution documented.
+
+**Safety boundary:** assertions only — the contract reads; nothing writes to the OWUI DB or container.
+
+**Status:** BUILD — contract 11/11 PASS live.
+
+---
+
 ### SLICE-19-DECIDE-CALIBRATION: WO-04 calibration loop — offline engine that samples logged /decide decisions through qwen-27B as audit oracle, refits isotonic calibration, and proposes abstain thresholds against an error budget.
 
 **Branch:** `slice/19-decide-calibration` (off slice/18 HEAD — same chain; rebase when parents merge)
