@@ -935,6 +935,51 @@
       ]
     },
     {
+      "id": "aios-decide-svc",
+      "name": "aios-decide.service (typed-decision API)",
+      "path": "~/Projects/aios/services/aios_decide/server.py",
+      "category": "ai-stack",
+      "what": "Typed-decision HTTP service on 127.0.0.1:8773 (/decide, /healthz) — answers hard_no/verdict/fit/actionable/lucrative questions via the sidecar backend.",
+      "why": "WO-03 advisory wiring: idea-factory triage consumes its verdicts (decide: chips on digest cards). User unit — dies quietly with no system-unit supervision.",
+      "created": "2026-09-19",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "aios-decide.service",
+        "scope": "user"
+      },
+      "tags": [
+        "decide",
+        "inference",
+        "systemd",
+        "user-unit"
+      ]
+    },
+    {
+      "id": "llama-decide-svc",
+      "name": "llama-decide.service (decide backend)",
+      "path": "~/.config/systemd/user/llama-decide.service",
+      "category": "ai-stack",
+      "what": "CPU-only llama-server on 127.0.0.1:8096 serving the distilled decide model (r8 augment as of 2026-10-02).",
+      "why": "The judgment model behind aios-decide — CPU so it never contends the GPU lane; when down, every /decide abstains and digest chips silently go blank.",
+      "created": "2026-09-19",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "llama-decide.service",
+        "scope": "user"
+      },
+      "tags": [
+        "decide",
+        "inference",
+        "llama",
+        "systemd",
+        "user-unit"
+      ]
+    },
+    {
       "id": "open-webui-svc",
       "name": "Open-WebUI (docker)",
       "path": "~/Projects/aios/services/open-webui/docker-compose.yml",

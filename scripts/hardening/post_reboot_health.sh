@@ -270,6 +270,38 @@ for svc in krill_harvester krill-supervisor; do
 done
 echo ""
 
+# --- 9b. Typed-decision sidecar (user units — advisory) ---
+# aios-decide (:8773 API) + llama-decide (:8096 llama-server backend)
+# run as USER units, so a sudo'd run must query the owner's manager.
+echo "--- 9b. Decide Sidecar (user units, advisory) ---"
+HORI_USER="${SUDO_USER:-$(id -un)}"
+user_systemctl() {
+    if [ "$(id -u)" -eq 0 ]; then
+        runuser -u "$HORI_USER" -- systemctl --user "$@"
+    else
+        systemctl --user "$@"
+    fi
+}
+for svc in aios-decide llama-decide; do
+    if user_systemctl is-active --quiet "$svc" 2>/dev/null; then
+        ok "user unit $svc is active"
+    else
+        warn "user unit $svc is not active (state: $(user_systemctl is-active "$svc" 2>/dev/null || echo missing))"
+    fi
+done
+# /healthz reports the decide app's own status plus its backend ("nano").
+if curl -s --max-time 5 http://127.0.0.1:8773/healthz 2>/dev/null | grep -q '"status":"ok"'; then
+    ok "aios-decide responding on :8773/healthz"
+else
+    warn "aios-decide not responding on :8773/healthz"
+fi
+if curl -s --max-time 5 http://127.0.0.1:8096/health 2>/dev/null | grep -q '"status":"ok"'; then
+    ok "llama-decide backend healthy on :8096"
+else
+    warn "llama-decide backend not healthy on :8096"
+fi
+echo ""
+
 # --- Summary ---
 echo "=== Summary ==="
 echo "  Passed: $PASS"
