@@ -5,6 +5,20 @@
 
 ## Current Slice
 
+### SLICE-19-DECIDE-CALIBRATION: WO-04 calibration loop — offline engine that samples logged /decide decisions through qwen-27B as audit oracle, refits isotonic calibration, and proposes abstain thresholds against an error budget.
+
+**Branch:** `slice/19-decide-calibration` (off slice/18 HEAD — same chain; rebase when parents merge)
+
+**Demo criterion:** `python3 -m services.aios_decide.calibrate --dry-run` over the real `~/.local/share/hori/decisions/` log prints sampling + stats; a seeded live run writes `report.md` + `exemplars.jsonl` + `params.json` under `~/.local/share/hori/calibration/<date>/`.
+
+**Safety boundary:** advisory only — `params.json` is a proposal a human applies, nothing auto-tunes the live service; oracle injected (tests never hit network); writes confined to out_dir; deterministic under seed.
+
+**PRD:** `.devin/prd/decide-calibration.md` · **Work order:** `core/state/proposed_work_orders/typed-decisions-04-calibration-loop.json`
+
+**Status:** PRD written; calibrate.py + tests in progress. Slice B (timer + power wrapper) is a follow-up.
+
+---
+
 ### SLICE-18-DECIDE-SERVICE: Tier-0 typed-decision service — POST /decide returns per-option probabilities via single-token top_logprobs reads on nano (:8090). S1 layer of the S1+S2 cascade.
 
 **Branch:** `slice/18-decide-service` (off slice/17 HEAD — inherits the WO files; rebase onto rebrand/hori after slice-17 merges)
