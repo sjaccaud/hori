@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-project-tools check-project-tools install-workspace-tools check-workspace-tools install-state-snapshot check-state-snapshot check-deployment install-kb-sync check-kb-sync install-llama-nano check-llama-nano install-script-panel check-script-panel
+.PHONY: test test-unit test-mcp test-integration test-regression test-adversarial test-all lint coverage test-stress-entropy test-stress-safety test-stress open-webui-apply install-open-webui-service install-local-tools check-local-tools install-project-tools check-project-tools install-workspace-tools check-workspace-tools install-state-snapshot check-state-snapshot check-deployment install-kb-sync check-kb-sync install-decide-calibrate check-decide-calibrate install-llama-nano check-llama-nano install-script-panel check-script-panel
 
 # Default target
 test: test-all
@@ -155,6 +155,20 @@ install-kb-sync:
 check-kb-sync:
 	@systemctl --user is-enabled kb-sync.timer
 	@systemctl --user list-timers kb-sync.timer --no-pager
+
+# Install the nightly decide-calibration timer (WO-04 slice B): samples the
+# /decide log through the 27B oracle, refits calibration, proposes min_prob.
+install-decide-calibrate:
+	@echo "🔗 Installing aios-decide-calibrate systemd user timer..."
+	@mkdir -p "$${HOME}/.config/systemd/user"
+	@cp ./services/aios_decide/aios-decide-calibrate.service ./services/aios_decide/aios-decide-calibrate.timer "$${HOME}/.config/systemd/user/"
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now aios-decide-calibrate.timer
+
+# Verify the calibration timer is armed and show its next run.
+check-decide-calibrate:
+	@systemctl --user is-enabled aios-decide-calibrate.timer
+	@systemctl --user list-timers aios-decide-calibrate.timer --no-pager
 
 # Install and start the nano SLM server (Llama-3.2-3B) on 127.0.0.1:8090.
 # Registered in Open-WebUI as a second OpenAI base URL; shows as "Nano Chat".

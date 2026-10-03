@@ -1,0 +1,14 @@
+[Unit]
+Description=HORI decide calibration — nightly timer
+# Runs at 03:20, after aios-consolidation (~03:00) inside the
+# 00:00-05:00 maintenance window. P2-compatible batch: router-mediated,
+# already-loaded model — no gpu-lane needed.
+# Traces to: .devin/prd/decide-calibration.md (Slice B)
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

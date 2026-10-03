@@ -1,0 +1,34 @@
+[Unit]
+Description=HORI decide calibration loop (WO-04 oracle audit + refit)
+# Nightly offline job: samples logged /decide decisions through qwen-quality
+# as audit oracle, refits isotonic calibration, proposes min_prob vs error
+# budget. Advisory only — params.json is a proposal a human applies.
+# No ai-power-manager wrap needed: ~100 sequential oracle calls keep the
+# daemon in active within one 10s poll (same as idea-factory-batch).
+# Traces to: .devin/prd/decide-calibration.md
+After=network.target llamacpp-adaptive.service
+Wants=llamacpp-adaptive.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/aios
+Environment=PYTHONPATH=.
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=%h/Projects/aios/venv/bin/python3 -m services.aios_decide.calibrate \
+    --log-dir %h/.local/share/hori/decisions \
+    --out-dir %h/.local/share/hori/calibration \
+    --oracle-url http://127.0.0.1:8080 \
+    --oracle-limit 100 --seed %j
+# ~100 sequential oracle calls; worst case ~45 min
+TimeoutStartSec=3600
+
+# Hardening: read-only on everything except the calibration output dir;
+# decision log is read through ProtectHome=read-only.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/hori/calibration
+
+StandardOutput=journal
+StandardError=journal
