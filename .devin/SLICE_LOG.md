@@ -15,7 +15,7 @@
 
 **PRD:** `.devin/prd/decide-calibration.md` · **Work order:** `core/state/proposed_work_orders/typed-decisions-04-calibration-loop.json`
 
-**Status:** PRD written; calibrate.py + tests in progress. Slice B (timer + power wrapper) is a follow-up.
+**Status:** DONE slice A — `calibrate.py` offline engine + CLI implemented TDD (20 tests, 81% module coverage, suite 39/39 green, added to `test-unit`). First LIVE oracle run 2026-10-03 (limit 20, seed 42): 16/20 labeled, agreement 0.812, ECE 0.200, suggested_min_prob=None (thin data — fail-closed as designed). Findings: hard_no false-veto confirmed (nano yes@0.71 vs oracle no — matches WO-02 44% recall), score inflation at scale (nano 5s audited to oracle 1-2), **49% of all logged decisions abstain** (3702/7557). Live-run bugs fixed: question text/options must join from record-level questions[] (oracle was blind on score questions), abstained rows excluded from sampling (unlabelable). Artifacts: `~/.local/share/hori/calibration/2026-10-03/`. Slice B (timer + ai-power-manager wrapper, nightly ~03:20) is the follow-up; a `--oracle-limit 100+` run gates any min_prob change.
 
 ---
 
