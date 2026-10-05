@@ -18,7 +18,7 @@ ExecStart=%h/Projects/aios/venv/bin/python3 -m services.aios_decide.calibrate \
     --log-dir %h/.local/share/hori/decisions \
     --out-dir %h/.local/share/hori/calibration \
     --oracle-url http://127.0.0.1:8080 \
-    --oracle-limit 100 --seed %j
+    --oracle-limit 100 --seed 42
 # ~100 sequential oracle calls; worst case ~45 min
 TimeoutStartSec=3600
 
