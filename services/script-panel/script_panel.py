@@ -6,9 +6,11 @@ catalog UI plus a gated "run" endpoint for scripts explicitly marked
 ``runnable: true`` in catalog.json.
 
 Endpoints:
-  GET  /                  HTML UI
+  GET  /                  HTML UI (with guardrail posture strip)
+  GET  /trust             trust console — read-only rig guardrail posture
   GET  /api/catalog       catalog entries + live status + last-run merged
   GET  /api/runs          recent run history (tail of runs.jsonl)
+  GET  /api/trust         guardrail posture JSON (denylist/guards/probation)
   POST /api/run/<id>      execute an allowlisted script, record the result
 
 Safety model (mirrors local_tools_server.py):
@@ -318,6 +320,106 @@ def run_script(entry: dict) -> dict:
 
 
 # --------------------------------------------------------------------------
+# Trust console — read-only posture for the rig scaffold (denylist, armed
+# revert guards, probationary changes, invariants, deny hits, snapshots).
+# Mirrors rig-guard-status.sh; all data is read from the same state files.
+# --------------------------------------------------------------------------
+
+RIG_STATE = Path(os.path.expanduser("~/.local/state/rig-guard"))
+RIG_DENY_CONF = Path(os.path.expanduser("~/.config/rig/deny.conf"))
+RIG_SCRIPTS = Path(os.path.expanduser("~/scripts"))
+
+
+def _journal_tag(tag: str, since: str = "-7 days", limit: int = 25) -> list[dict]:
+    """Recent journal entries for a syslog tag, oldest→newest."""
+    cp = _run_probe(["journalctl", "-t", tag, "--since", since,
+                     "-n", str(limit), "-o", "json", "--no-pager"], timeout=10)
+    out = []
+    for line in cp.stdout.splitlines():
+        try:
+            j = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        try:
+            ts = int(j.get("__REALTIME_TIMESTAMP", "0")) // 1_000_000
+        except (TypeError, ValueError):
+            ts = 0
+        out.append({"ts": ts, "msg": str(j.get("MESSAGE", ""))})
+    return out
+
+
+def trust_posture() -> dict:
+    deny_rules = 0
+    try:
+        deny_rules = sum(
+            1 for l in RIG_DENY_CONF.read_text().splitlines()
+            if l.strip() and not l.lstrip().startswith("#"))
+    except OSError:
+        pass
+
+    guards = []
+    cp = _run_probe(["systemctl", "list-timers", "--all", "agent-guard-*",
+                     "--no-legend", "--no-pager"])
+    for line in cp.stdout.splitlines():
+        toks = line.split()
+        timer = next((t for t in toks if t.endswith(".timer")), "")
+        if timer:
+            guards.append({"unit": timer, "fires": " ".join(toks[1:4])})
+
+    promoted: set[str] = set()
+    try:
+        for l in (RIG_STATE / "promotions.log").read_text().splitlines():
+            if " PROMOTED " in l:
+                promoted.add(l.split(" PROMOTED ", 1)[1].strip())
+    except OSError:
+        pass
+    probation = []
+    try:
+        for gid in (RIG_STATE / "probationary.log").read_text().splitlines():
+            gid = gid.strip()
+            if not gid:
+                continue
+            state = "promoted" if gid in promoted else (
+                "pending" if _run_probe(
+                    ["systemctl", "is-active",
+                     f"agent-guard-{gid}-prob.timer"]
+                ).stdout.strip() == "active" else "expired/reverted")
+            probation.append({"gid": gid, "state": state})
+    except OSError:
+        pass
+
+    inv = _run_probe([str(RIG_SCRIPTS / "rig-invariant-check.sh")], timeout=30)
+    inv_checks = [l.strip() for l in inv.stdout.splitlines() if l.strip()]
+
+    snapshots = []
+    try:
+        for l in (RIG_STATE / "snapshots.log").read_text().splitlines()[-8:]:
+            try:
+                snapshots.append(json.loads(l))
+            except json.JSONDecodeError:
+                continue
+    except OSError:
+        pass
+
+    deny_hits = _journal_tag("agent-deny")
+    inv_fails = [j for j in _journal_tag("rig-invariant") if "FAIL" in j["msg"]]
+    pending = [p for p in probation if p["state"] == "pending"]
+
+    return {
+        "deny_rules": deny_rules,
+        "guards_armed": guards,
+        "probation": probation,
+        "probation_pending": len(pending),
+        "invariants": {"rc": inv.returncode, "checks": inv_checks},
+        "snapshots": snapshots,
+        "deny_hits": deny_hits,
+        "invariant_failures": inv_fails,
+        "verdict": "PASS" if inv.returncode == 0 else "FAIL",
+        "warnings": len(guards) + len(pending) + len(inv_fails),
+    }
+
+
+# --------------------------------------------------------------------------
 # HTTP layer
 # --------------------------------------------------------------------------
 
@@ -399,6 +501,7 @@ tr.missing td{opacity:.45}
 </style></head><body>
 <h1>Script Panel</h1>
 <p class="sub" id="subnote"></p>
+<div id="trustbar" style="margin-bottom:12px;font-size:12px"></div>
 <div id="toolbar">
   <input type="search" id="q" placeholder="filter…">
   <span id="chips"></span>
@@ -513,10 +616,83 @@ async function openDrawer(s){
   }catch(e){document.getElementById('runout').innerHTML='';}
 }
 function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',4000);}
+async function trustBar(){
+  const el=document.getElementById('trustbar');
+  try{
+    const d=await(await fetch('/api/trust')).json();
+    const bad=d.verdict!=='PASS', warn=bad||d.guards_armed.length||d.probation_pending;
+    el.innerHTML=`<a href="/trust" style="color:${bad?'var(--bad)':(warn?'var(--warn)':'var(--ok)')}">`+
+      `guardrails: denylist=${d.deny_rules} · armed=${d.guards_armed.length} · `+
+      `probation=${d.probation_pending} · invariants=${d.verdict} · `+
+      `deny_hits_7d=${d.deny_hits.length}</a>`;
+  }catch(e){el.innerHTML='<span style="color:var(--dim)">guardrails: posture unavailable</span>';}
+}
 document.getElementById('q').oninput=e=>{search=e.target.value.toLowerCase();renderRows()};
 document.getElementById('refresh').onclick=()=>load(true);
 document.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{
   const k=th.dataset.k; sortDir=sortKey===k?-sortDir:1; sortKey=k; renderRows();});
+load(); trustBar();
+</script></body></html>
+"""
+
+
+TRUST_HTML = r"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trust Console</title>
+<style>
+:root{--bg:#0a0a0b;--panel:#121214;--border:#232327;--fg:#e6e6e8;--dim:#9a9aa2;--acc:#4f9cf9;--ok:#3fb950;--bad:#f85149;--warn:#d29922}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;padding:20px;max-width:960px}
+h1{font-size:17px;font-weight:600;margin:0 0 4px}a{color:var(--acc);text-decoration:none}
+p.sub{color:var(--dim);margin:0 0 16px;font-size:12px}
+.verdict{font-size:15px;font-weight:600;padding:8px 14px;border-radius:8px;display:inline-block;margin-bottom:16px}
+.verdict.ok{background:#12261a;color:var(--ok);border:1px solid #1f4a2e}
+.verdict.bad{background:#2b1215;color:var(--bad);border:1px solid #5b1d22}
+section{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin:0 0 8px;font-weight:600}
+table{width:100%;border-collapse:collapse}td{padding:4px 8px;font-size:12.5px;vertical-align:top;border-top:1px solid var(--border)}
+tr:first-child td{border-top:0}
+.dim{color:var(--dim)}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+.empty{color:var(--dim);font-size:12px;font-style:italic}
+button.chip{background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:5px 10px;border-radius:14px;cursor:pointer;font:inherit;font-size:12px}
+button.chip:hover{color:var(--fg);border-color:var(--acc)}
+</style></head><body>
+<h1>Trust Console <span style="color:var(--dim);font-weight:400">· rig guardrail posture</span></h1>
+<p class="sub">read-only — enforcement lives in the exec layer; this only reports. <a href="/">← script panel</a></p>
+<div id="verdict" class="verdict dim">loading…</div>
+<section><h2>Armed revert guards</h2><div id="guards"></div></section>
+<section><h2>Probationary changes</h2><div id="prob"></div></section>
+<section><h2>Invariants</h2><div id="inv"></div></section>
+<section><h2>Deny hits (7d)</h2><div id="deny"></div></section>
+<section><h2>Invariant failures (7d)</h2><div id="invf"></div></section>
+<section><h2>Recent snapshots</h2><div id="snap"></div></section>
+<div style="margin-top:8px"><button class="chip" onclick="load()">↻ refresh</button>
+<span id="stamp" class="dim" style="font-size:11px;margin-left:10px"></span></div>
+<script>
+function esc(t){return String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(ts){return ts?new Date(ts*1000).toLocaleString():'—';}
+function rows(list,html){return list.length?'<table>'+list.map(html).join('')+'</table>':'<div class="empty">none</div>';}
+async function load(){
+  const r=await fetch('/api/trust');const d=await r.json();
+  const v=document.getElementById('verdict');
+  const pend=d.probation_pending, arm=d.guards_armed.length;
+  v.className='verdict '+(d.verdict==='PASS'?'ok':'bad');
+  v.textContent='guardrails: denylist='+d.deny_rules+' rules · armed_guards='+arm+
+    ' · probation_pending='+pend+' · invariants='+d.verdict;
+  document.getElementById('guards').innerHTML=rows(d.guards_armed,
+    g=>`<tr><td class="warn">${esc(g.unit)}</td><td class="dim">fires ${esc(g.fires)}</td></tr>`);
+  document.getElementById('prob').innerHTML=rows(d.probation,
+    p=>`<tr><td>${esc(p.gid)}</td><td class="${p.state==='pending'?'warn':(p.state==='promoted'?'ok':'dim')}">${esc(p.state)}</td></tr>`);
+  document.getElementById('inv').innerHTML=rows(d.invariants.checks,
+    c=>`<tr><td class="${/^ok/.test(c)?'ok':'bad'}">${esc(c)}</td></tr>`);
+  document.getElementById('deny').innerHTML=rows(d.deny_hits.slice().reverse(),
+    h=>`<tr><td class="dim" style="white-space:nowrap">${fmt(h.ts)}</td><td class="bad">${esc(h.msg)}</td></tr>`);
+  document.getElementById('invf').innerHTML=rows(d.invariant_failures.slice().reverse(),
+    h=>`<tr><td class="dim" style="white-space:nowrap">${fmt(h.ts)}</td><td class="bad">${esc(h.msg)}</td></tr>`);
+  document.getElementById('snap').innerHTML=rows(d.snapshots.slice().reverse(),
+    s=>`<tr><td class="dim" style="white-space:nowrap">${esc(s.ts)}</td><td>${esc(s.tag)}</td><td class="dim">${esc(s.snapshot||'')}</td><td class="dim">${esc(s.why||'')}</td></tr>`);
+  document.getElementById('stamp').textContent='updated '+new Date().toLocaleTimeString();
+}
 load();
 </script></body></html>
 """
@@ -544,6 +720,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         if self.path in ("/", "/index.html"):
             self._html(INDEX_HTML)
+        elif self.path in ("/trust", "/trust.html"):
+            self._html(TRUST_HTML)
+        elif self.path.startswith("/api/trust"):
+            self._json(trust_posture())
         elif self.path.startswith("/api/catalog"):
             self._json(catalog_fresh() if "bust" in self.path else catalog_with_status())
         elif self.path.startswith("/api/runs"):

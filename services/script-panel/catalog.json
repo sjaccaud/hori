@@ -10,7 +10,8 @@
     "network": "WoL, SSH hardening",
     "backup": "restic/system backups and recovery media",
     "system": "One-shot fixes, installers, sysctl",
-    "krill": "krill_harvester — paper-trading daemon ops"
+    "krill": "krill_harvester — paper-trading daemon ops",
+    "guardrails": "Agent trust scaffold — denylist, snapshots, rollback, invariants"
   },
   "scripts": [
     {
@@ -1178,6 +1179,144 @@
         "secrets",
         "hook"
       ]
+    },
+    {
+      "id": "rig-health-check",
+      "name": "rig-health-check.sh",
+      "path": "~/scripts/rig-health-check.sh",
+      "category": "guardrails",
+      "what": "7-probe recovery-floor check: llama endpoint, sshd:52222, rocm, power cap, failed units, kernel errors, restic repo.",
+      "why": "Phase-0 gate — if this isn't green, nothing above the recovery floor should be trusted. Read-only.",
+      "created": "2026-10-09",
+      "kind": "script",
+      "runnable": true,
+      "tags": ["guardrails", "health", "audit"]
+    },
+    {
+      "id": "rig-invariant-check",
+      "name": "rig-invariant-check.sh",
+      "path": "~/scripts/rig-invariant-check.sh",
+      "category": "guardrails",
+      "what": "Reads ~/.config/rig/invariants.conf; verifies the rig is still the rig (llama, sshd, GPU clients, mounts, stale guards).",
+      "why": "Runs post-mutation + every 15min via user timer; FAILs are journal-tagged rig-invariant.",
+      "created": "2026-10-09",
+      "kind": "script",
+      "runnable": true,
+      "probe": {
+        "type": "timer",
+        "unit": "rig-invariant-check.timer",
+        "scope": "user"
+      },
+      "tags": ["guardrails", "invariants", "audit"]
+    },
+    {
+      "id": "guardrail-self-test",
+      "name": "guardrail-self-test.sh",
+      "path": "~/scripts/guardrail-self-test.sh",
+      "category": "guardrails",
+      "what": "10-check self-test of the scaffold itself: deny fires, nested deny, snapshot-on-mutate, guard arm path, agent-sys confinement.",
+      "why": "Guardrails get their own watchdog — proves the safety layer works, not just that it exists. Weekly timer.",
+      "created": "2026-10-09",
+      "kind": "script",
+      "runnable": true,
+      "confirm": true,
+      "confirm_text": "Run the self-test? It writes/removes sacrificial test files under /etc/systemd and arms+disarms a guard timer.",
+      "probe": {
+        "type": "timer",
+        "unit": "guardrail-self-test.timer",
+        "scope": "user"
+      },
+      "tags": ["guardrails", "self-test"]
+    },
+    {
+      "id": "rig-guard-status",
+      "name": "rig-guard-status.sh",
+      "path": "~/scripts/rig-guard-status.sh",
+      "category": "guardrails",
+      "what": "One-screen text view: armed revert timers, probation pending, promotions, recent snapshots, health tail.",
+      "why": "CLI twin of the /trust console page. Read-only.",
+      "created": "2026-10-09",
+      "kind": "script",
+      "runnable": true,
+      "tags": ["guardrails", "posture"]
+    },
+    {
+      "id": "guarded-change",
+      "name": "guarded-change.sh",
+      "path": "~/scripts/guarded-change.sh",
+      "category": "guardrails",
+      "what": "snapshot → arm root revert timer → apply → verify → disarm|revert. The dead-man rollback mechanism.",
+      "why": "Every mutation of protected state should flow through this. Not panel-runnable: takes args + sudo.",
+      "created": "2026-10-09",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "notes": "Invoke from shell: guarded-change.sh --ttl 900 --verify '<cmd>' --apply '<cmd>' [--probation]. See ~/runbooks.",
+      "tags": ["guardrails", "rollback", "core-mechanism"]
+    },
+    {
+      "id": "agent-deny-check",
+      "name": "agent-deny-check.py",
+      "path": "~/scripts/agent-deny-check.py",
+      "category": "guardrails",
+      "what": "Devin PreToolUse hook enforcing ~/.config/rig/deny.conf on full command strings (catches bash -c nesting). Blocks journal-tag agent-deny.",
+      "why": "Canonical denylist enforcement point; 24 incident-minted rules + compiled-in floor.",
+      "created": "2026-10-09",
+      "kind": "hook",
+      "runnable": false,
+      "notes": "Hook — invoked by Devin on every tool call; takes hook JSON on stdin.",
+      "tags": ["guardrails", "denylist", "hook"]
+    },
+    {
+      "id": "agent-pre-mutate",
+      "name": "agent-pre-mutate.py",
+      "path": "~/scripts/agent-pre-mutate.py",
+      "category": "guardrails",
+      "what": "Devin PreToolUse hook: scoped restic snapshot before writes to protected paths or inherent mutators (systemctl enable, apt install).",
+      "why": "Nothing wrong is permanent — every protected mutation is preceded by a restorable snapshot. Fail-closed.",
+      "created": "2026-10-09",
+      "kind": "hook",
+      "runnable": false,
+      "notes": "Hook — invoked by Devin before mutating tool calls; logs to ~/.local/state/rig-guard/snapshots.log.",
+      "tags": ["guardrails", "snapshot", "hook"]
+    },
+    {
+      "id": "agent-promote",
+      "name": "agent-promote.sh",
+      "path": "~/scripts/agent-promote.sh",
+      "category": "guardrails",
+      "what": "Promote a probationary change to permanent — disarms its auto-revert timer and logs the promotion.",
+      "why": "Phase-5 probation: unpromoted changes revert at 24h. Human decision point.",
+      "created": "2026-10-09",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Usage: agent-promote.sh <gid> — gids listed by rig-guard-status or /trust.",
+      "tags": ["guardrails", "probation"]
+    },
+    {
+      "id": "safe-config-edit",
+      "name": "safe-config-edit.sh",
+      "path": "~/scripts/safe-config-edit.sh",
+      "category": "guardrails",
+      "what": "guarded-change wrapper for single-file config edits: install new content + verify cmd + auto-revert.",
+      "why": "Runbook primitive — shrinks what an agent has to compose for the common mutation.",
+      "created": "2026-10-09",
+      "kind": "script",
+      "runnable": false,
+      "sudo": true,
+      "tags": ["guardrails", "wrapper"]
+    },
+    {
+      "id": "gpu-job-audit",
+      "name": "gpu-job-audit.sh",
+      "path": "~/scripts/gpu-job-audit.sh",
+      "category": "guardrails",
+      "what": "Scans timers + ~/scripts for GPU-touching jobs bypassing the gpu-lane acquire/release fencing.",
+      "why": "Lane-rule tripwire; exits nonzero on violations. Run after adding any scheduled GPU job.",
+      "created": "2026-10-09",
+      "kind": "script",
+      "runnable": true,
+      "tags": ["guardrails", "gpu", "audit"]
     }
   ]
 }
