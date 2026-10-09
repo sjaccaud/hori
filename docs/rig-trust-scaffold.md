@@ -1,7 +1,16 @@
 # Rig Trust Scaffold — Model-Agnostic Safety Layer
 
-Status: spec. Target: weekend implementation on the single-R9700 rig
-(27B-class local models, 32GB VRAM). No dependency on GPU card 2.
+Status: PHASES 0-6 BUILT + VERIFIED 2026-10-09 evening (ahead of the
+planned weekend — implementation session). Phase 4.5 partially done
+(snapshot posture + contract check live; script-panel console deferred).
+27B/32GB rig, no card-2 dependency — as designed.
+
+Verified live: deny hook 16/16 verdicts; pre-mutate snapshots landing
+(pre-agent-*/guard-* restic tags); guarded-change all three paths
+(happy/verify-fail-immediate-revert/orphaned-TTL-revert) against real
+/etc mutations; probation promote+expire; invariants 8/8; self-test 10/10;
+deployment_contract=PASS with new guardrails check; snapshot injection
+carries 'guardrails:' posture line into every gated OWUI prompt.
 
 ## Purpose
 
