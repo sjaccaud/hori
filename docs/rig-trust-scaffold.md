@@ -1,0 +1,155 @@
+# Rig Trust Scaffold — Model-Agnostic Safety Layer
+
+Status: spec. Target: weekend implementation on the single-R9700 rig
+(27B-class local models, 32GB VRAM). No dependency on GPU card 2.
+
+## Purpose
+
+Make the rig safe to operate under *any* agent — local 27B, future 120B,
+or cloud SWE-2 — by moving trust from "the model reads the rules" to
+"the mechanism enforces them." Advisory layers (AGENTS.md, thread state)
+remain, but nothing load-bearing depends on a model obeying prose.
+
+Threat model: confused/misaligned-with-context local model executing
+confident-but-wrong commands; prompt injection via fetched content;
+operator fatigue approving bad plans; availability loss of cloud models
+(ban/KYC/vend risk) requiring heavier reliance on local inference.
+
+Design sentence: **the rig should stay safe even if the model is wrong.**
+
+## Architecture decision
+
+Enforcement lives at the exec chokepoint, not the chat surface.
+`local_tools_server.py` is the sole owner of `run_safe_command` and
+already carries deny policy + audit log — the new layers plug in there
+so every frontend (OWUI, Devin CLI, Aider, SSH) inherits them for free.
+Devin CLI additionally gets a PreToolUse/exec wrapper so commands that
+bypass local-tools still hit the same deny/snapshot path.
+
+Chat surfaces stay conversational; trust surfaces show state (below).
+
+## Phase 0 — Prove the floor (Fri evening ~1h)
+
+Nothing builds on unverified backups.
+
+- [ ] `restic check` + restore drill of an `/etc` subtree to /tmp
+      (closes open item in `system-stability`)
+- [ ] Confirm `grub-reboot` one-shot boot works (precondition for
+      boot-counted kernel testing later)
+- [ ] `~/scripts/rig-health-check.sh` — probes `:8080/v1/models`, SSH
+      listener, `rocminfo`, `power1_cap` ∈ {210,330}, clean boot state.
+      Exit 0/1. Becomes THE verification primitive.
+
+Gate: restore verified + health script green. Stop here if not.
+
+## Phase 1 — Minted denylists (Sat AM ~2h)
+
+Incidents harden into mechanism.
+
+- [ ] `~/scripts/agent-deny.conf` — machine-readable denylist:
+      `/dev/i2c-*` reads, `ddcutil`, `i2cdetect`, MCR/Low-Latency writes,
+      `power1_cap` writes outside ai-power-manager. Each entry cites the
+      episode that minted it.
+- [ ] Enforce in `run_safe_command` (local-tools) + Devin exec wrapper.
+      Deny → log + return citation, never silent.
+- [ ] Seed from system-stability eps 009–010 + Sep i2c/RAS freezes.
+
+Gate: `ddcutil` via wrapper denied with episode citation.
+
+## Phase 2 — Snapshot-before-mutate (Sat early PM ~3h)
+
+- [ ] `~/scripts/pre-mutate-snapshot.sh <label>` — restic tag
+      `pre-agent-<session>` scoped to `/etc` + declared touched paths;
+      `git add -A && commit` on git-tracked config dirs.
+- [ ] Trigger paths (hook/wrapper): writes hitting `/etc`, `fstab`,
+      `grub.d`, `systemd`, `/sys/class/drm`, `mkinitcpio` → snapshot
+      lands BEFORE the write.
+- [ ] `etckeeper` if absent.
+
+Gate: write test file under `/etc/systemd/system/`; snapshot precedes
+write in audit log ordering.
+
+## Phase 3 — Dead-man rollback + verification contracts (Sat PM ~4h)
+
+The seatbelt. Core of the weekend.
+
+- [ ] `~/scripts/guarded-change.sh <verify-cmd> <ttl> -- <apply-cmd>`:
+  1. `pre-mutate-snapshot`
+  2. capture pre-state (file hashes, unit states)
+  3. apply
+  4. arm `systemd-run --on-active=<ttl>` revert unit
+  5. run `<verify-cmd>` (default `rig-health-check.sh`) → success
+     disarms; fail/timeout → auto-revert.
+- [ ] Convention: no bare apply for config mutations; verify is
+      declared up front or the wrapper refuses.
+
+Gate: deliberately break a test unit config → apply via
+`guarded-change` → confirm self-heal at TTL expiry.
+
+## Phase 4 — Shrink improvisation surface (Sat evening ~2h)
+
+- [ ] `safe-restart.sh`, `safe-config-edit.sh <file> <verify>`,
+      `safe-upgrade.sh` — `gpu-lane.sh` pattern: model supplies
+      parameters, never composes the command.
+- [ ] `~/runbooks/` — first three runbooks: service restart, model
+      swap, driver-adjacent config change. Strict step format +
+      declared verify + declared write-scope.
+
+## Phase 5 — Probationary changes (Sun AM ~3h)
+
+- [ ] `safe-config-edit --probationary` → 24h auto-revert unless
+      `agent-promote <change>` runs.
+- [ ] Policy: agent-applied = probationary by default; permanence is
+      opt-in. Generalizes the `--ttl` instinct.
+
+## Phase 6 — Invariants + self-tests (Sun PM ~2h)
+
+- [ ] `~/.config/rig/invariants.conf` + `rig-invariant-check.sh`:
+      power cap set, `:8080` healthy, no stray `/dev/dri` writers,
+      MCR/Low-Latency OFF, DDR speed nominal. Post-mutation + 15-min
+      timer; violations → notify + flag.
+- [ ] `guardrail-self-test.timer` (weekly): fake `/etc` write + fake
+      `/dev/i2c` read, assert both denied, log to system-stability.
+      Guardrails rot silently — the scaffold gets its own smoke test.
+
+## Phase 4.5 — Trust surface (integration with OWUI daily-driver, ep-020)
+
+Enforcement lands at exec layer; this phase makes it visible.
+
+- [ ] **script-panel :8770 → rig console.** Read-mostly tailnet page:
+      armed rollbacks w/ countdowns, probationary changes awaiting
+      promote, invariant violations, denylist hits. This is the
+      check-from-iPhone surface OWUI can't be (chat-first ≠ approval
+      queue).
+- [ ] **snapshot injection extension.** `state_snapshot.py` adds
+      guardrail posture (`denylist=ARMED`, `rollbacks_pending=1`,
+      `invariants=PASS`) — every model on every surface sees
+      enforcement state without asking.
+- [ ] **deployment_contract.py checks.** Register: deny.conf loaded,
+      snapshot timer healthy, self-test last-run green. Safety layer
+      covered by the existing fail-loudly pattern.
+- [ ] **Approval-from-phone.** journal_notify pattern (krill stack) →
+      tailnet notification on armed rollback / expiring probation.
+      The phone becomes the approve button.
+
+## Deferred (needs card 2 or >weekend)
+
+120B tier, quorum review, ephemeral-root overlayfs sessions, PiKVM,
+cgroup exec fences, guard-model distillation, planner/executor split,
+semantic exec firewall v2, honeytokens, Pi hardware watchdog, airgap
+rebuild drill, signed model manifest.
+
+## Ordering rationale
+
+Snapshots make rollback meaningful → rollback makes probation trivial →
+contracts make invariants actionable → enforcement makes every surface
+safer without per-surface work. Phases 0–3 are the seatbelt; 4–6 are
+daily-driver trust; 4.5 makes it legible.
+
+## Success metric
+
+A 27B runs `safe-*` operations unsupervised inside the envelope, and
+nothing it does is both wrong and permanent at once. Attended-trust
+~35%→~55%; gated deep work ~60%→~75%; bounded ops ~85%→~92% (judgment
+bands, not measurements). Capability on hard long-horizon tasks is
+unchanged — that column is weights, not scaffolding.
