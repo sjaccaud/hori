@@ -196,6 +196,42 @@ def _deployment_contract() -> str:
         return f"deployment_contract=ERROR ({e})"
 
 
+def _guardrails() -> str:
+    """Enforcement posture — the model sees the safety layer's live state
+    in every prompt instead of assuming it. Fail-open wording on purpose:
+    if a layer is unreadable we say DOWN rather than silently omit."""
+    parts = []
+    deny = HOME / ".config/rig/deny.conf"
+    try:
+        n = sum(1 for l in deny.read_text().splitlines()
+                if l.strip() and not l.startswith("#"))
+        parts.append(f"denylist=ARMED({n} rules)")
+    except Exception:
+        parts.append("denylist=DOWN")
+    armed = _run(
+        ["systemctl", "list-timers", "agent-guard-*", "--no-legend"], timeout=5
+    ).strip().splitlines()
+    armed = [l for l in armed if l.strip()]
+    parts.append(f"armed_guards={len(armed)}" if armed else "armed_guards=0")
+    prob = HOME / ".local/state/rig-guard/probationary.log"
+    pending = 0
+    if prob.exists():
+        for gid in prob.read_text().splitlines()[-50:]:
+            gid = gid.strip()
+            if not gid:
+                continue
+            r = subprocess.run(["systemctl", "is-active", "--quiet",
+                                f"agent-guard-{gid}-prob.timer"],
+                               capture_output=True, timeout=5)
+            if r.returncode == 0:
+                pending += 1
+    parts.append(f"probation_pending={pending}")
+    inv = subprocess.run([str(HOME / "scripts/rig-invariant-check.sh")],
+                         capture_output=True, timeout=30)
+    parts.append("invariants=PASS" if inv.returncode == 0 else "invariants=FAIL")
+    return "guardrails: " + " ".join(parts)
+
+
 def _threads() -> list[str]:
     rows = []
     if not THREADS_DIR.is_dir():
@@ -259,6 +295,7 @@ def render() -> str:
         f"docker:  {_docker_states()}",
         _hori_state_tools(),
         _deployment_contract(),
+        _guardrails(),
         f"resources: {_resources()}",
         _git_dirty(),
         "",

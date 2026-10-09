@@ -21,6 +21,7 @@ import argparse
 import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -407,6 +408,58 @@ def check_builtin_tools() -> tuple[bool, str]:
     return True, f"{len(rows)} models match canonical builtinTools"
 
 
+def check_guardrails() -> tuple[bool, str]:
+    """The rig trust scaffold (docs/rig-trust-scaffold.md) must stay
+    wired: denylist loaded, hook scripts present, timers enabled,
+    helper root-owned, config hook registered. An agent surface is only
+    as safe as this layer — it should fail loudly if it rots."""
+    bad = []
+    deny = HOME / ".config/rig/deny.conf"
+    try:
+        n = sum(1 for l in deny.read_text().splitlines()
+                if l.strip() and not l.startswith("#"))
+        if n < 5:
+            bad.append(f"deny.conf suspiciously small ({n})")
+    except OSError:
+        bad.append("deny.conf missing")
+    for p in (str(HOME / "scripts/agent-deny-check.py"),
+              str(HOME / "scripts/agent-pre-mutate.py"),
+              str(HOME / "scripts/guarded-change.sh"),
+              str(HOME / "scripts/rig-invariant-check.sh")):
+        if not Path(p).exists():
+            bad.append(f"missing {Path(p).name}")
+    try:
+        cfg = json.loads(re.sub(r"//.*", "",
+                   (HOME / ".config/devin/config.json").read_text()))
+        pre = cfg.get("hooks", {}).get("PreToolUse", [])
+        cmds = [h.get("command", "") for e in pre for h in e.get("hooks", [])]
+        if not any("agent-deny-check" in c for c in cmds):
+            bad.append("PreToolUse deny hook not registered")
+        if not any("agent-pre-mutate" in c for c in cmds):
+            bad.append("PreToolUse pre-mutate hook not registered")
+    except Exception:
+        bad.append("devin config unreadable")
+    st = os.stat("/usr/local/sbin/agent-sys")
+    if st.st_uid != 0 or st.st_mode & 0o002:
+        bad.append("agent-sys not root-owned or group/world-writable")
+    out, rc = _run(["sudo", "-n", "/usr/local/sbin/agent-sys",
+                    "read", "/etc/fstab"])
+    if rc != 0:
+        bad.append("agent-sys sudo path broken")
+    if not Path("/etc/sudoers.d/90-agent-scaffold").exists():
+        bad.append("90-agent-scaffold sudoers missing")
+    out, _ = _run(["systemctl", "--user", "is-enabled",
+                   "rig-invariant-check.timer", "guardrail-self-test.timer"])
+    if out.count("enabled") != 2:
+        bad.append("rig timers not enabled")
+    out, rc = _run([str(HOME / "scripts/rig-invariant-check.sh")], timeout=30)
+    if rc != 0:
+        bad.append("invariants currently FAILING")
+    if bad:
+        return False, "; ".join(bad)
+    return True, "denylist+hooks+helper+timers wired, invariants green"
+
+
 CHECKS = [
     ("units", check_units),
     ("endpoints", check_endpoints),
@@ -419,6 +472,7 @@ CHECKS = [
     ("filter_valves", check_filter_valves),
     ("builtin_tools", check_builtin_tools),
     ("compat_api_closed", check_compat_api_closed),
+    ("guardrails", check_guardrails),
 ]
 
 
