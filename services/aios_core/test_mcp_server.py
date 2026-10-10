@@ -428,3 +428,92 @@ def test_call_tool_memory_search_and_store(admin_token, monkeypatch):
     data = json.loads(result.content[0].text)
     assert len(data) == 1
     assert data[0]["content"] == "prior memory"
+
+
+# ---------------------------------------------------------------------------
+# Streamable-HTTP transport (/mcp/http) — native OWUI MCP client target.
+# ---------------------------------------------------------------------------
+
+READ_HDR = {"Authorization": "Bearer test-read-token"}
+ADMIN_HDR = {"Authorization": "Bearer test-admin-token"}
+
+
+def test_streamable_requires_auth(read_token):
+    """No token -> 401, wrong token -> 403. Fail-closed like the SSE lane."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={"jsonrpc": "2.0", "id": 1,
+                                     "method": "ping", "params": {}})
+    assert r.status_code == 401
+    r = client.post("/mcp/http", json={"jsonrpc": "2.0", "id": 1,
+                                       "method": "ping", "params": {}},
+                    headers={"Authorization": "Bearer wrong"})
+    assert r.status_code == 403
+
+
+def test_streamable_initialize_and_list(read_token):
+    """initialize handshake then tools/list under read scope — the exact
+    sequence OWUI's streamablehttp_client performs."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={
+        "jsonrpc": "2.0", "id": 0, "method": "initialize",
+        "params": {"protocolVersion": "2025-03-26",
+                   "capabilities": {},
+                   "clientInfo": {"name": "open-webui", "version": "0"}},
+    }, headers=READ_HDR)
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    body = r.json()
+    assert body["result"]["serverInfo"]["name"] == "aios-mcp"
+    assert body["result"]["capabilities"]["tools"] == {}
+
+    r = client.post("/mcp/http", json={"jsonrpc": "2.0", "id": 1,
+                                       "method": "tools/list", "params": {}},
+                    headers=READ_HDR)
+    names = {t["name"] for t in r.json()["result"]["tools"]}
+    assert {"thread_list", "thread_read", "episode_search",
+            "memory_search"} <= names
+    assert {"memory_store", "episode_append"}.isdisjoint(names)
+
+
+def test_streamable_notification_returns_202(read_token):
+    """notifications/initialized (no id) -> 202, empty body."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={
+        "jsonrpc": "2.0", "method": "notifications/initialized",
+    }, headers=READ_HDR)
+    assert r.status_code == 202
+
+
+def test_streamable_write_tool_denied_read_scope(read_token):
+    """read scope cannot invoke write tools — refused before dispatch."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={
+        "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+        "params": {"name": "memory_store",
+                   "arguments": {"content": "x", "conversation_id": "c"}},
+    }, headers=READ_HDR)
+    assert r.status_code == 200
+    assert "error" in r.json()
+
+
+def test_streamable_admin_scope_gets_writes(admin_token):
+    """admin token on the same endpoint sees the full catalog."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={"jsonrpc": "2.0", "id": 1,
+                                       "method": "tools/list", "params": {}},
+                    headers=ADMIN_HDR)
+    names = {t["name"] for t in r.json()["result"]["tools"]}
+    assert {"memory_store", "episode_append"} <= names
+
+
+def test_streamable_bad_json_400(read_token):
+    client = TestClient(app)
+    r = client.post("/mcp/http", content=b"{not json", headers=READ_HDR)
+    assert r.status_code == 400
+
+
+def test_streamable_get_method_not_allowed(read_token):
+    """No session stream on the stateless lane — GET is refused."""
+    client = TestClient(app)
+    r = client.get("/mcp/http", headers=READ_HDR)
+    assert r.status_code == 405

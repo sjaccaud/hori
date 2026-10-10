@@ -527,16 +527,39 @@ PROJECT_TOOL_MODELS = {
     "qwen-dsh-medium",
 }
 
-# Read-only HORI state tools (threads/episodes/memory) via the mcpo bridge
-# behind the :8775 allowlist filter. get_status is deliberately absent — it
-# is owned by local-tools so the model sees exactly one status tool.
+def _hori_mcp_read_token() -> str:
+    """Read-scoped HORI MCP bearer for the native-MCP connection row.
+
+    Read from the host mcpo config at apply time — the token must never be
+    committed (hori-mcpo.service reads the same file upstream). Returns ''
+    when unavailable; the row is written anyway so a later apply can
+    re-inject once the token exists.
+    """
+    try:
+        import pathlib
+
+        cfg = json.loads(
+            (pathlib.Path.home() / ".config/mcpo/hori.json").read_text()
+        )
+        auth = cfg["mcpServers"]["hori"]["headers"]["Authorization"]
+        return auth.split(" ", 1)[1] if " " in auth else auth
+    except Exception:
+        return ""
+
+
+# Read-only HORI state tools (threads/episodes/memory) via native MCP on
+# aios_core: OWUI's streamablehttp client -> POST /mcp/http, read-scoped
+# bearer. Retired the mcpo -> :8775 filter OpenAPI bridge (2026-10-09).
+# function_name_filter_list still caps the OWUI surface at the 4 state
+# tools — get_status stays local-tools-owned so the model sees exactly
+# one status tool.
 HORI_STATE_CONNECTION = {
-    "url": "http://127.0.0.1:8775",
-    "path": "openapi.json",
-    "type": "openapi",
-    "auth_type": "none",
+    "url": "http://127.0.0.1:5680/mcp/http",
+    "path": "",
+    "type": "mcp",
+    "auth_type": "bearer",
     "headers": {},
-    "key": "",
+    "key": _hori_mcp_read_token(),
     "config": {
         "enable": True,
         "function_name_filter_list": (
@@ -550,6 +573,9 @@ HORI_STATE_CONNECTION = {
         "description": "Read-only rig/agent state: threads, episodes, memory",
     },
 }
+
+# Retired bridge URL — the row is stripped wherever it appears.
+HORI_STATE_RETIRED_URL = "http://127.0.0.1:8775"
 
 
 def workspace_server_tool_ids_for(model_id: str) -> list[str]:
@@ -588,8 +614,8 @@ class Filter:
             description="Comma-separated model ids to attach local tool servers to.",
         )
         server_tool_ids: str = Field(
-            default="server:local-tools,server:hori-state",
-            description="Comma-separated 'server:<id>' tool_ids to attach (server-side execution).",
+            default="server:local-tools,server:mcp:hori-state",
+            description="Comma-separated 'server:<id>' tool_ids to attach (server-side execution). MCP connections resolve via 'server:mcp:<id>'.",
         )
         project_models: str = Field(
             default="qwen-128k,qwen-deepdive,qwen-dsh-fast,qwen-dsh-low,qwen-dsh-medium",
@@ -887,6 +913,9 @@ def main():
     row = c.execute("SELECT value FROM config WHERE key='tool_server.connections'").fetchone()
     if row:
         conns = json.loads(row[0])
+        # Drop the retired mcpo->filter bridge row wherever it sits.
+        conns = [conn for conn in conns
+                 if conn.get('url', '') != HORI_STATE_RETIRED_URL]
         # Ensure project-tools/workspace-tools/hori-state are present and
         # local-tools is clean.
         urls = {conn_cfg.get('url', '') for conn_cfg in conns}
@@ -914,6 +943,12 @@ def main():
                 conn_cfg['info']['id'] = 'project-tools'
                 conn_cfg['info']['name'] = 'Project Tools'
             elif url == HORI_STATE_CONNECTION['url']:
+                # Native-MCP row: normalize type/auth/token each apply so
+                # token rotation propagates from the host config.
+                conn_cfg['type'] = 'mcp'
+                conn_cfg['auth_type'] = 'bearer'
+                if HORI_STATE_CONNECTION['key']:
+                    conn_cfg['key'] = HORI_STATE_CONNECTION['key']
                 conn_cfg['config'] = conn_cfg.get('config', {})
                 conn_cfg['config']['enable'] = True
                 conn_cfg['config']['function_name_filter_list'] = (
@@ -1049,7 +1084,7 @@ def main():
             json.dumps(
                 {
                     "models": ",".join(ALL_QWEN_DEVSTRAL),
-                    "server_tool_ids": "server:local-tools,server:hori-state",
+                    "server_tool_ids": "server:local-tools,server:mcp:hori-state",
                     "project_models": ",".join(sorted(PROJECT_TOOL_MODELS)),
                     "project_tool_ids": "server:project-tools",
                     "write_models": ",".join(sorted(WORKSPACE_WRITE_MODELS)),

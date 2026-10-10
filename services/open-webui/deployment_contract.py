@@ -43,8 +43,6 @@ SYSTEM_UNITS = [
     "aios_core",
 ]
 USER_UNITS = [
-    "hori-mcpo.service",
-    "hori-mcpo-watchdog.timer",
     "aios-state-snapshot.timer",
     "idea-factory-web.service",
     "script-panel.service",
@@ -119,26 +117,92 @@ def check_endpoints() -> tuple[bool, str]:
     return True, f"{len(HTTP_ENDPOINTS)} endpoints healthy"
 
 
-def check_hori_state_tools() -> tuple[bool, str]:
-    spec, status = _http_json("http://127.0.0.1:8775/openapi.json")
-    n = len((spec or {}).get("paths") or {})
-    if n == 0:
-        return False, "empty/absent spec — mcpo bridge dead"
-    return True, f"{n} paths"
-
-
-def check_mcpo_auth() -> tuple[bool, str]:
-    """:8774 exposes write-capable hori tools — unauthenticated direct
-    access must be rejected (mcpo --api-key/--strict-auth, 2026-09-23)."""
+def _mcp_read_token() -> str:
+    """Read-scoped MCP bearer from the canonical hori.yaml source
+    (mcp.read_token) — same value aios_core resolves via
+    hori.config.MCP_READ_TOKEN. Never printed; only used in a header."""
     try:
-        urllib.request.urlopen("http://127.0.0.1:8774/hori/openapi.json", timeout=4)
-        return False, "mcpo spec served WITHOUT auth — write tools exposed"
+        for line in Path("/etc/hori/hori.yaml").read_text().splitlines():
+            s = line.strip()
+            if s.startswith("read_token:"):
+                return s.split(":", 1)[1].strip().strip("\"'")
+    except OSError:
+        pass
+    return ""
+
+
+def check_mcp_native() -> tuple[bool, str]:
+    """Native MCP lane (replaced the mcpo->:8775 OpenAPI filter bridge
+    2026-10-09): /mcp/http must refuse unauthenticated callers, serve a
+    read-scoped catalog with write tools absent, and OWUI's stored
+    tool_server.connections row must point at it as type 'mcp'."""
+    # Unauthenticated POST must be refused (401/403 both fine).
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:5680/mcp/http",
+            data=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=4)
+        return False, "unauthenticated /mcp/http answered — auth dead"
     except urllib.error.HTTPError as e:
-        if e.code == 401:
-            return True, "unauthenticated access rejected (401)"
-        return False, f"unexpected status {e.code}"
+        if e.code not in (401, 403):
+            return False, f"unexpected unauth status {e.code}"
     except Exception as e:
-        return False, f"probe error: {e}"
+        return False, f"unauth probe error: {e}"
+    # Read-scoped tools/list: catalog present, write tools absent. If the
+    # admin bearer ever lands in OWUI's row this fails instead of
+    # silently re-exposing writes.
+    token = _mcp_read_token()
+    if not token:
+        return False, "hori.yaml mcp.read_token unreadable"
+    req = urllib.request.Request(
+        "http://127.0.0.1:5680/mcp/http",
+        data=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    try:
+        resp = json.loads(urllib.request.urlopen(req, timeout=8).read())
+    except Exception as e:
+        return False, f"read-scope tools/list failed: {e}"
+    names = {
+        t.get("name") for t in (resp.get("result") or {}).get("tools") or []
+    }
+    leaked = names & {"memory_store", "episode_append"}
+    if leaked:
+        return False, f"write tools exposed under read scope: {sorted(leaked)}"
+    if not names:
+        return False, "catalog empty"
+    # OWUI wiring: the hori-state row must be type=mcp on the native URL,
+    # carry a bearer key, and the retired :8775 bridge row must be gone.
+    try:
+        rows = _owui_sql(
+            "SELECT value FROM config WHERE key='tool_server.connections'"
+        )
+        conns = json.loads(rows[0][0]) if rows else []
+    except RuntimeError as e:
+        return False, str(e)
+    if any(c.get("url", "").startswith("http://127.0.0.1:8775")
+           for c in conns):
+        return False, "retired :8775 bridge row still present"
+    row = next(
+        (c for c in conns
+         if (c.get("info") or {}).get("id") == "hori-state"),
+        None,
+    )
+    if not row:
+        return False, "hori-state row missing from tool_server.connections"
+    if row.get("type") != "mcp" or "/mcp/http" not in row.get("url", ""):
+        return False, (
+            f"hori-state not native-MCP "
+            f"({row.get('type')} {row.get('url')})"
+        )
+    if not row.get("key"):
+        return False, "hori-state bearer key empty"
+    return True, f"native lane live, read-scoped ({len(names)} tools)"
 
 
 def check_local_tools_status() -> tuple[bool, str]:
@@ -258,7 +322,7 @@ def check_filter_valves() -> tuple[bool, str]:
         if live != canon[canon_name]:
             bad.append(f"{valve_key} drifted")
     for key, expect in (
-        ("server_tool_ids", {"server:local-tools", "server:hori-state"}),
+        ("server_tool_ids", {"server:local-tools", "server:mcp:hori-state"}),
         ("project_tool_ids", {"server:project-tools"}),
         ("write_server_tool_ids", {"server:workspace-tools"}),
     ):
@@ -307,38 +371,6 @@ def _canon_constants() -> dict:
         except Exception:
             pass
     return {k: ns[k] for k in CANON_CONSTANTS if k in ns}
-
-
-def check_mcp_scope() -> tuple[bool, str]:
-    """The mcpo upstream token must be read-scoped: write tools
-    (memory_store, episode_append) must not appear in the served
-    catalog. If the admin bearer ever lands back in hori.json, this
-    fails instead of silently re-exposing writes."""
-    env = Path.home() / ".config/mcpo/mcpo.env"
-    key = None
-    try:
-        for line in env.read_text().splitlines():
-            if line.startswith("MCPO_API_KEY="):
-                key = line.split("=", 1)[1].strip().strip('"')
-    except OSError as e:
-        return False, f"mcpo.env unreadable: {e}"
-    if not key:
-        return False, "mcpo.env missing MCPO_API_KEY"
-    req = urllib.request.Request(
-        "http://127.0.0.1:8774/hori/openapi.json",
-        headers={"Authorization": f"Bearer {key}"},
-    )
-    try:
-        spec = json.loads(urllib.request.urlopen(req, timeout=8).read())
-    except Exception as e:
-        return False, f"mcpo openapi unreachable: {e}"
-    names = {p.rsplit("/", 1)[-1] for p in spec.get("paths", {})}
-    leaked = names & {"memory_store", "episode_append"}
-    if leaked:
-        return False, f"write tools exposed upstream: {sorted(leaked)}"
-    if not names:
-        return False, "upstream catalog empty"
-    return True, f"upstream catalog read-scoped ({len(names)} tools)"
 
 
 def check_compat_api_closed() -> tuple[bool, str]:
@@ -483,9 +515,7 @@ def check_guardrails() -> tuple[bool, str]:
 CHECKS = [
     ("units", check_units),
     ("endpoints", check_endpoints),
-    ("hori_state_tools", check_hori_state_tools),
-    ("mcpo_auth", check_mcpo_auth),
-    ("mcp_scope", check_mcp_scope),
+    ("mcp_native", check_mcp_native),
     ("local_tools_status", check_local_tools_status),
     ("local_tools_deny", check_local_tools_deny),
     ("snapshot_fresh", check_snapshot_fresh),

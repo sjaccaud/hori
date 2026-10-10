@@ -9,7 +9,7 @@
 
 **Branch:** `slice/20-owui-contract-guards` (off slice/19 HEAD)
 
-**Demo criterion:** `python3 services/open-webui/deployment_contract.py` shows `compat_api_closed` PASS and the extended `builtin_tools` check covering `meta.knowledge`.
+**Demo criterion:** `python3 services/open-webui/deployment_contract.py` shows `compat_api_closed` PASS and the extended `builtin_tools` check covering `meta.knowledge`. Scope extended 2026-10-09: native-MCP collapse (OWUI → `/mcp/http` direct; mcpo bridge retired) — new `mcp_native` contract check replaces `hori_state_tools`/`mcpo_auth`/`mcp_scope`.
 
 **What it resolves:** the open-webui thread's three flagged items. Live probing 2026-10-03 found the documented "/v1/* bypasses filters" concern was wrong in detail — `/v1/*` doesn't exist as an API surface in this OWUI version (SPA fallback: GET→index.html, POST→405). The real compat routers are `/openai/*` and `/ollama/*` — they DO bypass inlet filters but are unreachable: `ENABLE_API_KEYS=false`, zero `api_key` rows, unauthenticated POST → 401, and nothing on the box consumes them (clients hit llama router :8080). kb-sync timer already disabled; collection unattached since Phase A.
 
@@ -1151,6 +1151,23 @@ replies in text bubble AND speaks the reply aloud through speakers.
 **Demo:** `curl` to Open-WebUI `qwen-128k` and `qwen-long` with the project-survey question → both models now emit a `run_safe_command` call (e.g. `ls -la <user-home>/Projects/`) instead of a broad `query_knowledge_files` call.
 
 **Branch:** `slice/macos-project-context` (current working branch). `services/open-webui/` helper scripts and global `AGENTS.md` updated.
+
+### [2026-10-09] Native MCP collapse: OWUI → aios_core `/mcp/http`, mcpo bridge retired
+
+**Problem:** OWUI reached HORI MCP tools through a 3-hop bridge — mcpo (`:8774`, MCP-SSE→OpenAPI) → hori-filter (`:8775`, spec allowlist) → aios_core SSE (`:5680`) — plus a watchdog timer compensating for mcpo's missing reconnect. ep-020 called for replacing it with OWUI 0.11.4's native MCP client.
+
+**What was built:**
+- `mcp_streamable_endpoint` in `services/aios_core/mcp_server.py`, mounted `POST /mcp/http` in `main.py`: streamable-HTTP (2025-03-26 spec), POST-only, no session id, scope re-resolved from the bearer on every request via the existing `mcp_auth_dependency` + `_handle_mcp_message` dispatcher. Notifications → 202; single → JSON; batch → array. 7 new tests (23 MCP total).
+- `fix_tooling.py`: `HORI_STATE_CONNECTION` → `type: "mcp"`, `auth_type: "bearer"`, key injected at apply time from the host mcpo config (never committed); the `:8775` row is stripped wherever found; `server_tool_ids` valve → `server:mcp:hori-state` (OWUI resolves MCP connections under the `server:mcp:` prefix — discovered in middleware, would have silently attached zero tools).
+- `deployment_contract.py`: `mcp_native` check replaces `hori_state_tools`/`mcpo_auth`/`mcp_scope` — asserts unauth POST refused, read-scope catalog present with write tools absent, and the OWUI DB row is `type=mcp` + `/mcp/http` + keyed. Reads the token from canonical `/etc/hori/hori.yaml`.
+- `state_snapshot.py`: hori-state probe repointed to the native lane (401/403 = OK).
+- Retired live: `hori-mcpo.service`, `hori-mcpo-filter.service`, `hori-mcpo-watchdog.timer/.service` — disabled, stopped, unit files removed; `:8774`/`:8775` confirmed closed. Repo copies `git rm`'d (`services/open-webui/hori-mcpo/` deleted).
+
+**Demo:** OWUI's own `connect_mcp_server` (the function chat middleware calls for `server:mcp:` tool_ids) inside the live container: resolved the stored row → bearer headers → connect → `list_tool_specs` filtered to exactly `thread_list,thread_read,episode_search,memory_search` → `episode_search` call returned real episode data. Direct-client probe confirmed `memory_store` refused under read scope.
+
+**Surprised:** OWUI tool_ids for MCP connections need `server:mcp:` prefix, not `server:` — the old `server:hori-state` would have attached nothing with no error; `connect_mcp_server` accesses `Config.get` which needs full app init (module import of `open_webui.main`), so the probe needed the container's runtime secret env lifted from `/proc/1/environ`. MCP is lazy: connects per-chat-request, nothing in startup logs.
+
+**Unsure:** first real chat through OWUI UI hasn't been exercised (API needs session auth; middleware path verified in-container). Watch the first interactive use for tool-result shape surprises (results come back as MCP `content` arrays — same as SSE clients see).
 
 ## Notes
 

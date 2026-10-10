@@ -682,3 +682,41 @@ async def mcp_messages_endpoint(
         await session["queue"].put(response)
 
     return Response(status_code=202)
+
+
+async def mcp_streamable_endpoint(
+    request: Request,
+    scope: str = Depends(mcp_auth_dependency),
+):
+    """POST /mcp/http — MCP streamable-HTTP transport (2025-03-26 spec).
+
+    Native MCP clients (Open-WebUI >=0.6.31's streamablehttp_client) talk
+    to a single POST endpoint. Stateless by design: no mcp-session-id is
+    issued, and scope is re-resolved from the bearer on EVERY request —
+    strictly stronger than the SSE lane's connect-time session binding.
+
+    Per spec: a POST carrying only notifications gets 202 empty; a POST
+    with requests gets application/json with the response(s) — batch
+    input yields a batch response. GET/DELETE are 405 (no session stream
+    exists to read or tear down).
+    """
+    body = await request.body()
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}") from exc
+
+    batch = isinstance(payload, list)
+    messages = payload if batch else [payload]
+    responses = []
+    for msg in messages:
+        resp = await _handle_mcp_message(msg, scope=scope)
+        if resp is not None:
+            responses.append(resp)
+
+    if not responses:
+        return Response(status_code=202)
+    out = responses if batch else responses[0]
+    from starlette.responses import JSONResponse
+
+    return JSONResponse(out, media_type="application/json")

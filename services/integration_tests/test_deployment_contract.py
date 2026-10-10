@@ -3,11 +3,12 @@
 Asserts the *assembled* system matches declared intent — the layer unit
 tests can't see. Each check in deployment_contract.py becomes a pytest
 param so a failure names the specific broken wiring (dead timer, drifted
-valves, empty mcpo spec, stale snapshot) rather than a generic red.
+valves, dead MCP lane, stale snapshot) rather than a generic red.
 
 Defends: the "built but never wired" failure class — e.g. the kb-sync
 that was tested-but-never-invoked, and the mcpo boot race that silently
-removed all hori-state tools for ~30h.
+removed all hori-state tools for ~30h (bridge retired 2026-10-09 —
+the native lane now carries the check).
 """
 
 import importlib.util
