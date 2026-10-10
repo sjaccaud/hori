@@ -128,21 +128,25 @@ Gate: deliberately break a test unit config → apply via
 
 Enforcement lands at exec layer; this phase makes it visible.
 
-- [ ] **script-panel :8770 → rig console.** Read-mostly tailnet page:
-      armed rollbacks w/ countdowns, probationary changes awaiting
-      promote, invariant violations, denylist hits. This is the
-      check-from-iPhone surface OWUI can't be (chat-first ≠ approval
-      queue).
-- [ ] **snapshot injection extension.** `state_snapshot.py` adds
+- [x] **script-panel :8770 → rig console.** Tailnet page (`tailscale serve
+      --bg --https=8770`, 2026-10-09): armed rollbacks, probationary
+      changes awaiting promote, invariant violations, denylist hits —
+      plus ✓promote / ↩revert-now buttons on live units
+      (POST /api/guard/<act>?gid=). This is the check-from-iPhone
+      surface OWUI can't be (chat-first ≠ approval queue).
+- [x] **snapshot injection extension.** `state_snapshot.py` adds
       guardrail posture (`denylist=ARMED`, `rollbacks_pending=1`,
       `invariants=PASS`) — every model on every surface sees
       enforcement state without asking.
-- [ ] **deployment_contract.py checks.** Register: deny.conf loaded,
-      snapshot timer healthy, self-test last-run green. Safety layer
-      covered by the existing fail-loudly pattern.
-- [ ] **Approval-from-phone.** journal_notify pattern (krill stack) →
-      tailnet notification on armed rollback / expiring probation.
-      The phone becomes the approve button.
+- [x] **deployment_contract.py checks.** Registered: deny.conf loaded,
+      hooks wired, timers enabled, helper root-owned — plus
+      `local_tools_deny` (OWUI path serves minted citations, 2026-10-09).
+      Safety layer covered by the fail-loudly pattern.
+- [x] **Approval-from-phone.** rig-notify gained an action-URL passthrough
+      (notify_send.sh arg 3 → Telegram inline button + ntfy Actions view);
+      probation-armed and guard-fired notifications carry the /trust link.
+      The phone taps Open → /trust → ✓/↩. Server-side the endpoint only
+      acts on LIVE guard units — stale links settle harmlessly.
 
 ## Deferred (needs card 2 or >weekend)
 

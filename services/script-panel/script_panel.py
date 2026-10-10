@@ -7,25 +7,31 @@ catalog UI plus a gated "run" endpoint for scripts explicitly marked
 
 Endpoints:
   GET  /                  HTML UI (with guardrail posture strip)
-  GET  /trust             trust console — read-only rig guardrail posture
+  GET  /trust             trust console — guardrail posture + approve buttons
   GET  /api/catalog       catalog entries + live status + last-run merged
   GET  /api/runs          recent run history (tail of runs.jsonl)
   GET  /api/trust         guardrail posture JSON (denylist/guards/probation)
   POST /api/run/<id>      execute an allowlisted script, record the result
+  POST /api/guard/<act>?gid=  approve/deny a LIVE guard unit (promote|revert)
 
 Safety model (mirrors local_tools_server.py):
-  - Binds 127.0.0.1 only.
+  - Binds 127.0.0.1 only; tailnet exposure is via `tailscale serve` —
+    every tailnet device is the owner's (ACL decision 2026-09-23).
   - No shell: scripts execute as argv arrays; no user-supplied args.
   - Only catalog entries with runnable:true can execute; sudo-flagged
     entries are never runnable from the panel regardless.
+  - Guard actions only touch LIVE agent-guard-* units, verified server-side
+    before dispatch — stale notification links and id sprays settle to
+    "already settled", never act on arbitrary units.
   - confirm:true entries still execute on request — the *UI* shows the
-    confirm dialog; the API just runs. Keep the panel localhost-only.
+    confirm dialog; the API just runs.
   - Every launch is appended to ~/.local/share/script-panel/runs.jsonl.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -419,6 +425,56 @@ def trust_posture() -> dict:
     }
 
 
+_GID_RE = re.compile(r"g\d+-\d+")
+
+
+def guard_action(gid: str, action: str) -> dict:
+    """Human approve/deny on a LIVE guard unit (Phase 4.5 approve-from-phone).
+
+    Safety model: the gid must match the strict guard-id shape AND have a
+    live systemd unit — a stale notification or sprayed id can't act on
+    anything. promote disarms the probation timer (change stays); revert
+    fires the armed revert payload NOW by starting its sibling .service.
+    Both are the scaffold's own mechanisms, not new mutation code.
+    """
+    if action not in ("promote", "revert"):
+        return {"ok": False, "error": f"unknown action {action!r}"}
+    if not gid or not _GID_RE.fullmatch(gid):
+        return {"ok": False, "error": "bad guard id"}
+
+    prob_active = _run_probe(
+        ["systemctl", "is-active", f"agent-guard-{gid}-prob.timer"]
+    ).stdout.strip() == "active"
+    ttl_active = _run_probe(
+        ["systemctl", "is-active", f"agent-guard-{gid}.timer"]
+    ).stdout.strip() == "active"
+    if not (prob_active or ttl_active):
+        return {"ok": False, "error": f"no live guard for {gid} — already settled"}
+
+    if action == "promote":
+        if not prob_active:
+            return {"ok": False, "error": f"{gid} is armed, not in probation"}
+        cp = _run_probe([str(RIG_SCRIPTS / "agent-promote.sh"), gid], timeout=20)
+        ok = cp.returncode == 0
+        detail = (cp.stdout or cp.stderr).strip()[:200]
+    else:  # revert — fire the armed payload now, then disarm the pending
+        # timer so it doesn't fire a second revert. Order matters: stopping
+        # the timer first garbage-collects the sibling .service.
+        timer = (f"agent-guard-{gid}-prob.timer" if prob_active
+                 else f"agent-guard-{gid}.timer")
+        unit = timer[:-len(".timer")] + ".service"
+        cp = _run_probe(["sudo", "-n", "systemctl", "start", unit], timeout=20)
+        _run_probe(["sudo", "-n", "systemctl", "stop", timer], timeout=10)
+        ok = cp.returncode == 0
+        detail = f"fired {unit}" if ok else (cp.stderr or cp.stdout).strip()[:200]
+
+    sys.stderr.write(
+        f"[guard-action] {action} {gid} -> {'ok' if ok else 'FAIL'} {detail}\n")
+    _run_probe(["logger", "-t", "guard-action",
+                    f"{action} {gid} ok={ok} :: {detail[:120]}"])
+    return {"ok": ok, "action": action, "gid": gid, "detail": detail}
+
+
 # --------------------------------------------------------------------------
 # HTTP layer
 # --------------------------------------------------------------------------
@@ -656,9 +712,13 @@ tr:first-child td{border-top:0}
 .empty{color:var(--dim);font-size:12px;font-style:italic}
 button.chip{background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:5px 10px;border-radius:14px;cursor:pointer;font:inherit;font-size:12px}
 button.chip:hover{color:var(--fg);border-color:var(--acc)}
+button.act{background:#1a1d23;border:1px solid var(--border);color:var(--fg);padding:3px 10px;border-radius:6px;cursor:pointer;font:inherit;font-size:11.5px;margin-left:6px}
+button.act:hover{border-color:var(--acc)}
+button.act.go{color:var(--ok)}button.act.stop{color:var(--bad)}
+button.act:disabled{opacity:.4;cursor:default}
 </style></head><body>
 <h1>Trust Console <span style="color:var(--dim);font-weight:400">· rig guardrail posture</span></h1>
-<p class="sub">read-only — enforcement lives in the exec layer; this only reports. <a href="/">← script panel</a></p>
+<p class="sub">approve surface — promotes/reverts act on LIVE guard units only; enforcement stays in the exec layer. <a href="/">← script panel</a></p>
 <div id="verdict" class="verdict dim">loading…</div>
 <section><h2>Armed revert guards</h2><div id="guards"></div></section>
 <section><h2>Probationary changes</h2><div id="prob"></div></section>
@@ -672,6 +732,16 @@ button.chip:hover{color:var(--fg);border-color:var(--acc)}
 function esc(t){return String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fmt(ts){return ts?new Date(ts*1000).toLocaleString():'—';}
 function rows(list,html){return list.length?'<table>'+list.map(html).join('')+'</table>':'<div class="empty">none</div>';}
+function gidOf(u){const m=String(u).match(/agent-guard-(g\d+-\d+)/);return m?m[1]:'';}
+async function gact(a,gid,btn){
+  btn.disabled=true;
+  try{
+    const r=await fetch('/api/guard/'+a+'?gid='+encodeURIComponent(gid),{method:'POST'});
+    const d=await r.json();
+    if(!d.ok)alert((d.error||'action failed'));
+  }catch(e){alert('request failed: '+e);}
+  load();
+}
 async function load(){
   const r=await fetch('/api/trust');const d=await r.json();
   const v=document.getElementById('verdict');
@@ -680,9 +750,12 @@ async function load(){
   v.textContent='guardrails: denylist='+d.deny_rules+' rules · armed_guards='+arm+
     ' · probation_pending='+pend+' · invariants='+d.verdict;
   document.getElementById('guards').innerHTML=rows(d.guards_armed,
-    g=>`<tr><td class="warn">${esc(g.unit)}</td><td class="dim">fires ${esc(g.fires)}</td></tr>`);
+    g=>`<tr><td class="warn">${esc(g.unit)}</td><td class="dim">fires ${esc(g.fires)}</td>`+
+       `<td><button class="act stop" onclick="gact('revert',gidOf('${esc(g.unit)}'),this)">↩ revert now</button></td></tr>`);
   document.getElementById('prob').innerHTML=rows(d.probation,
-    p=>`<tr><td>${esc(p.gid)}</td><td class="${p.state==='pending'?'warn':(p.state==='promoted'?'ok':'dim')}">${esc(p.state)}</td></tr>`);
+    p=>`<tr><td>${esc(p.gid)}</td><td class="${p.state==='pending'?'warn':(p.state==='promoted'?'ok':'dim')}">${esc(p.state)}</td>`+
+       (p.state==='pending'?`<td><button class="act go" onclick="gact('promote','${esc(p.gid)}',this)">✓ promote</button>`+
+       `<button class="act stop" onclick="gact('revert','${esc(p.gid)}',this)">↩ revert now</button></td>`:'<td></td>')+`</tr>`);
   document.getElementById('inv').innerHTML=rows(d.invariants.checks,
     c=>`<tr><td class="${/^ok/.test(c)?'ok':'bad'}">${esc(c)}</td></tr>`);
   document.getElementById('deny').innerHTML=rows(d.deny_hits.slice().reverse(),
@@ -738,6 +811,21 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path.startswith("/api/guard/"):
+            from urllib.parse import parse_qs, urlparse
+            u = urlparse(self.path)
+            action = u.path[len("/api/guard/"):]
+            gid = parse_qs(u.query).get("gid", [""])[0]
+            if not gid:
+                try:
+                    body = self.rfile.read(
+                        int(self.headers.get("Content-Length", 0) or 0))
+                    gid = (json.loads(body) or {}).get("gid", "")
+                except (json.JSONDecodeError, ValueError):
+                    gid = ""
+            result = guard_action(gid, action)
+            self._json(result, 200 if result["ok"] else 409)
+            return
         if not self.path.startswith("/api/run/"):
             self._json({"error": "not found"}, 404)
             return
