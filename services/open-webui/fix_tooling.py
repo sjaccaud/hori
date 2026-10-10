@@ -598,7 +598,10 @@ SANDBOX_TOOLS_CONNECTION = {
     "url": "http://127.0.0.1:8774",
     "config": {
         "enable": True,
-        "function_name_filter_list": "sandbox_exec,sandbox_status",
+        "function_name_filter_list": (
+            "sandbox_exec,sandbox_status,sandbox_serve,"
+            "sandbox_serve_status,sandbox_serve_stop"
+        ),
     },
     "info": {"id": "sandbox-tools", "name": "Sandbox Tools"},
 }

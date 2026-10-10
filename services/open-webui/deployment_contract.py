@@ -243,11 +243,12 @@ def check_local_tools_deny() -> tuple[bool, str]:
 
 
 def check_sandbox_tools() -> tuple[bool, str]:
-    """sandbox_status runs live bwrap probes — asserts the confinement is
-    actually holding (scratch writable, host fs hidden), not just that the
-    port answers. ~150ms; safe on the 5-min fast cadence."""
+    """sandbox_status runs live confined probes — asserts the boundary
+    is actually holding (scratch writable, host fs hidden, netns up,
+    host loopback unreachable from inside), not just that the port
+    answers. ~300ms; safe on the 5-min fast cadence."""
     d, _ = _http_json(
-        "http://127.0.0.1:8774/sandbox_status", data=b"{}", timeout=10
+        "http://127.0.0.1:8774/sandbox_status", data=b"{}", timeout=20
     )
     if not (d or {}).get("ok"):
         return False, f"sandbox_status failed: {str(d)[:120]}"
@@ -258,9 +259,18 @@ def check_sandbox_tools() -> tuple[bool, str]:
         bad.append("host fs visible — confinement broken")
     if not d.get("bwrap"):
         bad.append("bwrap missing")
+    if not d.get("slirp"):
+        bad.append("slirp4netns missing")
+    if not d.get("netns"):
+        bad.append("private netns broken")
+    if not d.get("host_loopback_blocked"):
+        bad.append("HOST LOOPBACK REACHABLE — tool servers exposed "
+                   "inside sandbox")
+    if not d.get("dns"):
+        bad.append("guest DNS/egress dead")
     if bad:
         return False, "; ".join(bad)
-    return True, "confinement live (scratch rw, host hidden)"
+    return True, "confinement live (scratch rw, host hidden, net bounded)"
 
 
 def check_proposal_tools() -> tuple[bool, str]:

@@ -7,6 +7,7 @@ absent so the suite still runs on dev boxes without it.
 """
 import os
 import sys
+import time
 
 import pytest
 
@@ -96,10 +97,20 @@ def test_git_clone_host_allowlist():
     assert ok
     ok, _ = v(["git", "clone", "file:///home/testuser/some-repo"])
     assert ok
+    # Flag values (--depth 1) must not be mistaken for the URL.
+    ok, _ = v(["git", "clone", "--depth", "1",
+               "https://github.com/octocat/Hello-World"])
+    assert ok
+    ok, err = v(["git", "clone", "--depth", "1",
+                 "https://evil.example.com/r"])
+    assert not ok and "clone host" in err
     for url in ("https://evil.example.com/r", "ssh://github.com/a/b",
-                "git@github.com:a/b", "https://gist.github.com/x"):
+                "https://gist.github.com/x"):
         ok, err = v(["git", "clone", url])
         assert not ok and "clone host" in err, url
+    # scp-style has no :// — denied by the forbidden-arg rule instead.
+    ok, err = v(["git", "clone", "git@github.com:a/b"])
+    assert not ok
 
 
 def test_git_upload_pack_escape_denied():
@@ -184,13 +195,15 @@ def test_deny_conf_nonmatching_rule_leaves_allowlist(monkeypatch, tmp_path):
 # --- real bwrap confinement --------------------------------------------------
 
 needs_bwrap = pytest.mark.skipif(
-    not os.path.exists(sbx.BWRAP), reason="bwrap not installed"
+    not (os.path.exists(sbx.BWRAP) and os.path.exists(sbx.SLIRP)),
+    reason="bwrap/slirp4netns not installed",
 )
 
 
 @needs_bwrap
 def test_sandbox_exec_writes_inside_root(tmp_path, monkeypatch):
     monkeypatch.setattr(sbx, "SCRATCH", tmp_path)
+    monkeypatch.setattr(sbx, "NET_DIR", tmp_path / "net")
     r = sbx.tool_sandbox_exec({"command": "mkdir", "args": ["proj"]})
     assert r["ok"], r
     r = sbx.tool_sandbox_exec(
@@ -203,6 +216,7 @@ def test_sandbox_exec_writes_inside_root(tmp_path, monkeypatch):
 @needs_bwrap
 def test_sandbox_exec_host_fs_hidden(tmp_path, monkeypatch):
     monkeypatch.setattr(sbx, "SCRATCH", tmp_path)
+    monkeypatch.setattr(sbx, "NET_DIR", tmp_path / "net")
     # /etc doesn't exist inside the namespace at all.
     r = sbx.tool_sandbox_exec({"command": "cat", "args": ["/etc/hostname"]})
     assert not r["ok"]
@@ -218,6 +232,7 @@ def test_sandbox_exec_write_outside_impossible(tmp_path, monkeypatch):
     """A payload trying to write outside the root hits a nonexistent or
     read-only fs — confinement is structural, not policy."""
     monkeypatch.setattr(sbx, "SCRATCH", tmp_path)
+    monkeypatch.setattr(sbx, "NET_DIR", tmp_path / "net")
     home = os.path.expanduser("~")
     marker = os.path.join(home, "agent-escape-test.txt")
     r = sbx.tool_sandbox_exec(
@@ -230,5 +245,135 @@ def test_sandbox_exec_write_outside_impossible(tmp_path, monkeypatch):
 @needs_bwrap
 def test_sandbox_status_confinement_healthy(tmp_path, monkeypatch):
     monkeypatch.setattr(sbx, "SCRATCH", tmp_path)
+    monkeypatch.setattr(sbx, "NET_DIR", tmp_path / "net")
     r = sbx.tool_sandbox_status({})
     assert r["ok"] and r["scratch_writable"] and r["host_fs_hidden"]
+    assert r["host_loopback_blocked"] and r["netns"]
+
+
+# --- network boundary (netns + slirp) --------------------------------------
+
+
+def test_guest_resolv_conf_parses_upstreams(tmp_path, monkeypatch):
+    resolv = tmp_path / "resolv.conf"
+    resolv.write_text(
+        "nameserver 192.168.1.1\n"
+        "nameserver 127.0.0.53\n"          # stub — must be filtered
+        "nameserver fd7a:115c:a1e0::53\n"  # ipv6 — filtered (no ipv6)
+        "nameserver 100.100.100.100\n"
+        "search example.ts.net\n"
+    )
+    monkeypatch.setattr(sbx, "HOST_RESOLV", resolv)
+    out = sbx._guest_resolv_conf()
+    assert "192.168.1.1" in out and "100.100.100.100" in out
+    assert "127.0.0.53" not in out and "fd7a" not in out
+    assert "search example.ts.net" in out
+
+
+def test_guest_resolv_conf_fallback(monkeypatch, tmp_path):
+    monkeypatch.setattr(sbx, "HOST_RESOLV", tmp_path / "absent")
+    assert "10.0.2.3" in sbx._guest_resolv_conf()
+
+
+@needs_bwrap
+def test_sandbox_exec_host_loopback_unreachable(tmp_path, monkeypatch):
+    """The 10.0.2.2 slirp alias maps to host loopback — a connect must
+    FAIL, proving --disable-host-loopback is live and the host's tool
+    servers can't be invoked from inside the sandbox."""
+    monkeypatch.setattr(sbx, "SCRATCH", tmp_path)
+    monkeypatch.setattr(sbx, "NET_DIR", tmp_path / "net")
+    r = sbx.tool_sandbox_exec({
+        "command": "python3",
+        "args": ["-c",
+                 "import socket;s=socket.socket();s.settimeout(3);"
+                 "s.connect(('10.0.2.2',8766))"]})
+    assert not r["ok"], "host loopback reachable — boundary broken"
+
+
+@needs_bwrap
+def test_sandbox_exec_dns_and_egress_alive(tmp_path, monkeypatch):
+    """NAT'd outbound stays working: DNS resolves real names."""
+    monkeypatch.setattr(sbx, "SCRATCH", tmp_path)
+    monkeypatch.setattr(sbx, "NET_DIR", tmp_path / "net")
+    r = sbx.tool_sandbox_exec({
+        "command": "python3",
+        "args": ["-c",
+                 "import socket;print(socket.gethostbyname('github.com'))"],
+        "timeout": 30})
+    assert r["ok"], r
+
+
+# --- Band 2.5 serve sessions ------------------------------------------------
+
+
+def _free_serve_port():
+    for p in range(sbx.SERVE_PORT_MIN, sbx.SERVE_PORT_MAX + 1):
+        if not sbx._host_port_open(p):
+            return p
+    pytest.skip("no free serve ports")
+
+
+def test_serve_port_range_enforced():
+    r = sbx.tool_sandbox_serve({
+        "command": "python3", "args": ["-m", "http.server"],
+        "port": sbx.SERVE_PORT_MIN - 1})
+    assert not r["ok"] and "port must be" in r["error"]
+    r = sbx.tool_sandbox_serve({
+        "command": "python3", "args": ["-m", "http.server"],
+        "port": 8080})
+    assert not r["ok"] and "port must be" in r["error"]
+
+
+@needs_bwrap
+def test_serve_lifecycle_roundtrip(tmp_path, monkeypatch):
+    """Full 2.5 loop: serve a scratch file inside the sandbox, fetch it
+    from the host through the forwarded port, stop the session."""
+    monkeypatch.setattr(sbx, "SCRATCH", tmp_path)
+    monkeypatch.setattr(sbx, "NET_DIR", tmp_path / "net")
+    (tmp_path / "hello.txt").write_text("band-2.5 works\n")
+    port = _free_serve_port()
+    r = sbx.tool_sandbox_serve({
+        "command": "python3",
+        "args": ["-m", "http.server", str(port), "--bind", "0.0.0.0"],
+        "port": port, "ttl": 120})
+    assert r["ok"], r
+    sid = r["session_id"]
+    try:
+        import urllib.request
+        body = b""
+        for _ in range(10):  # dev-server warm window
+            try:
+                body = urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/hello.txt",
+                    timeout=5).read()
+                break
+            except OSError:
+                time.sleep(0.5)
+        assert b"band-2.5 works" in body
+        st = sbx.tool_sandbox_serve_status({})
+        assert any(s["session_id"] == sid for s in st["sessions"])
+    finally:
+        stopped = sbx.tool_sandbox_serve_stop({"session_id": sid})
+        assert stopped["ok"]
+    assert not sbx._host_port_open(port)
+
+
+@needs_bwrap
+def test_serve_guest_loopback_bind_fails_honestly(tmp_path, monkeypatch):
+    """A 127.0.0.1 guest bind is unreachable through hostfwd — the tool
+    must tear down and say why, not leave a dead session."""
+    monkeypatch.setattr(sbx, "SCRATCH", tmp_path)
+    monkeypatch.setattr(sbx, "NET_DIR", tmp_path / "net")
+    port = _free_serve_port()
+    r = sbx.tool_sandbox_serve({
+        "command": "python3",
+        "args": ["-m", "http.server", str(port), "--bind", "127.0.0.1"],
+        "port": port, "ttl": 60})
+    assert not r["ok"] and "0.0.0.0" in r["error"]
+    assert not sbx._SERVE_SESSIONS
+
+
+def test_serve_stop_rejects_bad_ids():
+    assert not sbx.tool_sandbox_serve_stop({"session_id": "../x"})["ok"]
+    assert not sbx.tool_sandbox_serve_stop(
+        {"session_id": "s-9999999999-ffff"})["ok"]

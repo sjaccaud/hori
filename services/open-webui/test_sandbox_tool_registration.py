@@ -30,7 +30,8 @@ def test_sandbox_tools_connection_and_filter_are_canonical():
     assert conn["info"]["id"] == "sandbox-tools"
     assert conn["config"]["enable"] is True
     assert conn["config"]["function_name_filter_list"] == (
-        "sandbox_exec,sandbox_status"
+        "sandbox_exec,sandbox_status,sandbox_serve,"
+        "sandbox_serve_status,sandbox_serve_stop"
     )
     for needle in ("sandbox_models", "sandbox_server_tool_ids"):
         assert needle in mod.TOOL_SERVER_FILTER_SOURCE

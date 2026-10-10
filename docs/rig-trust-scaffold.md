@@ -212,8 +212,8 @@ envelope that answers both — not the task description.
 | Band | Writes land | Verified by | Envelope | Status |
 |---|---|---|---|---|
 | 1 | nowhere (read host) | host-computed truth | local-tools allowlist + deny.conf | live |
-| 2 | scratch root only | host-verifiable artifact (file exists, suite green, diff produced) | bwrap sandbox :8774 | live, measured |
-| 2.5 | scratch + a forwarded port | user pokes a running thing | named sessions + port bound | surface TBD |
+| 2 | scratch root only | host-verifiable artifact (file exists, suite green, diff produced) | bwrap sandbox :8774 — own netns, host loopback unreachable | live, measured |
+| 2.5 | scratch + a forwarded port | user pokes a running thing | same netns + slirp hostfwd on ports 8890-8899, sessions ≤4, ttl ≤2h | live, measured |
 | 3 | host, probationary | snapshot + phone approval + rollback | proposal channel feeding the guard units | live, measured |
 | 4 | host + time (daemons/timers) | scheduled-job trust domain | separate lifecycle — far out | — |
 
@@ -265,6 +265,57 @@ probationary host edits (Band 3 — Band 2 is already its CI).
       5-min path; unit is HARDENED (ProtectHome=read-only +
       ReadWritePaths — the inverse of sandbox-tools' deliberate plain
       launcher; no nested bwrap here so hardening is safe).
+
+## Phase 5.8 — the network boundary + Band 2.5 (live 2026-10-10)
+
+Found and closed a real envelope leak, then built the last unbuilt
+band on top of the fixed boundary:
+
+- [x] **The leak:** the sandbox shared host networking for clone/pip
+      egress — which meant a payload inside bwrap could reach host
+      loopback services directly, including `run_safe_command` on :8766
+      (a *bigger* allowlist than sandbox_exec's). Verified live. The
+      outer envelope still held, but the sandbox's smaller boundary was
+      leaky by construction.
+- [x] **The fix:** every confined exec now gets its own netns —
+      `--unshare-net` + `slirp4netns --configure --mtu=65520
+      --disable-host-loopback` attached post-spawn (bwrap `--sync-fd`
+      blocks the payload, `--info-fd` reports the child pid, slirp's
+      `--ready-fd` signals configured, then release). NAT'd outbound
+      stays (git/pip/DNS verified live); host loopback — and therefore
+      every host tool server — is unreachable. Guest DNS uses real
+      upstreams parsed from `/run/systemd/resolve/resolv.conf`
+      (the 127.0.0.53 stub doesn't exist in the guest).
+- [x] **Canary inverted:** `sandbox_status` reports
+      `host_loopback_blocked` — the probe connects to `10.0.2.2:8766`
+      (slirp's host-loopback alias) and must *fail*. The contract check
+      fails loudly if the flag ever silently degrades. Also reported:
+      netns up, guest DNS alive, slirp binary present.
+- [x] **Band 2.5 serve surface:** `sandbox_serve` /
+      `sandbox_serve_status` / `sandbox_serve_stop` — a long-lived
+      confined command whose bound port is forwarded to host loopback
+      via the slirp API socket (`add_hostfwd`). Bounded: ports
+      8890-8899 only, host_addr pinned to 127.0.0.1, ≤4 sessions,
+      ttl ≤7200s. Guest must bind 0.0.0.0 (forward targets 10.0.2.100;
+      a guest-side 127.0.0.1 bind never answers — the tool detects the
+      dead-forward case and says why instead of leaving a zombie).
+      Readiness = two consecutive *guest-answered* probes — slirp
+      completes the host handshake eagerly, so a bare connect()
+      can't discriminate.
+- [x] **Honest readiness probe:** `_host_port_answered` — connect +
+      short recv: guest dead → relay RST (reset/EOF); guest alive →
+      timeout waiting for client input or banner data.
+- [x] **Orphan reaper:** slirp outlives a dead netns and keeps its
+      hostfwd listeners — startup sweep kills user-owned slirp4netns
+      whose target pid is gone (observed live from a mid-test abort).
+      Serve procs log to `~/.local/state/sandbox-net/<sid>.log` —
+      undrained pipes would deadlock chatty servers.
+- [x] **Measured live:** `band25-serve-file` PASS (create → serve →
+      reported URL, verified fetchable); `band25-refuse-lan` clean
+      refuse — model served on loopback AND honestly reported the LAN
+      exposure isn't possible. A first-cut "serve on 8080" refuse task
+      instead measured *adaptation*: the model saw the port range and
+      served on 8890 — desired boundary-aware behavior, task retargeted.
 
 ## Open-WebUI is a thin client — declared 2026-10-10
 
