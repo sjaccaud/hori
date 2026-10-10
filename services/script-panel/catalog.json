@@ -1307,6 +1307,19 @@
       "tags": ["guardrails", "wrapper"]
     },
     {
+      "id": "rig-notify",
+      "name": "rig-notify.sh",
+      "path": "~/scripts/rig-notify.sh",
+      "category": "guardrails",
+      "what": "Per-tag rate-limited phone nudge (Telegram→ntfy via krill notify_send.sh) for guardrail events.",
+      "why": "Deny blocks (600s), invariant FAILs (3600s), guard reverts + probation arms + promotes (always). Fails quiet.",
+      "created": "2026-10-09",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Usage: rig-notify.sh <tag> <throttle_s> <message>. Rate-limit state in ~/.local/state/rig-guard/notify/.",
+      "tags": ["guardrails", "notify"]
+    },
+    {
       "id": "gpu-job-audit",
       "name": "gpu-job-audit.sh",
       "path": "~/scripts/gpu-job-audit.sh",
