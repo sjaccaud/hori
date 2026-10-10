@@ -147,6 +147,14 @@ Enforcement lands at exec layer; this phase makes it visible.
       probation-armed and guard-fired notifications carry the /trust link.
       The phone taps Open → /trust → ✓/↩. Server-side the endpoint only
       acts on LIVE guard units — stale links settle harmlessly.
+- [x] **Notification hygiene (2026-10-10).** Throttled rig-notify events
+      queue to pending.log instead of dropping; rig-notify-flush.timer
+      (30 min) sends one grouped digest per tag (deny ×N, inv-* ×N …).
+      Synthetic denies (contract probe) mark `"probe": true` — same 422 +
+      citation, journaled as agent-deny-probe, no phone push. notify_send.sh
+      routes per title via TELEGRAM_CHAT_ID_<TITLE> when extra chats exist.
+      Root cause of the 160/day flood: ProtectHome=read-only silently ate
+      the service's throttle-stamp writes → ReadWritePaths fix staged.
 
 ## Deferred (needs card 2 or >weekend)
 

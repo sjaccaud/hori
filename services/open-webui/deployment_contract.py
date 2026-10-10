@@ -225,7 +225,7 @@ def check_local_tools_deny() -> tuple[bool, str]:
         urllib.request.urlopen(
             urllib.request.Request(
                 "http://127.0.0.1:8766/run_safe_command",
-                data=b'{"command": "ddcutil"}'), timeout=8)
+                data=b'{"command": "ddcutil", "probe": true}'), timeout=8)
         return False, "ddcutil EXECUTED — deny layer dead"
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")

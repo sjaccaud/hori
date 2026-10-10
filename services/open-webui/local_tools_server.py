@@ -21,6 +21,7 @@ companion, while the safety spine stays untouched.
 """
 from __future__ import annotations
 
+import contextvars
 import fnmatch
 import glob
 import json
@@ -152,20 +153,33 @@ def _rig_deny_check(subject: str, scope: str) -> str:
     return ""
 
 
+# Synthetic-deny suppression: callers that deliberately probe the deny
+# layer (the deployment contract's local_tools_deny check rides the 5-min
+# state snapshot) pass "probe": true in the tool args. The deny fires
+# identically — same 422 + citation — but journals under agent-deny-probe
+# and skips the phone push, so a health check can't masquerade as an
+# incident (~250 pings/day before this landed). Suppression only mutes
+# the notification; the block and the journal record are unchanged.
+_PROBE_REQUEST = contextvars.ContextVar("_probe_request", default=False)
+
+
 def _report_rig_deny(scope: str, subject: str, reason: str) -> None:
     """Journal + notify a deny hit — deny → log + citation, never silent
     (scaffold Phase-1 contract). Same 'agent-deny' journal tag the Devin
     hook uses, so OWUI-path hits show up in the /trust deny-hits panel.
-    Fire-and-forget: reporting must never break the deny itself."""
+    Synthetic probes journal under 'agent-deny-probe' instead and do not
+    push. Fire-and-forget: reporting must never break the deny itself."""
+    probe = _PROBE_REQUEST.get()
     try:
         subprocess.run(
-            ["logger", "-t", "agent-deny",
+            ["logger", "-t", "agent-deny-probe" if probe else "agent-deny",
              f"BLOCKED[local-tools:{scope}] {reason} :: {subject[:160]}"],
             check=False, timeout=5)
-        subprocess.run(
-            [os.path.expanduser("~/scripts/rig-notify.sh"), "deny", "600",
-             f"blocked[{scope}] {subject[:80]} — {reason[:80]}"],
-            check=False, timeout=10)
+        if not probe:
+            subprocess.run(
+                [os.path.expanduser("~/scripts/rig-notify.sh"), "deny", "600",
+                 f"blocked[{scope}] {subject[:80]} — {reason[:80]}"],
+                check=False, timeout=10)
     except Exception:
         pass
 
@@ -1087,6 +1101,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         log.info("POST /%s command=%s", tool_name, args.get("command", "<read>"))
+        _PROBE_REQUEST.set(bool(args.get("probe")))
         result = TOOLS[tool_name](args)
         _audit(tool_name, args, result)
         self._send_json(200 if result.get("ok") else 422, result)
