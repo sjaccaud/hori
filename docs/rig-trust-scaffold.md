@@ -279,6 +279,17 @@ probationary host edits (Band 3 — Band 2 is already its CI).
       snuck an `export LC_ALL=C` past its own rationale (fit=no). This
       is `aios-decide`'s first real consumer — dormant calibrated
       infra put to work as "two eyes on every host change".
+- [x] **Judge agreement tracking (live 2026-10-11):** verdicts are
+      correlated with human outcomes on /trust — clean+promoted or
+      flagged+rejected/reverted = agreed; clean+negative = **missed**
+      (the dangerous cell); flagged+promoted = **cried_wolf**.
+      Settled-state join reuses the guard-state resolver (meta
+      guard_id → probationary.log + promotions.log + timer liveness);
+      retracted/pending/abstained don't count — only human verdicts
+      on judged proposals. The verdict header shows
+      `judge=agreed/settled (%)` or `awaiting`. meta.judge.request_id
+      links each verdict back to decide's own decision log — the raw
+      material for per-question calibration later.
 
 ## Phase 5.8 — the network boundary + Band 2.5 (live 2026-10-10)
 

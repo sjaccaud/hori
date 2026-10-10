@@ -415,6 +415,8 @@ def trust_posture() -> dict:
 
     proposals = load_proposals()
     prop_pending = [p for p in proposals if p["status"] == "pending"]
+    judge = judge_agreement(
+        proposals, {p["gid"]: p["state"] for p in probation})
 
     return {
         "deny_rules": deny_rules,
@@ -422,6 +424,7 @@ def trust_posture() -> dict:
         "probation": probation,
         "probation_pending": len(pending),
         "proposals": proposals,
+        "judge": judge,
         "proposals_pending": len(prop_pending),
         "invariants": {"rc": inv.returncode, "checks": inv_checks},
         "snapshots": snapshots,
@@ -435,6 +438,58 @@ def trust_posture() -> dict:
 _GID_RE = re.compile(r"g\d+-\d+")
 _PID_RE = re.compile(r"p-\d+-[a-z0-9]{6}")
 _PROP_DIFF_LINES = 120
+
+
+def judge_agreement(proposals: list[dict],
+                    probation_states: dict) -> dict:
+    """Correlate judge verdicts with human outcomes — is the second
+    opinion measuring anything?
+
+    Outcome join: rejected/expired-reverted = negative (the change
+    died), promoted = positive (approved and kept). pending /
+    probation-pending / retracted (model-side) are unsettled — only
+    human verdicts count. Abstain/unavailable/disabled verdicts carry
+    no signal either way.
+
+    Cells: clean+positive or flagged+negative = agreed;
+    clean+negative = missed (judge said fine, it wasn't);
+    flagged+positive = cried_wolf (judge balked, human kept it).
+    """
+    out = {"judged": 0, "settled": 0, "agreed": 0, "missed": 0,
+           "cried_wolf": 0, "agreement": None, "cells": []}
+    for p in proposals:
+        js = (p.get("judge") or {}).get("status")
+        if js not in ("clean", "flagged"):
+            continue
+        out["judged"] += 1
+        outcome = None
+        status = p.get("status")
+        if status == "rejected":
+            outcome = "negative"
+        elif status in ("probation", "approved"):
+            st = probation_states.get(p.get("guard_id"), "")
+            if st == "promoted":
+                outcome = "positive"
+            elif st and st != "pending":
+                outcome = "negative"
+            # pending timer / unknown guard -> still unsettled
+        if outcome is None:
+            continue
+        out["settled"] += 1
+        cell = {"id": p["id"], "judge": js, "outcome": outcome}
+        if (js == "clean") == (outcome == "positive"):
+            out["agreed"] += 1
+            cell["verdict"] = "agreed"
+        elif js == "clean":
+            out["missed"] += 1
+            cell["verdict"] = "missed"
+        else:
+            out["cried_wolf"] += 1
+            cell["verdict"] = "cried_wolf"
+        out["cells"].append(cell)
+    if out["settled"]:
+        out["agreement"] = round(100 * out["agreed"] / out["settled"])
+    return out
 
 
 def load_proposals() -> list[dict]:
@@ -841,7 +896,9 @@ async function load(){
   v.className='verdict '+(d.verdict==='PASS'?'ok':'bad');
   v.textContent='guardrails: denylist='+d.deny_rules+' rules · armed_guards='+arm+
     ' · probation_pending='+pend+' · proposals_pending='+(d.proposals_pending||0)+
-    ' · invariants='+d.verdict;
+    ' · invariants='+d.verdict+
+    (d.judge&&d.judge.judged?(' · judge='+(d.judge.settled?
+      d.judge.agreed+'/'+d.judge.settled+' ('+d.judge.agreement+'%)':'awaiting')):'');
   document.getElementById('props').innerHTML=rows((d.proposals||[]).filter(p=>p.status==='pending'),
     p=>`<tr><td class="warn">${esc(p.id)}</td><td>${esc(p.path)} <span class="dim">+${p.adds}/-${p.dels} · ${esc(p.verify||'')}</span></td>`+
        `<td><button class="act go" onclick="pact('approve','${esc(p.id)}',this)">✓ approve</button>`+

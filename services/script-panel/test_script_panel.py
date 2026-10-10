@@ -105,3 +105,55 @@ def test_promote_failure_propagates(monkeypatch):
     monkeypatch.setattr(sp, "_run_probe", fake)
     r = sp.guard_action("g111-222", "promote")
     assert not r["ok"]
+
+
+# --- judge_agreement: verdict x human-outcome correlation -------------
+
+
+def _prop(pid, status, judge=None, guard_id=None):
+    p = {"id": pid, "status": status}
+    if judge:
+        p["judge"] = {"status": judge}
+    if guard_id:
+        p["guard_id"] = guard_id
+    return p
+
+
+def test_judge_agreement_empty():
+    a = sp.judge_agreement([], {})
+    assert a["judged"] == 0 and a["settled"] == 0
+    assert a["agreement"] is None
+
+
+def test_judge_agreement_cells():
+    props = [
+        _prop("p-1", "probation", "clean", "g1"),     # +promoted: agreed
+        _prop("p-2", "rejected", "flagged"),           # denied: agreed
+        _prop("p-3", "probation", "clean", "g3"),      # reverted: MISSED
+        _prop("p-4", "probation", "flagged", "g4"),    # promoted: wolf
+        _prop("p-5", "pending", "clean"),              # unsettled
+        _prop("p-6", "retracted", "clean"),            # model-side, not human
+        _prop("p-7", "rejected", "abstain"),           # no-signal verdict
+        _prop("p-8", "rejected"),                      # never judged
+        _prop("p-9", "probation", "clean", "g9"),      # timer live: unsettled
+    ]
+    states = {"g1": "promoted", "g3": "expired/reverted",
+              "g4": "promoted", "g9": "pending"}
+    a = sp.judge_agreement(props, states)
+    assert a["judged"] == 7      # clean/flagged verdicts (p1-6, p9)
+    assert a["settled"] == 4     # p1, p2, p3, p4
+    assert a["agreed"] == 2      # p1 clean-promoted, p2 flagged-rejected
+    assert a["missed"] == 1      # p3 clean but reverted
+    assert a["cried_wolf"] == 1  # p4 flagged but promoted
+    assert a["agreement"] == 50
+    by_id = {c["id"]: c["verdict"] for c in a["cells"]}
+    assert by_id == {"p-1": "agreed", "p-2": "agreed",
+                     "p-3": "missed", "p-4": "cried_wolf"}
+
+
+def test_judge_agreement_all_unsettled():
+    props = [_prop("p-1", "pending", "clean"),
+             _prop("p-2", "probation", "flagged", "g2")]
+    a = sp.judge_agreement(props, {"g2": "pending"})
+    assert a["judged"] == 2 and a["settled"] == 0
+    assert a["agreement"] is None
