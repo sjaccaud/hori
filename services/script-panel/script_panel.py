@@ -414,7 +414,9 @@ def trust_posture() -> dict:
     pending = [p for p in probation if p["state"] == "pending"]
 
     proposals = load_proposals()
-    prop_pending = [p for p in proposals if p["status"] == "pending"]
+    prop_pending = [p for p in proposals
+                    if p["status"] == "pending"
+                    and p.get("origin") not in SYNTHETIC_ORIGINS]
     judge = judge_agreement(
         proposals, {p["gid"]: p["state"] for p in probation})
 
@@ -438,6 +440,11 @@ def trust_posture() -> dict:
 _GID_RE = re.compile(r"g\d+-\d+")
 _PID_RE = re.compile(r"p-\d+-[a-z0-9]{6}")
 _PROP_DIFF_LINES = 120
+# Proposals tagged by synthetic callers (the eval harness marks
+# fixtures "eval") are measurement artifacts, not human decisions:
+# excluded from the open-decision count, the agreement stats, and the
+# phone surface — they render under a collapsed /trust section.
+SYNTHETIC_ORIGINS = frozenset({"eval"})
 
 
 def judge_agreement(proposals: list[dict],
@@ -458,6 +465,8 @@ def judge_agreement(proposals: list[dict],
     out = {"judged": 0, "settled": 0, "agreed": 0, "missed": 0,
            "cried_wolf": 0, "agreement": None, "cells": []}
     for p in proposals:
+        if p.get("origin") in SYNTHETIC_ORIGINS:
+            continue                     # eval fixtures aren't ground truth
         js = (p.get("judge") or {}).get("status")
         if js not in ("clean", "flagged"):
             continue
@@ -510,7 +519,7 @@ def load_proposals() -> list[dict]:
             continue
         entry = {k: meta.get(k) for k in
                  ("id", "status", "path", "created", "adds", "dels",
-                  "rationale", "verify", "guard_id", "judge")}
+                  "rationale", "verify", "guard_id", "judge", "origin")}
         if meta.get("status") == "pending":
             try:
                 diff = (d / "diff.patch").read_text().splitlines()
@@ -909,7 +918,9 @@ async function load(){
     ' · invariants='+d.verdict+
     (d.judge&&d.judge.judged?(' · judge='+(d.judge.settled?
       d.judge.agreed+'/'+d.judge.settled+' ('+d.judge.agreement+'%)':'awaiting')):'');
-  document.getElementById('props').innerHTML=rows((d.proposals||[]).filter(p=>p.status==='pending'),
+  const pendAll=(d.proposals||[]).filter(p=>p.status==='pending');
+  const pendReal=pendAll.filter(p=>p.origin!=='eval'), pendEval=pendAll.filter(p=>p.origin==='eval');
+  document.getElementById('props').innerHTML=rows(pendReal,
     p=>`<tr id="prop-${esc(p.id)}"><td class="warn">${esc(p.id)}</td><td>${esc(p.path)} <span class="dim">+${p.adds}/-${p.dels} · ${esc(p.verify||'')}</span></td>`+
        `<td><button class="act go" onclick="pact('approve','${esc(p.id)}',this)">✓ approve</button>`+
        `<button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ deny</button></td></tr>`+
@@ -920,7 +931,14 @@ async function load(){
         (p.judge.answers?` <span class="dim">${esc(Object.entries(p.judge.answers).map(([q,a])=>q+'='+(a.abstained?'?':a.chosen)+'('+a.prob+')').join(' · '))}</span>`:'')+
         (p.judge.error?` <span class="dim">${esc(p.judge.error)}</span>`:'')+
         `</td></tr>`:'')+
-       (p.diff?`<tr><td colspan="3"><pre style="margin:4px 0;font-size:10.5px;max-height:280px;overflow:auto;background:#0d0d10;padding:8px;border-radius:6px">${esc(p.diff)}${p.diff_truncated?'\n… (truncated)':''}</pre></td></tr>`:''));
+       (p.diff?`<tr><td colspan="3"><pre style="margin:4px 0;font-size:10.5px;max-height:280px;overflow:auto;background:#0d0d10;padding:8px;border-radius:6px">${esc(p.diff)}${p.diff_truncated?'\n… (truncated)':''}</pre></td></tr>`:''))
+    +(pendEval.length?`<details style="margin-top:6px"><summary class="dim" style="font-size:11px">eval fixtures ×${pendEval.length} — corpus artifacts, not decisions; deny dismisses</summary>`+
+      rows(pendEval,
+        p=>`<tr><td class="dim">${esc(p.id)}</td><td class="dim">${esc(p.path)} <span class="dim">+${p.adds}/-${p.dels}`+
+           (p.judge?` · judge:${esc(p.judge.status)}`:'')+`</span></td>`+
+           `<td><button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ dismiss</button></td></tr>`+
+           `<tr><td colspan="3" class="dim" style="font-size:11px">${esc(p.rationale||'')}</td></tr>`)
+      +`</details>`:'');
   document.getElementById('guards').innerHTML=rows(d.guards_armed,
     g=>`<tr><td class="warn">${esc(g.unit)}</td><td class="dim">fires ${esc(g.fires)}</td>`+
        `<td><button class="act stop" onclick="gact('revert',gidOf('${esc(g.unit)}'),this)">↩ revert now</button></td></tr>`);

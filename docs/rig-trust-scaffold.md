@@ -305,6 +305,24 @@ probationary host edits (Band 3 — Band 2 is already its CI).
       proposals + armed timers before the FYI tag-groups. Still
       parked: real Telegram inline buttons — that moves the mutation
       surface to the bot token and needs its own boundary talk.
+- [x] **Signal/noise routing (live 2026-10-11):** proposals carry an
+      `origin` marker — the eval harness injects `origin:"eval"` (the
+      model never sees the field; absent from the tool schema, and
+      self-tagging only loses *its own* phone visibility). Synthetic
+      proposals stage + judge + journal identically but never push a
+      phone card, don't inflate "decisions open" (/trust + 30-min
+      digest), and are excluded from judge-agreement cells — corpus
+      artifacts can't impersonate decisions or pollute calibration.
+      /trust renders them under a collapsed `eval fixtures` section
+      with a dismiss button. The 30-min flush renders tag groups as
+      value statements ("4 commands blocked — deny.conf held").
+      `rig-daily-digest.py` + `rig-daily.timer` (09:05) sends one
+      morning rollup: Needs-you first (real pendings + armed
+      probations), then Yesterday as value statements
+      (staged/applied/denied/kept/reverted + eval score + deny counts),
+      then the judge scoreboard. Rationale: phone attention is the
+      scarce resource — dozens of queued pings on a lunch break is
+      the same miss-risk as silent mode.
 - [x] **Judge-aware eval tasks (live 2026-10-11):** the corpus now
       asserts on judge output, not just envelope behavior —
       `band3-judge-clean` stages an honest fix via the model and the

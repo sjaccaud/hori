@@ -69,6 +69,14 @@ DECIDE_URL = os.environ.get(
 DECIDE_TIMEOUT = float(os.environ.get("PROPOSAL_DECIDE_TIMEOUT", "30"))
 JUDGE_DIFF_CHARS = 6500  # decide's 8k input cap minus header budget
 
+# Callers may tag a proposal with `origin` (e.g. the eval harness marks
+# measurement fixtures "eval"). Synthetic-origin proposals stage, judge
+# and journal like any other — they just never push a phone card, so a
+# corpus run can't impersonate a decision that needs a human. The model
+# can't reach the field: it isn't in the tool schema, and self-tagging
+# would only lose *its own* visibility — the envelope doesn't care.
+SYNTHETIC_ORIGINS = frozenset({"eval"})
+
 # Typed questions over the diff. noul = yes/no/unknown; choice picks a
 # label. Every question can abstain — an unsure judge says 'unknown'
 # instead of bluffing, which is itself useful signal for the human.
@@ -346,6 +354,7 @@ def tool_propose_host_change(args: dict) -> dict:
     rationale = (args.get("rationale") or "").strip()
     verify = (args.get("verify") or "health").strip()
     evidence = (args.get("evidence") or "").strip()[:2000]
+    origin = (args.get("origin") or "").strip()[:40]
 
     target, err = _resolve_target(path_arg)
     if err:
@@ -432,6 +441,8 @@ def tool_propose_host_change(args: dict) -> dict:
         "sha256": hashlib.sha256(content.encode()).hexdigest()[:16],
         "orig_sha256": hashlib.sha256(old.encode()).hexdigest()[:16],
     }
+    if origin:
+        meta["origin"] = origin
     try:
         (pdir / "meta.json").write_text(json.dumps(meta, indent=2))
     except OSError as e:
@@ -441,23 +452,28 @@ def tool_propose_host_change(args: dict) -> dict:
              f"judge:{judge['status']}\t{rationale[:80]}")
     _audit("propose-staged", id=pid, path=str(target), adds=adds,
            dels=dels, judge=judge["status"])
-    home = os.path.expanduser("~")
-    card = _card(
-        "propose",
-        "--file", target.name,
-        "--dir", str(target.parent).replace(home, "~", 1),
-        "--adds", str(adds), "--dels", str(dels),
-        "--judge", judge["status"],
-        "--judge-detail", " ".join(judge.get("flagged") or []),
-        "--rationale", rationale[:160],
-    )
-    _notify(
-        f"propose-{pid}",
-        card or f"[propose] {pid}: {target} (+{adds}/-{dels}) "
-                f"judge:{judge['status']} — {rationale[:120]}",
-        f"{TRUST_URL}#prop-{pid}" if TRUST_URL else "",
-    )
-    return {
+    # Synthetic proposals (eval fixtures) stage and journal identically
+    # but never page the phone — a measurement artifact is not a human
+    # decision. The journal above is the audit trail; the phone stays
+    # for things that actually need a tap.
+    if meta.get("origin") not in SYNTHETIC_ORIGINS:
+        home = os.path.expanduser("~")
+        card = _card(
+            "propose",
+            "--file", target.name,
+            "--dir", str(target.parent).replace(home, "~", 1),
+            "--adds", str(adds), "--dels", str(dels),
+            "--judge", judge["status"],
+            "--judge-detail", " ".join(judge.get("flagged") or []),
+            "--rationale", rationale[:160],
+        )
+        _notify(
+            f"propose-{pid}",
+            card or f"[propose] {pid}: {target} (+{adds}/-{dels}) "
+                    f"judge:{judge['status']} — {rationale[:120]}",
+            f"{TRUST_URL}#prop-{pid}" if TRUST_URL else "",
+        )
+    out = {
         "ok": True,
         "id": pid,
         "status": "pending",
@@ -469,6 +485,9 @@ def tool_propose_host_change(args: dict) -> dict:
         "note": "staged — a human approves or denies it. Do NOT edit the "
                 "host file yourself; proposal_status reports the outcome.",
     }
+    if origin:
+        out["origin"] = origin
+    return out
 
 
 def tool_list_proposals(args: dict) -> dict:
@@ -492,6 +511,7 @@ def tool_list_proposals(args: dict) -> dict:
                 "path": meta["path"], "created": meta["created"],
                 "adds": meta.get("adds"), "dels": meta.get("dels"),
                 "judge": (meta.get("judge") or {}).get("status"),
+                "origin": meta.get("origin"),
                 "rationale": meta.get("rationale", "")[:120],
             })
     except OSError:
@@ -506,7 +526,7 @@ def tool_proposal_status(args: dict) -> dict:
         return err
     out = {k: meta.get(k) for k in
            ("id", "status", "path", "created", "adds", "dels", "verify",
-            "rationale", "guard_id", "settled", "judge")}
+            "rationale", "guard_id", "settled", "judge", "origin")}
     return {"ok": True, "proposal": out}
 
 

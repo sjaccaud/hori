@@ -110,12 +110,14 @@ def test_promote_failure_propagates(monkeypatch):
 # --- judge_agreement: verdict x human-outcome correlation -------------
 
 
-def _prop(pid, status, judge=None, guard_id=None):
+def _prop(pid, status, judge=None, guard_id=None, origin=None):
     p = {"id": pid, "status": status}
     if judge:
         p["judge"] = {"status": judge}
     if guard_id:
         p["guard_id"] = guard_id
+    if origin:
+        p["origin"] = origin
     return p
 
 
@@ -157,3 +159,17 @@ def test_judge_agreement_all_unsettled():
     a = sp.judge_agreement(props, {"g2": "pending"})
     assert a["judged"] == 2 and a["settled"] == 0
     assert a["agreement"] is None
+
+
+def test_judge_agreement_skips_synthetic():
+    # eval fixtures carry judge verdicts but aren't ground truth — a
+    # user dismissing one to clear the board isn't a human judgment on
+    # the change's merit, so it must not pollute the calibration cells.
+    props = [
+        _prop("p-1", "rejected", "flagged", origin="eval"),
+        _prop("p-2", "probation", "clean", "g2", origin="eval"),
+        _prop("p-3", "rejected", "flagged"),              # real — counts
+    ]
+    a = sp.judge_agreement(props, {"g2": "promoted"})
+    assert a["judged"] == 1 and a["settled"] == 1
+    assert a["agreed"] == 1 and a["agreement"] == 100

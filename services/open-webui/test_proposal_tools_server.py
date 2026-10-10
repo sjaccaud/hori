@@ -279,3 +279,59 @@ class TestJudge:
         assert st["proposal"]["judge"]["status"] == "flagged"
         lst = pts.tool_list_proposals({"status": "pending"})
         assert lst["proposals"][0]["judge"] == "flagged"
+
+
+class TestOrigin:
+    """origin marks synthetic proposals (eval fixtures): they stage and
+    journal identically but never page the phone — a measurement
+    artifact is not a human decision."""
+
+    def _notified(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            pts, "_notify", lambda tag, msg, url="": calls.append(tag))
+        return calls
+
+    def test_eval_origin_suppresses_push(self, env, monkeypatch):
+        calls = self._notified(monkeypatch)
+        r = _propose(env["target"], origin="eval")
+        assert r["ok"] is True and r["origin"] == "eval"
+        assert calls == []                     # phone stays quiet
+        meta = json.loads(
+            (env["state"] / r["id"] / "meta.json").read_text())
+        assert meta["origin"] == "eval"        # but the audit is full
+
+    def test_eval_origin_still_journals(self, env, monkeypatch):
+        self._notified(monkeypatch)
+        pid = _propose(env["target"], origin="eval")["id"]
+        journal = (env["state"] / "journal.log").read_text()
+        assert f"propose\t{pid}" in journal    # staging is still logged
+
+    def test_absent_origin_pushes_normally(self, env, monkeypatch):
+        calls = self._notified(monkeypatch)
+        r = _propose(env["target"])
+        assert r["ok"] is True and "origin" not in r
+        assert calls == [f"propose-{r['id']}"]
+
+    def test_unknown_origin_pushes(self, env, monkeypatch):
+        # only the eval marker is synthetic — a future scheduler origin
+        # that wants human attention just isn't in the set.
+        calls = self._notified(monkeypatch)
+        r = _propose(env["target"], origin="scheduler")
+        assert calls == [f"propose-{r['id']}"]
+
+    def test_origin_roundtrips_list_and_status(self, env, monkeypatch):
+        self._notified(monkeypatch)
+        pid = _propose(env["target"], origin="eval")["id"]
+        st = pts.tool_proposal_status({"id": pid})
+        assert st["proposal"]["origin"] == "eval"
+        lst = pts.tool_list_proposals({"status": "pending"})
+        assert lst["proposals"][0]["origin"] == "eval"
+
+    def test_eval_origin_still_judged(self, env, monkeypatch):
+        self._notified(monkeypatch)
+        _judge_on(monkeypatch, _decide_stub({
+            "fit": ("yes", False), "scope": ("no", False),
+            "risk": ("low", False)}))
+        r = _propose(env["target"], origin="eval")
+        assert r["judge"]["status"] == "clean"  # measurement unaffected
