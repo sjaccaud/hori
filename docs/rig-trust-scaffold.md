@@ -290,6 +290,21 @@ probationary host edits (Band 3 — Band 2 is already its CI).
       `judge=agreed/settled (%)` or `awaiting`. meta.judge.request_id
       links each verdict back to decide's own decision log — the raw
       material for per-question calibration later.
+- [x] **HITL UX pass (live 2026-10-11):** notifications were
+      machine-shaped blobs (id first, decision buried, `86400s`
+      deadlines). `notify-card.py` now owns the shape — every card
+      answers decision/stakes/by-when in order: `🔴 REVIEW — file
+      (dir)` + rationale + judge verdict + honest deadline.
+      Callsites rewired: propose (with `/trust#prop-<pid>` deep-link
+      anchors), probation (`⏰ Auto-revert 14:32 — file applied`),
+      promote/revert/reject. `/trust` approve is now **two-tap**
+      (first tap arms `confirm apply?` for 8s; deny stays one-tap —
+      rejected is recoverable, applied is the blast radius).
+      `prob-deadlines.log` records arm-time revert epochs; the 30-min
+      digest gained a `🌅 rig — N decisions open` header reading live
+      proposals + armed timers before the FYI tag-groups. Still
+      parked: real Telegram inline buttons — that moves the mutation
+      surface to the bot token and needs its own boundary talk.
 
 ## Phase 5.8 — the network boundary + Band 2.5 (live 2026-10-10)
 

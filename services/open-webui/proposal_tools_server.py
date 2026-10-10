@@ -32,6 +32,7 @@ import os
 import re
 import secrets
 import stat
+import subprocess
 import sys
 import time
 import urllib.request
@@ -55,6 +56,7 @@ AUDIT_LOG = os.environ.get(
     os.path.expanduser("~/.local/share/proposal-tools/audit.jsonl"),
 )
 RIG_NOTIFY = os.path.expanduser("~/scripts/rig-notify.sh")
+NOTIFY_CARD = os.path.expanduser("~/scripts/notify-card.py")
 TRUST_URL = os.environ.get("PROPOSAL_TRUST_URL", "")
 
 # Second-opinion judge: aios-decide (:8773) reviews each staged diff —
@@ -180,15 +182,28 @@ def _journal(line: str) -> None:
         pass
 
 
-def _notify(tag: str, msg: str) -> None:
-    import subprocess
+def _notify(tag: str, msg: str, url: str = "") -> None:
     argv = [RIG_NOTIFY, tag, "0", msg]
-    if TRUST_URL:
-        argv.append(TRUST_URL)
+    u = url or TRUST_URL
+    if u:
+        argv.append(u)
     try:
         subprocess.run(argv, capture_output=True, timeout=15)
     except (OSError, subprocess.SubprocessError) as e:
         log.warning("rig-notify failed: %s", e)
+
+
+def _card(*args: str) -> str:
+    """Decision-shaped card via notify-card.py — empty string when the
+    formatter is missing so notify falls back to a plain line."""
+    try:
+        r = subprocess.run([NOTIFY_CARD, *args], capture_output=True,
+                           text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return ""
 
 
 def _decide_post(payload: dict) -> dict:
@@ -426,11 +441,21 @@ def tool_propose_host_change(args: dict) -> dict:
              f"judge:{judge['status']}\t{rationale[:80]}")
     _audit("propose-staged", id=pid, path=str(target), adds=adds,
            dels=dels, judge=judge["status"])
+    home = os.path.expanduser("~")
+    card = _card(
+        "propose",
+        "--file", target.name,
+        "--dir", str(target.parent).replace(home, "~", 1),
+        "--adds", str(adds), "--dels", str(dels),
+        "--judge", judge["status"],
+        "--judge-detail", " ".join(judge.get("flagged") or []),
+        "--rationale", rationale[:160],
+    )
     _notify(
         f"propose-{pid}",
-        f"[propose] {pid}: {target} (+{adds}/-{dels}) "
-        f"judge:{judge['status']} — "
-        f"{rationale[:120]} — approve: agent-approve {pid} or /trust",
+        card or f"[propose] {pid}: {target} (+{adds}/-{dels}) "
+                f"judge:{judge['status']} — {rationale[:120]}",
+        f"{TRUST_URL}#prop-{pid}" if TRUST_URL else "",
     )
     return {
         "ok": True,

@@ -851,6 +851,7 @@ button.chip:hover{color:var(--fg);border-color:var(--acc)}
 button.act{background:#1a1d23;border:1px solid var(--border);color:var(--fg);padding:3px 10px;border-radius:6px;cursor:pointer;font:inherit;font-size:11.5px;margin-left:6px}
 button.act:hover{border-color:var(--acc)}
 button.act.go{color:var(--ok)}button.act.stop{color:var(--bad)}
+button.act.arm{color:var(--warn);border-color:var(--warn)}
 button.act:disabled{opacity:.4;cursor:default}
 </style></head><body>
 <h1>Trust Console <span style="color:var(--dim);font-weight:400">· rig guardrail posture</span></h1>
@@ -880,6 +881,15 @@ async function gact(a,gid,btn){
   load();
 }
 async function pact(a,pid,btn){
+  // approve is the load-bearing tap — first tap arms for 8s, second
+  // confirms. deny stays one-tap: a rejected proposal is recoverable
+  // (the model re-proposes), an applied host change is the blast radius.
+  if(a==='approve'&&!btn.dataset.armed){
+    btn.dataset.armed='1';const t=btn.textContent;
+    btn.textContent='confirm apply?';btn.className='act arm';
+    setTimeout(()=>{btn.dataset.armed='';btn.textContent=t;btn.className='act go';},8000);
+    return;
+  }
   btn.disabled=true;
   try{
     const r=await fetch('/api/proposal/'+a+'?id='+encodeURIComponent(pid),{method:'POST'});
@@ -900,7 +910,7 @@ async function load(){
     (d.judge&&d.judge.judged?(' · judge='+(d.judge.settled?
       d.judge.agreed+'/'+d.judge.settled+' ('+d.judge.agreement+'%)':'awaiting')):'');
   document.getElementById('props').innerHTML=rows((d.proposals||[]).filter(p=>p.status==='pending'),
-    p=>`<tr><td class="warn">${esc(p.id)}</td><td>${esc(p.path)} <span class="dim">+${p.adds}/-${p.dels} · ${esc(p.verify||'')}</span></td>`+
+    p=>`<tr id="prop-${esc(p.id)}"><td class="warn">${esc(p.id)}</td><td>${esc(p.path)} <span class="dim">+${p.adds}/-${p.dels} · ${esc(p.verify||'')}</span></td>`+
        `<td><button class="act go" onclick="pact('approve','${esc(p.id)}',this)">✓ approve</button>`+
        `<button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ deny</button></td></tr>`+
        `<tr><td colspan="3" class="dim" style="font-size:11px">${esc(p.rationale||'')}</td></tr>`+
