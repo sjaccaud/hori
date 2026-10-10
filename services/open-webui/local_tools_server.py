@@ -296,6 +296,34 @@ FORBIDDEN_ARGS = frozenset(
     }
 )
 
+# Flags that consume the NEXT argument as their value — skipped (with the
+# value) when locating a subcommand, so 'systemctl --user list-units' and
+# 'docker --format x ps' reach their real subcommand. Deliberately NOT
+# listed: -M/--machine/-H/--host/--context/--config/--url — target- or
+# network-selecting flags keep their value visible so 'systemctl
+# --machine x@.host restart y' still checks 'x@.host' as the subcommand
+# (fail-safe: unknown value flags can only false-deny, never false-allow).
+_SUBCMD_VALUE_FLAGS = frozenset(
+    "-o,--output,-t,--type,-p,--property,-j,--jobs,--state,"
+    "--signal,-s,--kill-who,--kill-signal,--root,--image,--drop-in,"
+    "--message,--preset-mode,-u,--unit,--boot-loader-menu,"
+    "--boot-loader-entry,--format,--log-level,--log-opt".split(",")
+)
+
+
+def _subcommand_index(cmd: list[str], start: int = 1) -> int:
+    """Index of the real subcommand: the first arg that isn't a flag and
+    isn't a known value-flag's value. len(cmd) if none exists."""
+    i = start
+    while i < len(cmd):
+        a = cmd[i]
+        if a == "-" or not a.startswith("-"):
+            return i
+        if "=" not in a and a in _SUBCMD_VALUE_FLAGS:
+            i += 1  # value flag: consume its argument too
+        i += 1
+    return len(cmd)
+
 _SHELL_METACHAR_RE = re.compile(r"[;&|`$\n\r\x00<>\"'\\]|\$\(")
 _GLOB_CHARS_RE = re.compile(r"[*?\[\]]")
 _GLOB_EXPANSION_LIMIT = 256
@@ -621,8 +649,15 @@ def _validate_command(cmd: list[str]) -> tuple[bool, str]:
 
     sub_filter = SUBCOMMAND_FILTERS.get(base)
     if sub_filter is not None:
-        if len(cmd) <= sub_idx or cmd[sub_idx] not in sub_filter:
-            return False, f"forbidden subcommand for {base}: {cmd[sub_idx] if len(cmd) > sub_idx else '(none)'}"
+        # Accept either the immediate arg (flag-style "subcommands" like
+        # 'smartctl -a', 'fdisk -l') or the first non-flag arg scanned
+        # past flags and value-flag pairs.
+        direct_ok = sub_idx < len(cmd) and cmd[sub_idx] in sub_filter
+        idx = _subcommand_index(cmd, sub_idx)
+        scan_ok = idx < len(cmd) and cmd[idx] in sub_filter
+        if not (direct_ok or scan_ok):
+            shown = cmd[idx] if idx < len(cmd) else "(none)"
+            return False, f"forbidden subcommand for {base}: {shown}"
 
     return True, ""
 
