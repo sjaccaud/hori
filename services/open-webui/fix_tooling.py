@@ -450,10 +450,15 @@ WEB_SEARCH_MODELS = set(ALL_QWEN_DEVSTRAL) - {"qwen-256k-batch"}
 # 2026-09-26: knowledge/memory/chats OFF — the retrieval safaris (search_chats
 # pulling stale cross-chat docs, memory×7 looping, knowledge×5 on dead
 # collections) were the brittleness source. files stays on (manual attach).
+# 2026-10-10: code_interpreter OFF — eval A/B (rig-agent-eval --surface):
+# execute_code was the ONLY consistent wrong-tool attractor (6 calls across
+# 3 surface runs, picked over run_safe_command for exec tasks). On this box
+# it's also an unaudited exec path — no backend configured, so a call is a
+# dead end, or Pyodide-in-browser: exec outside deny.conf + audit journal.
 META_BUILTINTOOLS = {
     "knowledge": False,
     "time": True,
-    "code_interpreter": True,
+    "code_interpreter": False,
     "web_search": False,
     "memory": False,
     "files": True,
