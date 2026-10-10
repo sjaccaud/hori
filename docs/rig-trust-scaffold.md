@@ -1,8 +1,11 @@
 # Rig Trust Scaffold — Model-Agnostic Safety Layer
 
 Status: PHASES 0-6 BUILT + VERIFIED 2026-10-09 evening (ahead of the
-planned weekend — implementation session). Phase 4.5 partially done
-(snapshot posture + contract check live; script-panel console deferred).
+planned weekend — implementation session). Phase 4.5 console shipped same
+night (/trust page + posture strip). Follow-ups 2026-10-09 late: deny.conf
+parser ported to local_tools_server (OWUI path now serves minted citations,
+contract check local_tools_deny), guarded-change v2 gains auto-detected
+apt/dpkg package-state revert via apt-state-restore.sh.
 27B/32GB rig, no card-2 dependency — as designed.
 
 Verified live: deny hook 16/16 verdicts; pre-mutate snapshots landing

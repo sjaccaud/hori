@@ -152,6 +152,26 @@ def check_local_tools_status() -> tuple[bool, str]:
     return True, "get_status ok"
 
 
+def check_local_tools_deny() -> tuple[bool, str]:
+    """run_safe_command must enforce deny.conf CONTENT — minted incident
+    citations — not just its allowlist. deny.conf is canonical for all
+    agent exec paths (docs/rig-trust-scaffold.md); a server that only
+    allowlists has silently lost the registry."""
+    try:
+        urllib.request.urlopen(
+            urllib.request.Request(
+                "http://127.0.0.1:8766/run_safe_command",
+                data=b'{"command": "ddcutil"}'), timeout=8)
+        return False, "ddcutil EXECUTED — deny layer dead"
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        if "deny.conf" in body:
+            return True, "deny.conf citation served live"
+        return False, f"blocked without citation: {body[:120]}"
+    except Exception as e:
+        return False, f"probe error: {e}"
+
+
 def check_snapshot_fresh() -> tuple[bool, str]:
     """Checks the *previous* snapshot's age — i.e. the cadence held. When run
     inside the generator this measures time since the last successful run,
@@ -467,6 +487,7 @@ CHECKS = [
     ("mcpo_auth", check_mcpo_auth),
     ("mcp_scope", check_mcp_scope),
     ("local_tools_status", check_local_tools_status),
+    ("local_tools_deny", check_local_tools_deny),
     ("snapshot_fresh", check_snapshot_fresh),
     ("owui_db_hygiene", check_owui_db_hygiene),
     ("filter_valves", check_filter_valves),

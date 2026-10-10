@@ -94,6 +94,64 @@ def _path_under_read_roots(path: str) -> bool:
         return False
     return any(p == root or root in p.parents for root in READ_ROOTS)
 
+# rig deny.conf — canonical minted-incident denylist for ALL agent exec
+# paths (docs/rig-trust-scaffold.md). The Devin path enforces it via
+# ~/scripts/agent-deny-check.py; this parser ports the same rules so the
+# OWUI surface denies with identical citations and picks up newly minted
+# rules without a service restart. Format: <scope>|<reason>|<regex> —
+# scope exec|read|write|any; 'write' has no tool here so it never matches.
+RIG_DENY_CONF = Path(os.environ.get(
+    "LOCAL_TOOLS_DENY_CONF",
+    os.path.expanduser("~/.config/rig/deny.conf"),
+))
+
+# Compiled-in floor — mirrors agent-deny-check.py's FLOOR. If deny.conf is
+# missing/corrupt the Sep-07/08 i2c incident class still carries its
+# citation instead of degrading to a bare allowlist rejection.
+_RIG_DENY_FLOOR = (
+    (r"\bddcutil\b", "any",
+     "i2c/DDC probe — RAS events + freezes (system-stability Sep-07/08)"),
+    (r"\bi2cdetect\b|\bi2cdump\b|\bi2cget\b|\bi2cset\b", "exec",
+     "i2c bus probe — same incident class"),
+    (r"/dev/i2c", "any", "direct i2c access — same incident class"),
+    (r"\bflashrom\b", "exec", "firmware flashing — human-only"),
+)
+
+
+def _rig_deny_rules() -> list[tuple[str, str, str]]:
+    """Re-parse deny.conf each call — rules minted after an incident take
+    effect immediately, matching agent-deny-check.py semantics."""
+    rules = list(_RIG_DENY_FLOOR)
+    try:
+        for line in RIG_DENY_CONF.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("|", 2)  # scope|reason|pattern (pattern may contain |)
+            if len(parts) != 3:
+                continue
+            scope, reason, pat = parts
+            rules.append((pat.strip(), scope.strip(), reason.strip()))
+    except OSError:
+        pass
+    return rules
+
+
+def _rig_deny_check(subject: str, scope: str) -> str:
+    """Return the citation if subject hits a deny.conf rule for this scope
+    (exec matches exec+any, read matches read+any; empty scope = universal),
+    else ''."""
+    for pat, rule_scope, reason in _rig_deny_rules():
+        if rule_scope and rule_scope not in (scope, "any"):
+            continue
+        try:
+            if re.search(pat, subject):
+                return reason
+        except re.error:
+            continue
+    return ""
+
+
 # Patterns that are always denied for reading — via read_file AND (as of
 # 2026-09-23) via run_safe_command path arguments, which previously let
 # `cat`/`grep`/`find` walk straight past this list.
@@ -282,6 +340,10 @@ def _is_path_allowed(path: str) -> tuple[bool, str]:
         p = _resolve_path(path)
     except (OSError, ValueError) as e:
         return False, f"invalid path: {e}"
+
+    reason = _rig_deny_check(str(p), "read")
+    if reason:
+        return False, f"blocked by rig deny.conf: {reason}"
 
     for pat in READ_DENY_PATTERNS:
         if pat and fnmatch.fnmatch(str(p), pat):
@@ -475,6 +537,12 @@ def _validate_command(cmd: list[str]) -> tuple[bool, str]:
         return False, "empty command"
 
     base = os.path.basename(cmd[0])
+
+    # deny.conf content first: a minted incident citation beats a bare
+    # allowlist rejection — the model learns WHY, with the episode pointer.
+    reason = _rig_deny_check(" ".join(cmd), "exec")
+    if reason:
+        return False, f"blocked by rig deny.conf: {reason}"
 
     if base in ("bash", "sh", "zsh", "fish", "csh", "ksh", "tcsh", "sudo", "su", "pkexec", "doas"):
         return False, f"forbidden interpreter/escalator: {base}"
