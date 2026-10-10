@@ -19,6 +19,8 @@
 
 **Status:** BUILD — contract 11/11 PASS live.
 
+**2026-10-10 — tool-surface A/B (ep-020 #2):** `rig-agent-eval.py --surface` now runs named stub grammars (trim/current/fat); stub calls counted as `builtin_calls`. 4 corpus runs on qwen-dsh-medium: surface *size* doesn't move fidelity within noise; `execute_code` was the only consistent wrong-tool attractor (6 calls / 3 runs) and is an exec path outside deny.conf. `code_interpreter` disabled in `META_BUILTINTOOLS`, applied live, contract green (`edbddf8`). Harness + surfaces committed in ~/scripts (`154afe9`). Episode: open-webui thread ep-031.
+
 ---
 
 ### SLICE-19-DECIDE-CALIBRATION: WO-04 calibration loop — offline engine that samples logged /decide decisions through qwen-27B as audit oracle, refits isotonic calibration, and proposes abstain thresholds against an error budget.
