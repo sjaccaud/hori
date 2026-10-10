@@ -156,6 +156,53 @@ Enforcement lands at exec layer; this phase makes it visible.
       Root cause of the 160/day flood: ProtectHome=read-only silently ate
       the service's throttle-stamp writes → ReadWritePaths fix staged.
 
+## Phase 5.5 — Disposable sandbox exec (Band 2 of the capability ladder)
+
+Band 1 was read/report (local-tools). Band 2 gives the model a place to
+*do* things where the worst outcome is a messy scratch dir — "check out
+this repo and test it" becomes a real, measured capability (2026-10-10).
+
+- [x] **sandbox_tools_server.py :8774** (reclaimed mcpo port). One main
+      tool: `sandbox_exec` runs a bounded allowlist inside `bwrap` —
+      `~/agent-scratch` is the only writable path (`HOME=/sbx` keeps
+      venvs, pip caches, git state inside); `/etc`, `~`, and every
+      unbound path are literally nonexistent to the payload. pid/ipc/uts
+      unshared; network kept for clone/pip but egress-shaped: clone URLs
+      limited to github/gitlab/codeberg/sr.ht/`file://`, no curl/ssh
+      anywhere, no git push/fetch/remote/config. Targeted ro-binds for
+      `resolv.conf`/`hosts`/`nsswitch.conf`/`/etc/ssl/certs` — never
+      `/etc/ssl` wholesale (its private/ dir holds host keys). deny.conf
+      overlays the whole command line (incident citations beat every
+      layer); calls journaled to `~/.local/share/sandbox-tools/`.
+- [x] **Allowlist shaped for "clone, inspect, test".** git
+      (`-C <dir>` for in-repo work — no cd exists), file ops, sed,
+      python3/pytest/pip, make. Excluded: `env`/`xargs`/`nohup` (generic
+      launchers), `awk` (`system()`), `find -exec`, shells, net tools.
+      No shell exists — the tool description teaches `python3 -c`/`sed -i`
+      for file writes since `>`/`>>` are inert. Timeout ≤300s, output
+      capped, journal on every call.
+- [x] **Armed on `qwen-deepdive` only** (`sandbox_models` filter valve) —
+      same deliberate-agent posture as workspace writes; fast-chat models
+      don't carry the grammar.
+- [x] **Contract confinement canary.** `sandbox_tools` posts
+      `/sandbox_status` → asserts `scratch_writable` AND `host_fs_hidden`
+      via live bwrap probes — a kernel/bwrap regression fails the
+      contract instead of degrading silently. ~150ms, runs on the 5-min
+      fast path.
+- [x] **Eval coverage (mutation side begins).** rig-agent-eval routes
+      `sandbox_*` to :8774 (per-tool routing) and tasks can declare
+      `tools`/`system`/`setup_cmd`. 5 sandbox tasks live: write-verify,
+      clone+unittest+report, primes→file (do); push-to-origin, host
+      /etc/shadow (refuse). Live `qwen-dsh-medium`: **3/3 do + 2/2
+      refuse** — real `git -C` adaptation, `sed -i` file writes,
+      `GIT_*` env identity for commits, honest partial-completion at the
+      push boundary.
+- [x] **Unit-hardening constraint discovered.** Any systemd mount-ns
+      flag (ProtectHome/ProtectSystem/PrivateTmp/NNP) wraps the service
+      in a userns; `apparmor_restrict_unprivileged_userns` then blocks
+      bwrap's *nested* userns — bisected live via systemd-run. The unit
+      is a deliberately plain launcher; confinement is bwrap's job.
+
 ## Deferred (needs card 2 or >weekend)
 
 120B tier, quorum review, ephemeral-root overlayfs sessions, PiKVM,

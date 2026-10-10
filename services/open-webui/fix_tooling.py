@@ -590,6 +590,27 @@ def workspace_server_tool_ids_for(model_id: str) -> list[str]:
     return []
 
 
+# Disposable sandbox exec (bwrap-confined ~/agent-scratch on :8774). Armed on
+# the same deliberate-agent model as workspace writes: Band 2 of the trust
+# ladder — disposable by construction, still behind the deny overlay.
+SANDBOX_MODELS = {"qwen-deepdive"}
+SANDBOX_TOOLS_CONNECTION = {
+    "url": "http://127.0.0.1:8774",
+    "config": {
+        "enable": True,
+        "function_name_filter_list": "sandbox_exec,sandbox_status",
+    },
+    "info": {"id": "sandbox-tools", "name": "Sandbox Tools"},
+}
+
+
+def sandbox_server_tool_ids_for(model_id: str) -> list[str]:
+    """Sandbox tool ids attached only to the deliberate-agent model."""
+    if model_id in SANDBOX_MODELS:
+        return ["server:sandbox-tools"]
+    return []
+
+
 # Attaches local tool servers via metadata['tool_ids'] using 'server:<id>' ids.
 #
 # Two distinct mechanisms in Open-WebUI 0.11.x:
@@ -637,6 +658,14 @@ class Filter:
         write_server_tool_ids: str = Field(
             default="server:workspace-tools",
             description="Comma-separated write-capable 'server:<id>' tool_ids for write_models.",
+        )
+        sandbox_models: str = Field(
+            default="qwen-deepdive",
+            description="Comma-separated model ids allowed to use the disposable sandbox exec tools.",
+        )
+        sandbox_server_tool_ids: str = Field(
+            default="server:sandbox-tools",
+            description="Comma-separated 'server:<id>' tool_ids for sandbox_models.",
         )
         state_file: str = Field(
             default="/app/backend/data/aios-state-snapshot.md",
@@ -719,6 +748,14 @@ class Filter:
             if model_id in write_models:
                 write_ids = getattr(self.valves, "write_server_tool_ids", "") or ""
                 server_ids.update(t.strip() for t in write_ids.split(",") if t.strip())
+            sandbox_models = {
+                m.strip()
+                for m in (getattr(self.valves, "sandbox_models", "") or "").split(",")
+                if m.strip()
+            }
+            if model_id in sandbox_models:
+                sbx_ids = getattr(self.valves, "sandbox_server_tool_ids", "") or ""
+                server_ids.update(t.strip() for t in sbx_ids.split(",") if t.strip())
             server_tool_ids = ",".join(sorted(server_ids))
 
             for tool_id in server_ids:
@@ -927,6 +964,7 @@ def main():
         for tool_conn in (
             project_tools_conn,
             WORKSPACE_TOOLS_CONNECTION,
+            SANDBOX_TOOLS_CONNECTION,
             HORI_STATE_CONNECTION,
         ):
             if tool_conn['url'] not in urls:
@@ -970,6 +1008,15 @@ def main():
                 conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info']['id'] = 'workspace-tools'
                 conn_cfg['info']['name'] = 'Workspace Tools'
+            elif url == SANDBOX_TOOLS_CONNECTION['url']:
+                conn_cfg['config'] = conn_cfg.get('config', {})
+                conn_cfg['config']['enable'] = True
+                conn_cfg['config']['function_name_filter_list'] = (
+                    SANDBOX_TOOLS_CONNECTION['config']['function_name_filter_list']
+                )
+                conn_cfg['info'] = conn_cfg.get('info', {})
+                conn_cfg['info']['id'] = 'sandbox-tools'
+                conn_cfg['info']['name'] = 'Sandbox Tools'
             elif url in ('http://127.0.0.1:8767', 'http://127.0.0.1:8768'):
                 # OaK tool servers are not running; keep them disabled to reduce bloat.
                 conn_cfg.setdefault('config', {})['enable'] = False
@@ -997,6 +1044,7 @@ def main():
                         },
                         project_tools_conn,
                         WORKSPACE_TOOLS_CONNECTION,
+                        SANDBOX_TOOLS_CONNECTION,
                         HORI_STATE_CONNECTION,
                     ],
                     ensure_ascii=False,
@@ -1094,6 +1142,8 @@ def main():
                     "project_tool_ids": "server:project-tools",
                     "write_models": ",".join(sorted(WORKSPACE_WRITE_MODELS)),
                     "write_server_tool_ids": "server:workspace-tools",
+                    "sandbox_models": ",".join(sorted(SANDBOX_MODELS)),
+                    "sandbox_server_tool_ids": "server:sandbox-tools",
                 },
                 ensure_ascii=False,
             ),

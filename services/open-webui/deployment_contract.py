@@ -47,6 +47,7 @@ USER_UNITS = [
     "idea-factory-web.service",
     "script-panel.service",
     "workspace-tools.service",
+    "sandbox-tools.service",
 ]
 
 HTTP_ENDPOINTS = [
@@ -56,12 +57,14 @@ HTTP_ENDPOINTS = [
     ("workspace-tools", "http://127.0.0.1:8771/health"),
     ("aios_core", "http://127.0.0.1:5680/health"),
     ("idea-factory", "http://127.0.0.1:8772/health"),
+    ("sandbox-tools", "http://127.0.0.1:8774/health"),
 ]
 
 EXPECTED_CANON_KEYS = {
     "ALL_QWEN_DEVSTRAL": "models",
     "PROJECT_TOOL_MODELS": "project_models",
     "WORKSPACE_WRITE_MODELS": "write_models",
+    "SANDBOX_MODELS": "sandbox_models",
 }
 
 CANON_CONSTANTS = {"META_BUILTINTOOLS", "WEB_SEARCH_MODELS"}
@@ -236,6 +239,27 @@ def check_local_tools_deny() -> tuple[bool, str]:
         return False, f"probe error: {e}"
 
 
+def check_sandbox_tools() -> tuple[bool, str]:
+    """sandbox_status runs live bwrap probes — asserts the confinement is
+    actually holding (scratch writable, host fs hidden), not just that the
+    port answers. ~150ms; safe on the 5-min fast cadence."""
+    d, _ = _http_json(
+        "http://127.0.0.1:8774/sandbox_status", data=b"{}", timeout=10
+    )
+    if not (d or {}).get("ok"):
+        return False, f"sandbox_status failed: {str(d)[:120]}"
+    bad = []
+    if not d.get("scratch_writable"):
+        bad.append("scratch not writable")
+    if not d.get("host_fs_hidden"):
+        bad.append("host fs visible — confinement broken")
+    if not d.get("bwrap"):
+        bad.append("bwrap missing")
+    if bad:
+        return False, "; ".join(bad)
+    return True, "confinement live (scratch rw, host hidden)"
+
+
 def check_snapshot_fresh() -> tuple[bool, str]:
     """Checks the *previous* snapshot's age — i.e. the cadence held. When run
     inside the generator this measures time since the last successful run,
@@ -325,6 +349,7 @@ def check_filter_valves() -> tuple[bool, str]:
         ("server_tool_ids", {"server:local-tools", "server:mcp:hori-state"}),
         ("project_tool_ids", {"server:project-tools"}),
         ("write_server_tool_ids", {"server:workspace-tools"}),
+        ("sandbox_server_tool_ids", {"server:sandbox-tools"}),
     ):
         live = {x.strip() for x in (valves.get(key) or "").split(",") if x.strip()}
         if live != expect:
@@ -755,6 +780,7 @@ CHECKS = [
     ("mcp_native", check_mcp_native),
     ("local_tools_status", check_local_tools_status),
     ("local_tools_deny", check_local_tools_deny),
+    ("sandbox_tools", check_sandbox_tools),
     ("snapshot_fresh", check_snapshot_fresh),
     ("owui_db_hygiene", check_owui_db_hygiene),
     ("filter_valves", check_filter_valves),
