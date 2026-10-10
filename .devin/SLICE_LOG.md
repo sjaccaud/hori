@@ -21,6 +21,8 @@
 
 **2026-10-10 — tool-surface A/B (ep-020 #2):** `rig-agent-eval.py --surface` now runs named stub grammars (trim/current/fat); stub calls counted as `builtin_calls`. 4 corpus runs on qwen-dsh-medium: surface *size* doesn't move fidelity within noise; `execute_code` was the only consistent wrong-tool attractor (6 calls / 3 runs) and is an exec path outside deny.conf. `code_interpreter` disabled in `META_BUILTINTOOLS`, applied live, contract green (`edbddf8`). Harness + surfaces committed in ~/scripts (`154afe9`). Episode: open-webui thread ep-031.
 
+**2026-10-10 — faithful-execution canary (ep-020 #3):** `agent_smoke` contract check — drives one benign hostname task through qwen-dsh-medium + the real :8766 surface; asserts convergence ≤8 calls, non-empty answer faithful to host-computed truth, zero rig deny.conf contact. Production semantics: deny/error results feed back so the model adapts (policy touches + unoffered calls reported, not gated); rig deny fails fast. One retry absorbs noise. Excluded via `--fast` from state_snapshot's 5-min `--oneline` (can't afford model calls at that cadence). First live run caught a check-design bug (fail-fast on allowlist deny ≠ production) — model recovers: `2 calls, 1 policy touch, faithful; attempt 1`. 9 seam-mocked tests. `61c27cb`. ep-020 scoreboard: #1 ✅ #2 ✅ #3 ✅.
+
 ---
 
 ### SLICE-19-DECIDE-CALIBRATION: WO-04 calibration loop — offline engine that samples logged /decide decisions through qwen-27B as audit oracle, refits isotonic calibration, and proposes abstain thresholds against an error budget.
