@@ -200,7 +200,7 @@ def _deployment_contract() -> str:
     script = Path(__file__).with_name("deployment_contract.py")
     try:
         p = subprocess.run(
-            [sys.executable, str(script), "--oneline"],
+            [sys.executable, str(script), "--oneline", "--fast"],
             capture_output=True, text=True, timeout=45,
         )
         return p.stdout.strip() or "deployment_contract=ERROR (no output)"
