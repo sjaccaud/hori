@@ -203,6 +203,30 @@ this repo and test it" becomes a real, measured capability (2026-10-10).
       bwrap's *nested* userns — bisected live via systemd-run. The unit
       is a deliberately plain launcher; confinement is bwrap's job.
 
+## Capability bands — classify by write-boundary, not task type
+
+How a new ask gets bucketed (2026-10-10). Two questions: **where does
+the write land, and how is the result verified?** The band is the
+envelope that answers both — not the task description.
+
+| Band | Writes land | Verified by | Envelope | Status |
+|---|---|---|---|---|
+| 1 | nowhere (read host) | host-computed truth | local-tools allowlist + deny.conf | live |
+| 2 | scratch root only | host-verifiable artifact (file exists, suite green, diff produced) | bwrap sandbox :8774 | live, measured |
+| 2.5 | scratch + a forwarded port | user pokes a running thing | named sessions + port bound | surface TBD |
+| 3 | host, probationary | snapshot + phone approval + rollback | proposal channel feeding the guard units | channel TBD |
+| 4 | host + time (daemons/timers) | scheduled-job trust domain | separate lifecycle — far out | — |
+
+Task classes that fit Band 2 unchanged (the envelope is
+*verifiable-artifact work*, not "repo work"): repo investigation,
+repro-and-fix (a proven patch before it reaches a human — the Band-3
+rehearsal), code prototyping (iterate until self-written tests pass),
+data/document transforms, dependency evaluation (pip install + smoke
+test = evidence not vibes), host-read → sandbox-write hybrids
+(read project, write refactor, show diff). The two classes that need
+new envelopes: run-and-let-me-try (dev servers → Band 2.5) and
+probationary host edits (Band 3 — Band 2 is already its CI).
+
 ## Deferred (needs card 2 or >weekend)
 
 120B tier, quorum review, ephemeral-root overlayfs sessions, PiKVM,
