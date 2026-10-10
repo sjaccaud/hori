@@ -517,3 +517,97 @@ def test_streamable_get_method_not_allowed(read_token):
     client = TestClient(app)
     r = client.get("/mcp/http", headers=READ_HDR)
     assert r.status_code == 405
+
+
+def test_streamable_unknown_notification_swallowed(read_token):
+    """JSON-RPC: a notification (no id) never gets a response — not even
+    for a method the server doesn't know. Found live by monkey test:
+    notifications/cancelled produced a -32601 with id:null."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={
+        "jsonrpc": "2.0", "method": "notifications/cancelled",
+        "params": {"requestId": 9},
+    }, headers=READ_HDR)
+    assert r.status_code == 202
+    assert r.content in (b"", b"null")
+
+
+def test_streamable_notification_only_batch_202(read_token):
+    """A batch of pure notifications -> 202, empty body."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json=[
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "method": "notifications/cancelled",
+         "params": {"requestId": 1}},
+    ], headers=READ_HDR)
+    assert r.status_code == 202
+
+
+def test_streamable_batch_non_dict_item_errored(read_token):
+    """Batch members that aren't objects get -32600, not a 500."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json=[
+        {"jsonrpc": "2.0", "id": 1, "method": "ping"},
+        42,
+        "garbage",
+    ], headers=READ_HDR)
+    assert r.status_code == 200
+    arr = r.json()
+    assert len(arr) == 3
+    assert arr[0]["result"] == {}
+    assert arr[1]["error"]["code"] == -32600
+    assert arr[2]["error"]["code"] == -32600
+
+
+def test_streamable_garbage_object_invalid_request(read_token):
+    """A JSON object with no method isn't a notification — -32600."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={"foo": "bar"}, headers=READ_HDR)
+    assert r.status_code == 200
+    assert r.json()["error"]["code"] == -32600
+
+
+def test_handle_message_notification_no_response():
+    """Dispatcher level (shared with the SSE lane): unknown notification
+    methods must return None — fire-and-forget, never an error frame."""
+    from services.aios_core import mcp_server as ms
+    assert asyncio.run(ms._handle_mcp_message(
+        {"jsonrpc": "2.0", "method": "notifications/cancelled"}
+    )) is None
+    assert asyncio.run(ms._handle_mcp_message(
+        {"jsonrpc": "2.0", "method": "bogus/unknown.method"}
+    )) is None
+
+
+def test_call_local_tool_surfaces_error_body(monkeypatch):
+    """local-tools returns its reason (deny.conf citation, policy error)
+    in the 422 body — the MCP wrapper must surface it, not a bare
+    '422 Unprocessable Content' the model can't act on."""
+    import httpx
+    from services.aios_core import mcp_server as ms
+
+    class _Resp:
+        status_code = 422
+        text = '{"error": "denied by deny.conf rule rig-deny-i2c"}'
+
+        def json(self):
+            return {"error": "denied by deny.conf rule rig-deny-i2c"}
+
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError("422", request=None, response=None)
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, *a, **kw):
+            return _Resp()
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: _Client())
+    result = asyncio.run(ms.call_mcp_tool("run_safe_command", {"command": "x"}))
+    text = json.dumps(result.model_dump())
+    assert result.is_error
+    assert "deny.conf" in text
