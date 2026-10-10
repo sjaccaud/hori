@@ -34,6 +34,7 @@ import secrets
 import stat
 import sys
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,32 @@ AUDIT_LOG = os.environ.get(
 )
 RIG_NOTIFY = os.path.expanduser("~/scripts/rig-notify.sh")
 TRUST_URL = os.environ.get("PROPOSAL_TRUST_URL", "")
+
+# Second-opinion judge: aios-decide (:8773) reviews each staged diff —
+# typed questions, calibrated answers, an explicit abstain contract.
+# ADVISORY ONLY: a down or abstaining judge never blocks staging — the
+# structural boundaries (allowlist/protected/verify-enum/deny) are the
+# safety; the judge is a second pair of eyes for the human reviewer.
+DECIDE_URL = os.environ.get(
+    "PROPOSAL_DECIDE_URL", "http://127.0.0.1:8773")
+DECIDE_TIMEOUT = float(os.environ.get("PROPOSAL_DECIDE_TIMEOUT", "30"))
+JUDGE_DIFF_CHARS = 6500  # decide's 8k input cap minus header budget
+
+# Typed questions over the diff. noul = yes/no/unknown; choice picks a
+# label. Every question can abstain — an unsure judge says 'unknown'
+# instead of bluffing, which is itself useful signal for the human.
+_JUDGE_QUESTIONS = [
+    {"id": "fit", "type": "noul",
+     "question": "The DIFF implements the stated RATIONALE and "
+                "nothing else."},
+    {"id": "scope", "type": "noul",
+     "question": "The DIFF contains changes beyond the stated fix — "
+                "extra edits, unrelated hunks, or deletions the "
+                "rationale doesn't explain."},
+    {"id": "risk", "type": "choice",
+     "options": ["low", "medium", "high"],
+     "question": "Overall risk of applying this diff to the file?"},
+]
 
 # Proposal targets: existing files under these roots only.
 PROPOSAL_ROOTS = [
@@ -162,6 +189,66 @@ def _notify(tag: str, msg: str) -> None:
         subprocess.run(argv, capture_output=True, timeout=15)
     except (OSError, subprocess.SubprocessError) as e:
         log.warning("rig-notify failed: %s", e)
+
+
+def _decide_post(payload: dict) -> dict:
+    """Single seam for the decide call — tests patch this, the network
+    never leaks into the unit suite."""
+    req = urllib.request.Request(
+        DECIDE_URL.rstrip("/") + "/decide",
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=DECIDE_TIMEOUT) as r:
+        return json.loads(r.read())
+
+
+def _judge_proposal(target: Path, rationale: str, verify: str,
+                    diff: str) -> dict:
+    """Second-model review of a staged diff via aios-decide.
+
+    Returns {"status": clean|flagged|abstain|unavailable|disabled,
+             "answers": {...}}. Advisory — every failure mode maps to
+    unavailable, never an exception. Flagged = any answered question
+    came back bad (fit=no, scope=yes, risk=high); abstain = a question
+    declined to answer or risk came back medium — the judge can't call
+    it low-risk, which for a second opinion is honest uncertainty.
+    """
+    if not DECIDE_URL:
+        return {"status": "disabled"}
+    text = (
+        f"FILE: {target}\nRATIONALE: {rationale}\n"
+        f"POST-APPLY VERIFY: {verify}\nDIFF:\n{diff[:JUDGE_DIFF_CHARS]}"
+    )
+    try:
+        resp = _decide_post({"text": text,
+                             "questions": _JUDGE_QUESTIONS})
+    except Exception as e:
+        log.warning("judge unavailable: %s", e)
+        return {"status": "unavailable", "error": str(e)[:120]}
+
+    answers: dict[str, Any] = {}
+    flagged, abstained = [], []
+    for d in resp.get("decisions", []):
+        qid = d.get("id", "?")
+        answers[qid] = {"chosen": d.get("chosen"),
+                        "prob": round(d.get("prob") or 0.0, 3),
+                        "abstained": bool(d.get("abstained"))}
+        if d.get("abstained"):
+            abstained.append(qid)
+            continue
+        ch = d.get("chosen")
+        if (qid == "fit" and ch == "no") or \
+           (qid == "scope" and ch == "yes") or \
+           (qid == "risk" and ch == "high"):
+            flagged.append(f"{qid}={ch}")
+        elif qid == "risk" and ch == "medium":
+            abstained.append(qid)
+    status = ("flagged" if flagged else
+              "abstain" if abstained else "clean")
+    return {"status": status, "answers": answers,
+            "flagged": flagged, "abstained": abstained,
+            "request_id": resp.get("request_id")}
 
 
 # --- validation ----------------------------------------------------------
@@ -311,6 +398,10 @@ def tool_propose_host_change(args: dict) -> dict:
     dels = sum(1 for l in diff.splitlines()
                if l.startswith("-") and not l.startswith("---"))
 
+    # Second opinion: the decide sidecar reads the staged diff before
+    # the human's phone does. Advisory — never gates the stage.
+    judge = _judge_proposal(target, rationale, verify, diff)
+
     meta = {
         "id": pid,
         "created": int(time.time()),
@@ -322,6 +413,7 @@ def tool_propose_host_change(args: dict) -> dict:
         "verify": verify,
         "adds": adds,
         "dels": dels,
+        "judge": judge,
         "sha256": hashlib.sha256(content.encode()).hexdigest()[:16],
         "orig_sha256": hashlib.sha256(old.encode()).hexdigest()[:16],
     }
@@ -330,12 +422,15 @@ def tool_propose_host_change(args: dict) -> dict:
     except OSError as e:
         return _err(f"staging meta failed: {e}")
 
-    _journal(f"propose\t{pid}\t{target}\t+{adds}/-{dels}\t{rationale[:80]}")
-    _audit("propose-staged", id=pid, path=str(target), adds=adds, dels=dels)
+    _journal(f"propose\t{pid}\t{target}\t+{adds}/-{dels}\t"
+             f"judge:{judge['status']}\t{rationale[:80]}")
+    _audit("propose-staged", id=pid, path=str(target), adds=adds,
+           dels=dels, judge=judge["status"])
     _notify(
         f"propose-{pid}",
-        f"[propose] {pid}: {target} (+{adds}/-{dels}) — "
-        f"{rationale[:140]} — approve: agent-approve {pid} or /trust",
+        f"[propose] {pid}: {target} (+{adds}/-{dels}) "
+        f"judge:{judge['status']} — "
+        f"{rationale[:120]} — approve: agent-approve {pid} or /trust",
     )
     return {
         "ok": True,
@@ -345,6 +440,7 @@ def tool_propose_host_change(args: dict) -> dict:
         "adds": adds,
         "dels": dels,
         "verify": verify,
+        "judge": judge,
         "note": "staged — a human approves or denies it. Do NOT edit the "
                 "host file yourself; proposal_status reports the outcome.",
     }
@@ -370,6 +466,7 @@ def tool_list_proposals(args: dict) -> dict:
                 "id": meta["id"], "status": meta["status"],
                 "path": meta["path"], "created": meta["created"],
                 "adds": meta.get("adds"), "dels": meta.get("dels"),
+                "judge": (meta.get("judge") or {}).get("status"),
                 "rationale": meta.get("rationale", "")[:120],
             })
     except OSError:
@@ -384,7 +481,7 @@ def tool_proposal_status(args: dict) -> dict:
         return err
     out = {k: meta.get(k) for k in
            ("id", "status", "path", "created", "adds", "dels", "verify",
-            "rationale", "guard_id", "settled")}
+            "rationale", "guard_id", "settled", "judge")}
     return {"ok": True, "proposal": out}
 
 

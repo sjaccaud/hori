@@ -265,6 +265,20 @@ probationary host edits (Band 3 — Band 2 is already its CI).
       5-min path; unit is HARDENED (ProtectHome=read-only +
       ReadWritePaths — the inverse of sandbox-tools' deliberate plain
       launcher; no nested bwrap here so hardening is safe).
+- [x] **Second-opinion judge (live 2026-10-11):** every staged diff
+      gets a typed-question review from `aios-decide` (:8773 → nano
+      :8090) before the human sees it — three questions (does the diff
+      match the rationale? any scope creep? overall risk?), each with
+      the decide abstain contract. Verdict rolls to
+      clean/flagged/abstain/unavailable, rides `meta.json`, the tool
+      response, the journal, the phone notification, and the /trust
+      card (per-question answers + probs rendered). **Advisory by
+      design** — the judge never gates staging; enforcement stays
+      structural. Live-verified: clean verdict on a real fix
+      (fit=yes 0.69, scope=no 0.97, risk=low); flagged a diff that
+      snuck an `export LC_ALL=C` past its own rationale (fit=no). This
+      is `aios-decide`'s first real consumer — dormant calibrated
+      infra put to work as "two eyes on every host change".
 
 ## Phase 5.8 — the network boundary + Band 2.5 (live 2026-10-10)
 

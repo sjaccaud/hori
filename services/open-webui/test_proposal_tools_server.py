@@ -29,6 +29,9 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(pts, "STATE_DIR", state)
     monkeypatch.setattr(pts, "AUDIT_LOG", str(tmp_path / "audit.jsonl"))
     monkeypatch.setattr(pts, "RIG_NOTIFY", "/bin/true")
+    # decide is a real service on this host — disabled by default so the
+    # suite never touches the network; judge tests re-enable + stub it.
+    monkeypatch.setattr(pts, "DECIDE_URL", "")
     return {"root": root, "target": target, "state": state,
             "tmp": tmp_path}
 
@@ -188,3 +191,91 @@ class TestBounds:
         assert pts.tool_proposal_status({"id": "../etc"})["ok"] is False
         assert pts.tool_proposal_status({"id": "p-1"})["ok"] is False
         assert pts.tool_retract_proposal({"id": "x"})["ok"] is False
+
+
+def _decide_stub(answers, request_id="req-1"):
+    """_decide_post double. answers = {qid: (chosen, abstained)}."""
+    def post(payload):
+        assert "DIFF:" in payload["text"]
+        assert "RATIONALE:" in payload["text"]
+        assert len(payload["questions"]) == 3
+        return {"request_id": request_id, "decisions": [
+            {"id": qid, "type": "noul", "result": "answered",
+             "probabilities": {chosen: 0.9},
+             "chosen": chosen, "prob": 0.9, "abstained": ab}
+            for qid, (chosen, ab) in answers.items()]}
+    return post
+
+
+def _judge_on(monkeypatch, stub):
+    monkeypatch.setattr(pts, "DECIDE_URL", "http://fake-decide")
+    monkeypatch.setattr(pts, "_decide_post", stub)
+
+
+class TestJudge:
+    """Second-opinion sidecar: advisory verdicts ride the staged meta."""
+
+    def test_clean_verdict_in_response_and_meta(self, env, monkeypatch):
+        _judge_on(monkeypatch, _decide_stub({
+            "fit": ("yes", False), "scope": ("no", False),
+            "risk": ("low", False)}))
+        r = _propose(env["target"])
+        assert r["ok"] is True and r["judge"]["status"] == "clean"
+        meta = json.loads(
+            (env["state"] / r["id"] / "meta.json").read_text())
+        assert meta["judge"]["status"] == "clean"
+        assert meta["judge"]["answers"]["fit"]["chosen"] == "yes"
+        assert meta["judge"]["request_id"] == "req-1"
+
+    @pytest.mark.parametrize("answers,flag", [
+        ({"fit": ("no", False), "scope": ("no", False),
+          "risk": ("low", False)}, "fit=no"),
+        ({"fit": ("yes", False), "scope": ("yes", False),
+          "risk": ("low", False)}, "scope=yes"),
+        ({"fit": ("yes", False), "scope": ("no", False),
+          "risk": ("high", False)}, "risk=high"),
+    ])
+    def test_flagged_verdicts(self, env, monkeypatch, answers, flag):
+        _judge_on(monkeypatch, _decide_stub(answers))
+        r = _propose(env["target"])
+        assert r["ok"] is True  # advisory — staging is never gated
+        assert r["judge"]["status"] == "flagged"
+        assert flag in r["judge"]["flagged"]
+
+    @pytest.mark.parametrize("answers", [
+        {"fit": ("yes", False), "scope": ("no", False),
+         "risk": ("medium", False)},          # can't call it low-risk
+        {"fit": ("yes", False), "scope": ("no", False),
+         "risk": (None, True)},               # model abstained
+        {"fit": (None, True), "scope": ("no", False),
+         "risk": ("low", False)},
+    ])
+    def test_abstain_verdicts(self, env, monkeypatch, answers):
+        _judge_on(monkeypatch, _decide_stub(answers))
+        r = _propose(env["target"])
+        assert r["judge"]["status"] == "abstain"
+        assert r["judge"]["abstained"]
+
+    def test_unavailable_does_not_block_stage(self, env, monkeypatch):
+        def boom(payload):
+            raise OSError("connection refused")
+        _judge_on(monkeypatch, boom)
+        r = _propose(env["target"])
+        assert r["ok"] is True
+        assert r["judge"]["status"] == "unavailable"
+        assert "connection refused" in r["judge"]["error"]
+        assert (env["state"] / r["id"] / "meta.json").exists()
+
+    def test_disabled_without_url(self, env):
+        r = _propose(env["target"])  # env fixture sets DECIDE_URL=""
+        assert r["ok"] is True and r["judge"]["status"] == "disabled"
+
+    def test_verdict_surfaces_in_list_and_status(self, env, monkeypatch):
+        _judge_on(monkeypatch, _decide_stub({
+            "fit": ("yes", False), "scope": ("yes", False),
+            "risk": ("low", False)}))
+        pid = _propose(env["target"])["id"]
+        st = pts.tool_proposal_status({"id": pid})
+        assert st["proposal"]["judge"]["status"] == "flagged"
+        lst = pts.tool_list_proposals({"status": "pending"})
+        assert lst["proposals"][0]["judge"] == "flagged"

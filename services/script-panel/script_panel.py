@@ -455,7 +455,7 @@ def load_proposals() -> list[dict]:
             continue
         entry = {k: meta.get(k) for k in
                  ("id", "status", "path", "created", "adds", "dels",
-                  "rationale", "verify", "guard_id")}
+                  "rationale", "verify", "guard_id", "judge")}
         if meta.get("status") == "pending":
             try:
                 diff = (d / "diff.patch").read_text().splitlines()
@@ -847,6 +847,12 @@ async function load(){
        `<td><button class="act go" onclick="pact('approve','${esc(p.id)}',this)">✓ approve</button>`+
        `<button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ deny</button></td></tr>`+
        `<tr><td colspan="3" class="dim" style="font-size:11px">${esc(p.rationale||'')}</td></tr>`+
+       (p.judge?`<tr><td colspan="3" style="font-size:11px">`+
+        `<span class="${p.judge.status==='clean'?'ok':(p.judge.status==='flagged'?'bad':(p.judge.status==='abstain'?'warn':'dim'))}">`+
+        `judge: ${esc(p.judge.status)}</span>`+
+        (p.judge.answers?` <span class="dim">${esc(Object.entries(p.judge.answers).map(([q,a])=>q+'='+(a.abstained?'?':a.chosen)+'('+a.prob+')').join(' · '))}</span>`:'')+
+        (p.judge.error?` <span class="dim">${esc(p.judge.error)}</span>`:'')+
+        `</td></tr>`:'')+
        (p.diff?`<tr><td colspan="3"><pre style="margin:4px 0;font-size:10.5px;max-height:280px;overflow:auto;background:#0d0d10;padding:8px;border-radius:6px">${esc(p.diff)}${p.diff_truncated?'\n… (truncated)':''}</pre></td></tr>`:''));
   document.getElementById('guards').innerHTML=rows(d.guards_armed,
     g=>`<tr><td class="warn">${esc(g.unit)}</td><td class="dim">fires ${esc(g.fires)}</td>`+
