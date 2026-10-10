@@ -1169,7 +1169,7 @@ replies in text bubble AND speaks the reply aloud through speakers.
 
 **Unsure:** first real chat through OWUI UI hasn't been exercised (API needs session auth; middleware path verified in-container). Watch the first interactive use for tool-result shape surprises (results come back as MCP `content` arrays — same as SSE clients see).
 
-**Monkey-tested 2026-10-09** (31-case live battery, `/tmp/mcp_monkey.py`): found + fixed in `96c6240` —
+**Monkey-tested 2026-10-09** (31-case live battery, `services/aios_core/monkey_mcp_http.py`): found + fixed in `96c6240` —
 - notifications with unknown methods produced a stray -32601 instead of being swallowed → notif-only batches returned 200 not 202 (dispatcher fix; shared with SSE lane);
 - non-dict batch items could 500 → now per-item -32600;
 - `_call_local_tool` dropped 422 bodies → deny.conf citations now propagate to the model through MCP instead of bare "Unprocessable Content".
