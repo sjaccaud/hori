@@ -21,6 +21,16 @@ sys.path.insert(0, os.path.dirname(__file__))
 import local_tools_server as jlt  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def reports(monkeypatch):
+    """Record rig-deny reports instead of really logging/notifying —
+    otherwise every test deny would push a real phone notification."""
+    seen = []
+    monkeypatch.setattr(jlt, "_report_rig_deny",
+                        lambda s, sub, r: seen.append((s, sub, r)))
+    return seen
+
+
 @pytest.fixture()
 def deny_conf(tmp_path, monkeypatch):
     """Point the server at a scratch deny.conf; tests write their own rules."""
@@ -84,3 +94,18 @@ def test_malformed_lines_skipped(deny_conf):
     result = jlt.tool_run_safe_command({"command": "lsblk"})
     assert not result["ok"]
     assert "valid" in result["error"]
+
+
+def test_deny_is_reported_not_silent(deny_conf, reports):
+    """Deny → log + citation, never silent (Phase-1 contract). A denied
+    call must reach the journal/notify reporter so the /trust deny-hits
+    panel sees OWUI-path blocks, not just Devin-hook ones."""
+    deny_conf.write_text("exec|test-minted|\\blsblk\\b\n")
+    jlt.tool_run_safe_command({"command": "lsblk"})
+    assert reports and reports[0][0] == "exec"
+    assert "test-minted" in reports[0][2]
+
+
+def test_allowlisted_clean_command_not_reported(reports):
+    jlt.tool_run_safe_command({"command": "df -h"})
+    assert reports == []

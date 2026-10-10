@@ -152,6 +152,24 @@ def _rig_deny_check(subject: str, scope: str) -> str:
     return ""
 
 
+def _report_rig_deny(scope: str, subject: str, reason: str) -> None:
+    """Journal + notify a deny hit — deny → log + citation, never silent
+    (scaffold Phase-1 contract). Same 'agent-deny' journal tag the Devin
+    hook uses, so OWUI-path hits show up in the /trust deny-hits panel.
+    Fire-and-forget: reporting must never break the deny itself."""
+    try:
+        subprocess.run(
+            ["logger", "-t", "agent-deny",
+             f"BLOCKED[local-tools:{scope}] {reason} :: {subject[:160]}"],
+            check=False, timeout=5)
+        subprocess.run(
+            [os.path.expanduser("~/scripts/rig-notify.sh"), "deny", "600",
+             f"blocked[{scope}] {subject[:80]} — {reason[:80]}"],
+            check=False, timeout=10)
+    except Exception:
+        pass
+
+
 # Patterns that are always denied for reading — via read_file AND (as of
 # 2026-09-23) via run_safe_command path arguments, which previously let
 # `cat`/`grep`/`find` walk straight past this list.
@@ -343,6 +361,7 @@ def _is_path_allowed(path: str) -> tuple[bool, str]:
 
     reason = _rig_deny_check(str(p), "read")
     if reason:
+        _report_rig_deny("read", str(p), reason)
         return False, f"blocked by rig deny.conf: {reason}"
 
     for pat in READ_DENY_PATTERNS:
@@ -542,6 +561,7 @@ def _validate_command(cmd: list[str]) -> tuple[bool, str]:
     # allowlist rejection — the model learns WHY, with the episode pointer.
     reason = _rig_deny_check(" ".join(cmd), "exec")
     if reason:
+        _report_rig_deny("exec", " ".join(cmd), reason)
         return False, f"blocked by rig deny.conf: {reason}"
 
     if base in ("bash", "sh", "zsh", "fish", "csh", "ksh", "tcsh", "sudo", "su", "pkexec", "doas"):
