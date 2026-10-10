@@ -227,6 +227,43 @@ test = evidence not vibes), host-read → sandbox-write hybrids
 new envelopes: run-and-let-me-try (dev servers → Band 2.5) and
 probationary host edits (Band 3 — Band 2 is already its CI).
 
+## Open-WebUI is a thin client — declared 2026-10-10
+
+Settles the ep-020 strategy question (thin client vs substrate):
+**OWUI is a thin client.** Its job is exactly three things — chat UI,
+model selector, managed tool plumbing. Every capability the model can
+*invoke* lives in an external service behind an enforced boundary; no
+capability may live inside OWUI itself, because internal features can't
+be deny.conf'd, audited, banded, or contract-checked.
+
+Permanently off (substrate-class features — the boundary list):
+
+- **knowledge / memory / chats retrieval** — probabilistic retrieval was
+  the 09-23 wrong-domain dementia fuel; continuity comes from
+  deterministic injection (state snapshot + hori-state tools).
+- **code_interpreter / execute_code** — unaudited, unconstrained exec
+  that duplicated `sandbox_exec`'s job with none of the confinement;
+  grammar-gated off via `META_BUILTINTOOLS`.
+- **subagents/delegate_task, image_generation, notes, channels, skills,
+  tasks, automations, calendar, notifications, user_input** — OWUI
+  builtin categories that spawn work outside the band system; all off in
+  `META_BUILTINTOOLS`.
+- **compat API** (`/openai/*`, `/ollama/*`) — bypasses inlet filters;
+  `ENABLE_API_KEYS=false`, contract-enforced closed.
+- **New builtin categories** from future OWUI upgrades default ON —
+  the `builtin_tools` contract check exists to catch them; re-check
+  `get_builtin_tools` after every upgrade.
+
+Kept (thin-client surface): time, files, `web_search`/`fetch_url`
+(SearXNG — egress-shaped search, not a substrate feature), the tool
+servers by band (8766/5680/8769/8771/8774).
+
+Corollary: if a feature wants building, it goes in an outside service
+with its own envelope (like sandbox-tools did) — never as an OWUI
+workspace script, builtin, or plugin. The config-as-code layer
+(`fix_tooling.py` + `deployment_contract.py`) is the enforcement;
+this section is the policy it enforces.
+
 ## Deferred (needs card 2 or >weekend)
 
 120B tier, quorum review, ephemeral-root overlayfs sessions, PiKVM,
