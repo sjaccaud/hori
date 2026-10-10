@@ -611,6 +611,31 @@ def sandbox_server_tool_ids_for(model_id: str) -> list[str]:
     return []
 
 
+# Host-change proposal channel (:8775). Band 3 of the trust ladder: the
+# model stages sandbox-verified content as a proposal; a human approves
+# (/trust or agent-approve) and the guarded-change envelope applies it.
+# Deliberate-agent posture — same gating as sandbox/workspace writes.
+PROPOSAL_MODELS = {"qwen-deepdive"}
+PROPOSAL_TOOLS_CONNECTION = {
+    "url": "http://127.0.0.1:8775",
+    "config": {
+        "enable": True,
+        "function_name_filter_list": (
+            "propose_host_change,list_proposals,proposal_status,"
+            "retract_proposal"
+        ),
+    },
+    "info": {"id": "proposal-tools", "name": "Proposal Tools"},
+}
+
+
+def proposal_server_tool_ids_for(model_id: str) -> list[str]:
+    """Proposal-channel tool ids attached only to the deliberate model."""
+    if model_id in PROPOSAL_MODELS:
+        return ["server:proposal-tools"]
+    return []
+
+
 # Attaches local tool servers via metadata['tool_ids'] using 'server:<id>' ids.
 #
 # Two distinct mechanisms in Open-WebUI 0.11.x:
@@ -666,6 +691,14 @@ class Filter:
         sandbox_server_tool_ids: str = Field(
             default="server:sandbox-tools",
             description="Comma-separated 'server:<id>' tool_ids for sandbox_models.",
+        )
+        proposal_models: str = Field(
+            default="qwen-deepdive",
+            description="Comma-separated model ids allowed to use the host-change proposal channel (Band 3).",
+        )
+        proposal_server_tool_ids: str = Field(
+            default="server:proposal-tools",
+            description="Comma-separated 'server:<id>' tool_ids for proposal_models.",
         )
         state_file: str = Field(
             default="/app/backend/data/aios-state-snapshot.md",
@@ -756,6 +789,14 @@ class Filter:
             if model_id in sandbox_models:
                 sbx_ids = getattr(self.valves, "sandbox_server_tool_ids", "") or ""
                 server_ids.update(t.strip() for t in sbx_ids.split(",") if t.strip())
+            proposal_models = {
+                m.strip()
+                for m in (getattr(self.valves, "proposal_models", "") or "").split(",")
+                if m.strip()
+            }
+            if model_id in proposal_models:
+                prop_ids = getattr(self.valves, "proposal_server_tool_ids", "") or ""
+                server_ids.update(t.strip() for t in prop_ids.split(",") if t.strip())
             server_tool_ids = ",".join(sorted(server_ids))
 
             for tool_id in server_ids:
@@ -956,8 +997,11 @@ def main():
     if row:
         conns = json.loads(row[0])
         # Drop the retired mcpo->filter bridge row wherever it sits.
+        # :8775 is RECLAIMED by proposal-tools (Band 3) — purge the port
+        # only when the row isn't the proposal connection itself.
         conns = [conn for conn in conns
-                 if conn.get('url', '') != HORI_STATE_RETIRED_URL]
+                 if conn.get('url', '') != HORI_STATE_RETIRED_URL
+                 or (conn.get('info') or {}).get('id') == 'proposal-tools']
         # Ensure project-tools/workspace-tools/hori-state are present and
         # local-tools is clean.
         urls = {conn_cfg.get('url', '') for conn_cfg in conns}
@@ -965,6 +1009,7 @@ def main():
             project_tools_conn,
             WORKSPACE_TOOLS_CONNECTION,
             SANDBOX_TOOLS_CONNECTION,
+            PROPOSAL_TOOLS_CONNECTION,
             HORI_STATE_CONNECTION,
         ):
             if tool_conn['url'] not in urls:
@@ -1017,6 +1062,15 @@ def main():
                 conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info']['id'] = 'sandbox-tools'
                 conn_cfg['info']['name'] = 'Sandbox Tools'
+            elif url == PROPOSAL_TOOLS_CONNECTION['url']:
+                conn_cfg['config'] = conn_cfg.get('config', {})
+                conn_cfg['config']['enable'] = True
+                conn_cfg['config']['function_name_filter_list'] = (
+                    PROPOSAL_TOOLS_CONNECTION['config']['function_name_filter_list']
+                )
+                conn_cfg['info'] = conn_cfg.get('info', {})
+                conn_cfg['info']['id'] = 'proposal-tools'
+                conn_cfg['info']['name'] = 'Proposal Tools'
             elif url in ('http://127.0.0.1:8767', 'http://127.0.0.1:8768'):
                 # OaK tool servers are not running; keep them disabled to reduce bloat.
                 conn_cfg.setdefault('config', {})['enable'] = False
@@ -1045,6 +1099,7 @@ def main():
                         project_tools_conn,
                         WORKSPACE_TOOLS_CONNECTION,
                         SANDBOX_TOOLS_CONNECTION,
+                        PROPOSAL_TOOLS_CONNECTION,
                         HORI_STATE_CONNECTION,
                     ],
                     ensure_ascii=False,
@@ -1144,6 +1199,8 @@ def main():
                     "write_server_tool_ids": "server:workspace-tools",
                     "sandbox_models": ",".join(sorted(SANDBOX_MODELS)),
                     "sandbox_server_tool_ids": "server:sandbox-tools",
+                    "proposal_models": ",".join(sorted(PROPOSAL_MODELS)),
+                    "proposal_server_tool_ids": "server:proposal-tools",
                 },
                 ensure_ascii=False,
             ),

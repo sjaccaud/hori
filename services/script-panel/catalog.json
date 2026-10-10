@@ -4,14 +4,14 @@
   "note": "Script library for the HORI/AIOS rig. Entries are hand-curated; add new scripts here when created. runnable=false rows are reference-only (installers, sudo-only, hooks, destructive). probes feed the status column.",
   "categories": {
     "ai-stack": "Inference, OWUI, models, benchmarks",
-    "aios-dev": "aios repo tooling — ingest, memory, hooks, health",
+    "aios-dev": "aios repo tooling \u2014 ingest, memory, hooks, health",
     "gaming": "GameMode / Heroic / display-mode switching",
     "power": "Idle power management",
     "network": "WoL, SSH hardening",
     "backup": "restic/system backups and recovery media",
     "system": "One-shot fixes, installers, sysctl",
-    "krill": "krill_harvester — paper-trading daemon ops",
-    "guardrails": "Agent trust scaffold — denylist, snapshots, rollback, invariants"
+    "krill": "krill_harvester \u2014 paper-trading daemon ops",
+    "guardrails": "Agent trust scaffold \u2014 denylist, snapshots, rollback, invariants"
   },
   "scripts": [
     {
@@ -42,7 +42,7 @@
       "path": "~/llama-builds/build-adaptive-mtp-10.sh",
       "category": "ai-stack",
       "what": "Builds the mainline-adaptive-mtp-10 llama.cpp from source (ROCm 10, clang 23, gfx1201) and installs into ~/llama-builds/mainline-adaptive-mtp-10.",
-      "why": "This is the build that gave the ROCm 7→10 + adaptive-MTP cutover.",
+      "why": "This is the build that gave the ROCm 7\u219210 + adaptive-MTP cutover.",
       "created": "2026-09-10",
       "kind": "build",
       "runnable": false,
@@ -63,7 +63,7 @@
       "created": "2026-09-10",
       "kind": "benchmark",
       "runnable": false,
-      "notes": "Do not run while llamacpp-adaptive is serving on :8080 — two Qwen models will not fit in 32 GB VRAM.",
+      "notes": "Do not run while llamacpp-adaptive is serving on :8080 \u2014 two Qwen models will not fit in 32 GB VRAM.",
       "tags": [
         "inference",
         "benchmark",
@@ -116,7 +116,7 @@
       "name": "benchmark-llamacpp-port.sh",
       "path": "~/scripts/benchmark-llamacpp-port.sh",
       "category": "ai-stack",
-      "what": "Same benchmark but takes a port argument — for A/B testing alternate configs on side ports.",
+      "what": "Same benchmark but takes a port argument \u2014 for A/B testing alternate configs on side ports.",
       "why": "Used during the spec-decode / ctx tuning passes to compare configs without touching the live router.",
       "created": "2026-08-20",
       "kind": "script",
@@ -139,7 +139,7 @@
       "kind": "script",
       "runnable": true,
       "confirm": true,
-      "confirm_text": "Spins up a second llama-server on a test port — heavy VRAM use while it runs. Continue?",
+      "confirm_text": "Spins up a second llama-server on a test port \u2014 heavy VRAM use while it runs. Continue?",
       "interpreter": "bash",
       "timeout": 600,
       "tags": [
@@ -157,7 +157,7 @@
       "created": "2026-09-06",
       "kind": "script",
       "runnable": false,
-      "notes": "Disrupts the live AI stack for hours — run manually overnight.",
+      "notes": "Disrupts the live AI stack for hours \u2014 run manually overnight.",
       "tags": [
         "eval",
         "disruptive"
@@ -203,7 +203,7 @@
       "path": "~/Projects/aios/scripts/hardening/post_reboot_health.sh",
       "category": "aios-dev",
       "what": "Functional safety-spine check: 8 core services + NRestarts flap detection, tool-daemon socket + real e2e tool call, Sherpa capability freshness + audit-path agreement, llama /health, workspace dir, docker + krill advisory tiers.",
-      "why": "The Aug 8 and Sep 25 incidents were silent because 'is-active' lies — crash-loops and a blind Sherpa looked fine. This verifies function, not process state.",
+      "why": "The Aug 8 and Sep 25 incidents were silent because 'is-active' lies \u2014 crash-loops and a blind Sherpa looked fine. This verifies function, not process state.",
       "created": "2026-08-08",
       "kind": "script",
       "runnable": false,
@@ -226,7 +226,7 @@
       "name": "notify_health.sh",
       "path": "~/Projects/aios/scripts/hardening/notify_health.sh",
       "category": "aios-dev",
-      "what": "Wrapper: runs post_reboot_health.sh and pushes the result to telegram + ntfy + desktop notify — pass AND fail. ExecStart of hori-boot-health.service.",
+      "what": "Wrapper: runs post_reboot_health.sh and pushes the result to telegram + ntfy + desktop notify \u2014 pass AND fail. ExecStart of hori-boot-health.service.",
       "why": "The health check used to be manual-only; a spine outage at boot went unnoticed for 90min on 2026-09-25. Now it always tells you.",
       "created": "2026-09-25",
       "kind": "script",
@@ -314,7 +314,7 @@
       "name": "devin_resume.sh",
       "path": "~/Projects/aios/scripts/devin_resume.sh",
       "category": "aios-dev",
-      "what": "Crash-recovery checklist — verifies the 6 things a fresh Devin session needs before touching the repo.",
+      "what": "Crash-recovery checklist \u2014 verifies the 6 things a fresh Devin session needs before touching the repo.",
       "why": "Session-continuity protocol after earlier context-loss incidents.",
       "created": "2026-08-09",
       "kind": "script",
@@ -382,7 +382,7 @@
       "name": "memory_consolidation.py",
       "path": "~/Projects/aios/scripts/memory_consolidation.py",
       "category": "aios-dev",
-      "what": "Memory consolidation pass — merges/prunes stored memories.",
+      "what": "Memory consolidation pass \u2014 merges/prunes stored memories.",
       "why": "Keeps the memory store from accreting duplicates; driven by the aios-consolidation timer.",
       "created": "2026-08-30",
       "kind": "script",
@@ -454,7 +454,7 @@
       "kind": "script",
       "runnable": true,
       "confirm": true,
-      "confirm_text": "Toggles the AI stack off (or back on) — interrupts anything running. Continue?",
+      "confirm_text": "Toggles the AI stack off (or back on) \u2014 interrupts anything running. Continue?",
       "interpreter": "bash",
       "timeout": 120,
       "tags": [
@@ -569,7 +569,7 @@
       "kind": "script",
       "runnable": false,
       "sudo": true,
-      "notes": "Destructive; sudo only; already run — kept for reference.",
+      "notes": "Destructive; sudo only; already run \u2014 kept for reference.",
       "tags": [
         "cleanup",
         "sudo"
@@ -606,7 +606,7 @@
       "created": "2026-09-04",
       "kind": "app",
       "runnable": false,
-      "notes": "GUI app — launch from the desktop, not the panel.",
+      "notes": "GUI app \u2014 launch from the desktop, not the panel.",
       "tags": [
         "power",
         "gui"
@@ -648,7 +648,7 @@
       "path": "~/scripts/wol-keepalive.sh",
       "category": "network",
       "what": "Re-arms Wake-on-LAN on the Aquantia NIC (B850 AI TOP drops the setting); runs as a sleep hook + boot one-shot.",
-      "why": "Without it WoL silently stops working after suspend/reboot — the box becomes unreachable remotely.",
+      "why": "Without it WoL silently stops working after suspend/reboot \u2014 the box becomes unreachable remotely.",
       "created": "2026-08-21",
       "kind": "service",
       "runnable": false,
@@ -768,7 +768,7 @@
       "path": "~/scripts/open-webui-backup.sh",
       "category": "backup",
       "what": "Backs up the Open-WebUI data (chats, webui.db) to the 8TB cold drive.",
-      "why": "The DB holds all chat history + model config — and has already been corrupted once by a docker-cp mishap.",
+      "why": "The DB holds all chat history + model config \u2014 and has already been corrupted once by a docker-cp mishap.",
       "created": "2026-09-04",
       "kind": "script",
       "runnable": false,
@@ -791,13 +791,13 @@
       "name": "fresh-start-4tb-copy.sh",
       "path": "~/scripts/fresh-start-4tb-copy.sh",
       "category": "backup",
-      "what": "Copies irreplaceable small files + current model weights to the external 4TB SSD — a portable, Mac-independent recovery set.",
+      "what": "Copies irreplaceable small files + current model weights to the external 4TB SSD \u2014 a portable, Mac-independent recovery set.",
       "why": "The 'grab one drive and rebuild anywhere' kit.",
       "created": "2026-09-04",
       "kind": "script",
       "runnable": true,
       "confirm": true,
-      "confirm_text": "Long-running copy to the 4TB SSD — it must be mounted. Continue?",
+      "confirm_text": "Long-running copy to the 4TB SSD \u2014 it must be mounted. Continue?",
       "interpreter": "bash",
       "timeout": 3600,
       "tags": [
@@ -866,7 +866,7 @@
       "created": "2026-08-17",
       "kind": "script",
       "runnable": false,
-      "notes": "Dormant — single GPU currently installed. Deployed copy also at /opt/scripts/switch-to-dual-gpu.sh.",
+      "notes": "Dormant \u2014 single GPU currently installed. Deployed copy also at /opt/scripts/switch-to-dual-gpu.sh.",
       "tags": [
         "gpu",
         "dormant"
@@ -919,7 +919,7 @@
       "name": "llama-nano-adaptive.service (nano SLM)",
       "path": "~/llama-builds/mainline-adaptive-mtp-10/llama-nano-adaptive.service",
       "category": "ai-stack",
-      "what": "Dedicated llama-server for Llama-3.2-3B on 127.0.0.1:8090, 32k ctx — the always-on fast responder and read_file summarizer.",
+      "what": "Dedicated llama-server for Llama-3.2-3B on 127.0.0.1:8090, 32k ctx \u2014 the always-on fast responder and read_file summarizer.",
       "why": "Instant answers + subagent work without evicting the main router model; also used by local-tools for file summarization.",
       "created": "2026-09-10",
       "kind": "service",
@@ -940,8 +940,8 @@
       "name": "aios-decide.service (typed-decision API)",
       "path": "~/Projects/aios/services/aios_decide/server.py",
       "category": "ai-stack",
-      "what": "Typed-decision HTTP service on 127.0.0.1:8773 (/decide, /healthz) — answers hard_no/verdict/fit/actionable/lucrative questions via the sidecar backend.",
-      "why": "WO-03 advisory wiring: idea-factory triage consumes its verdicts (decide: chips on digest cards). User unit — dies quietly with no system-unit supervision.",
+      "what": "Typed-decision HTTP service on 127.0.0.1:8773 (/decide, /healthz) \u2014 answers hard_no/verdict/fit/actionable/lucrative questions via the sidecar backend.",
+      "why": "WO-03 advisory wiring: idea-factory triage consumes its verdicts (decide: chips on digest cards). User unit \u2014 dies quietly with no system-unit supervision.",
       "created": "2026-09-19",
       "kind": "service",
       "runnable": false,
@@ -963,7 +963,7 @@
       "path": "~/.config/systemd/user/llama-decide.service",
       "category": "ai-stack",
       "what": "CPU-only llama-server on 127.0.0.1:8096 serving the distilled decide model (r8 augment as of 2026-10-02).",
-      "why": "The judgment model behind aios-decide — CPU so it never contends the GPU lane; when down, every /decide abstains and digest chips silently go blank.",
+      "why": "The judgment model behind aios-decide \u2014 CPU so it never contends the GPU lane; when down, every /decide abstains and digest chips silently go blank.",
       "created": "2026-09-19",
       "kind": "service",
       "runnable": false,
@@ -1009,7 +1009,7 @@
       "created": "2026-09-04",
       "kind": "script",
       "runnable": false,
-      "notes": "Run via apply-model-config.sh — it handles the safe DB copy dance. Never run against the live DB directly.",
+      "notes": "Run via apply-model-config.sh \u2014 it handles the safe DB copy dance. Never run against the live DB directly.",
       "tags": [
         "owui",
         "config",
@@ -1022,7 +1022,7 @@
       "path": "~/Projects/aios/services/open-webui/set_context_lengths.py",
       "category": "ai-stack",
       "what": "Writes per-model context_length/num_ctx/max_tokens into the OWUI DB (mirrored by MAX_TOKENS in fix_tooling.py).",
-      "why": "OWUI needs to know each preset's real ctx or it silently truncates — the 4096-cap incident.",
+      "why": "OWUI needs to know each preset's real ctx or it silently truncates \u2014 the 4096-cap incident.",
       "created": "2026-09-04",
       "kind": "script",
       "runnable": false,
@@ -1054,7 +1054,7 @@
       "path": "~/Projects/aios/services/open-webui/patch_openai_model_names.py",
       "category": "ai-stack",
       "what": "Patches Open-WebUI's openai.py inside the container so /v1/models carries workspace display names.",
-      "why": "docker compose up -d recreates the container and wipes the patch — this is why model names revert after recreates.",
+      "why": "docker compose up -d recreates the container and wipes the patch \u2014 this is why model names revert after recreates.",
       "created": "2026-09-04",
       "kind": "script",
       "runnable": false,
@@ -1070,7 +1070,7 @@
       "name": "script_panel.py (this panel)",
       "path": "~/Projects/aios/services/script-panel/script_panel.py",
       "category": "system",
-      "what": "The control panel itself — catalog server + UI + gated run API on 127.0.0.1:8770.",
+      "what": "The control panel itself \u2014 catalog server + UI + gated run API on 127.0.0.1:8770.",
       "why": "Meta entry so the panel can report its own health.",
       "created": "2026-09-07",
       "kind": "service",
@@ -1090,7 +1090,7 @@
       "name": "krill_status.sh",
       "path": "~/Projects/krill_harvester/scripts/krill_status.sh",
       "category": "krill",
-      "what": "Status dashboard — service health, DEFCON level, paper P&L, recent audit tail, trade count.",
+      "what": "Status dashboard \u2014 service health, DEFCON level, paper P&L, recent audit tail, trade count.",
       "why": "One-glance ops check; runs unprivileged at reduced depth, sudo for audit log + supervisor socket.",
       "created": "2026-09-22",
       "kind": "script",
@@ -1112,7 +1112,7 @@
       "name": "funnel_check.sh",
       "path": "~/Projects/krill_harvester/scripts/funnel_check.sh",
       "category": "krill",
-      "what": "Weekly funnel digest — journalctl-only counts: catalysts, nano-filtered vs to-model per source, errors, denials, kraken_pairs deltas. Writes ~/.local/state/krill/funnel-<date>.md + desktop notification.",
+      "what": "Weekly funnel digest \u2014 journalctl-only counts: catalysts, nano-filtered vs to-model per source, errors, denials, kraken_pairs deltas. Writes ~/.local/state/krill/funnel-<date>.md + desktop notification.",
       "why": "Anti-mothballing check-in; cron Thursdays 08:30. Prints the audit-pull + counterfactual steps when to-model traffic flows.",
       "created": "2026-09-22",
       "kind": "script",
@@ -1130,7 +1130,7 @@
       "name": "deploy.sh",
       "path": "~/Projects/krill_harvester/scripts/deploy.sh",
       "category": "krill",
-      "what": "Canonical production deploy — rsyncs src to /opt/krill_harvester (preserving audit.jsonl/state.db), rebuilds supervisor, reinstalls units, daemon-reload.",
+      "what": "Canonical production deploy \u2014 rsyncs src to /opt/krill_harvester (preserving audit.jsonl/state.db), rebuilds supervisor, reinstalls units, daemon-reload.",
       "why": "Idempotent; the only supported path to push repo code to the live daemon. Requires sudo.",
       "created": "2026-09-22",
       "kind": "script",
@@ -1152,7 +1152,7 @@
       "name": "verify_secops.sh",
       "path": "~/Projects/krill_harvester/scripts/verify_secops.sh",
       "category": "krill",
-      "what": "SecOps posture verifier — llama bind, secrets perms, egress, DEFCON isolation. Read-only; exits 0 on all HARD checks.",
+      "what": "SecOps posture verifier \u2014 llama bind, secrets perms, egress, DEFCON isolation. Read-only; exits 0 on all HARD checks.",
       "why": "Run after host or config changes; sudo enables filesystem-perm checks.",
       "created": "2026-09-22",
       "kind": "script",
@@ -1168,7 +1168,7 @@
       "name": "pii_check.sh",
       "path": "~/Projects/krill_harvester/scripts/pii_check.sh",
       "category": "krill",
-      "what": "PII scrubber — scans staged files against patterns + local allowlist before commit/push.",
+      "what": "PII scrubber \u2014 scans staged files against patterns + local allowlist before commit/push.",
       "why": "Pre-commit hook; run manually before pushing anything new. Strips emails, tailnet names, home paths, tokens.",
       "created": "2026-09-22",
       "kind": "hook",
@@ -1186,11 +1186,15 @@
       "path": "~/scripts/rig-health-check.sh",
       "category": "guardrails",
       "what": "7-probe recovery-floor check: llama endpoint, sshd:52222, rocm, power cap, failed units, kernel errors, restic repo.",
-      "why": "Phase-0 gate — if this isn't green, nothing above the recovery floor should be trusted. Read-only.",
+      "why": "Phase-0 gate \u2014 if this isn't green, nothing above the recovery floor should be trusted. Read-only.",
       "created": "2026-10-09",
       "kind": "script",
       "runnable": true,
-      "tags": ["guardrails", "health", "audit"]
+      "tags": [
+        "guardrails",
+        "health",
+        "audit"
+      ]
     },
     {
       "id": "rig-invariant-check",
@@ -1207,7 +1211,11 @@
         "unit": "rig-invariant-check.timer",
         "scope": "user"
       },
-      "tags": ["guardrails", "invariants", "audit"]
+      "tags": [
+        "guardrails",
+        "invariants",
+        "audit"
+      ]
     },
     {
       "id": "guardrail-self-test",
@@ -1215,7 +1223,7 @@
       "path": "~/scripts/guardrail-self-test.sh",
       "category": "guardrails",
       "what": "10-check self-test of the scaffold itself: deny fires, nested deny, snapshot-on-mutate, guard arm path, agent-sys confinement.",
-      "why": "Guardrails get their own watchdog — proves the safety layer works, not just that it exists. Weekly timer.",
+      "why": "Guardrails get their own watchdog \u2014 proves the safety layer works, not just that it exists. Weekly timer.",
       "created": "2026-10-09",
       "kind": "script",
       "runnable": true,
@@ -1226,7 +1234,10 @@
         "unit": "guardrail-self-test.timer",
         "scope": "user"
       },
-      "tags": ["guardrails", "self-test"]
+      "tags": [
+        "guardrails",
+        "self-test"
+      ]
     },
     {
       "id": "rig-guard-status",
@@ -1238,21 +1249,28 @@
       "created": "2026-10-09",
       "kind": "script",
       "runnable": true,
-      "tags": ["guardrails", "posture"]
+      "tags": [
+        "guardrails",
+        "posture"
+      ]
     },
     {
       "id": "guarded-change",
       "name": "guarded-change.sh",
       "path": "~/scripts/guarded-change.sh",
       "category": "guardrails",
-      "what": "snapshot → arm root revert timer → apply → verify → disarm|revert. The dead-man rollback mechanism.",
+      "what": "snapshot \u2192 arm root revert timer \u2192 apply \u2192 verify \u2192 disarm|revert. The dead-man rollback mechanism.",
       "why": "Every mutation of protected state should flow through this. Not panel-runnable: takes args + sudo.",
       "created": "2026-10-09",
       "kind": "script",
       "runnable": false,
       "sudo": true,
       "notes": "Invoke from shell: guarded-change.sh --ttl 900 --verify '<cmd>' --apply '<cmd>' [--probation]. See ~/runbooks.",
-      "tags": ["guardrails", "rollback", "core-mechanism"]
+      "tags": [
+        "guardrails",
+        "rollback",
+        "core-mechanism"
+      ]
     },
     {
       "id": "agent-deny-check",
@@ -1264,8 +1282,12 @@
       "created": "2026-10-09",
       "kind": "hook",
       "runnable": false,
-      "notes": "Hook — invoked by Devin on every tool call; takes hook JSON on stdin.",
-      "tags": ["guardrails", "denylist", "hook"]
+      "notes": "Hook \u2014 invoked by Devin on every tool call; takes hook JSON on stdin.",
+      "tags": [
+        "guardrails",
+        "denylist",
+        "hook"
+      ]
     },
     {
       "id": "agent-pre-mutate",
@@ -1273,25 +1295,32 @@
       "path": "~/scripts/agent-pre-mutate.py",
       "category": "guardrails",
       "what": "Devin PreToolUse hook: scoped restic snapshot before writes to protected paths or inherent mutators (systemctl enable, apt install).",
-      "why": "Nothing wrong is permanent — every protected mutation is preceded by a restorable snapshot. Fail-closed.",
+      "why": "Nothing wrong is permanent \u2014 every protected mutation is preceded by a restorable snapshot. Fail-closed.",
       "created": "2026-10-09",
       "kind": "hook",
       "runnable": false,
-      "notes": "Hook — invoked by Devin before mutating tool calls; logs to ~/.local/state/rig-guard/snapshots.log.",
-      "tags": ["guardrails", "snapshot", "hook"]
+      "notes": "Hook \u2014 invoked by Devin before mutating tool calls; logs to ~/.local/state/rig-guard/snapshots.log.",
+      "tags": [
+        "guardrails",
+        "snapshot",
+        "hook"
+      ]
     },
     {
       "id": "agent-promote",
       "name": "agent-promote.sh",
       "path": "~/scripts/agent-promote.sh",
       "category": "guardrails",
-      "what": "Promote a probationary change to permanent — disarms its auto-revert timer and logs the promotion.",
+      "what": "Promote a probationary change to permanent \u2014 disarms its auto-revert timer and logs the promotion.",
       "why": "Phase-5 probation: unpromoted changes revert at 24h. Human decision point.",
       "created": "2026-10-09",
       "kind": "script",
       "runnable": false,
-      "notes": "Usage: agent-promote.sh <gid> — gids listed by rig-guard-status or /trust.",
-      "tags": ["guardrails", "probation"]
+      "notes": "Usage: agent-promote.sh <gid> \u2014 gids listed by rig-guard-status or /trust.",
+      "tags": [
+        "guardrails",
+        "probation"
+      ]
     },
     {
       "id": "safe-config-edit",
@@ -1299,25 +1328,31 @@
       "path": "~/scripts/safe-config-edit.sh",
       "category": "guardrails",
       "what": "guarded-change wrapper for single-file config edits: install new content + verify cmd + auto-revert.",
-      "why": "Runbook primitive — shrinks what an agent has to compose for the common mutation.",
+      "why": "Runbook primitive \u2014 shrinks what an agent has to compose for the common mutation.",
       "created": "2026-10-09",
       "kind": "script",
       "runnable": false,
       "sudo": true,
-      "tags": ["guardrails", "wrapper"]
+      "tags": [
+        "guardrails",
+        "wrapper"
+      ]
     },
     {
       "id": "rig-notify",
       "name": "rig-notify.sh",
       "path": "~/scripts/rig-notify.sh",
       "category": "guardrails",
-      "what": "Per-tag rate-limited phone nudge (Telegram→ntfy via krill notify_send.sh) for guardrail events.",
+      "what": "Per-tag rate-limited phone nudge (Telegram\u2192ntfy via krill notify_send.sh) for guardrail events.",
       "why": "Deny blocks (600s), invariant FAILs (3600s), guard reverts + probation arms + promotes (always). Fails quiet.",
       "created": "2026-10-09",
       "kind": "script",
       "runnable": false,
       "notes": "Usage: rig-notify.sh <tag> <throttle_s> <message>. Rate-limit state in ~/.local/state/rig-guard/notify/.",
-      "tags": ["guardrails", "notify"]
+      "tags": [
+        "guardrails",
+        "notify"
+      ]
     },
     {
       "id": "gpu-job-audit",
@@ -1329,7 +1364,72 @@
       "created": "2026-10-09",
       "kind": "script",
       "runnable": true,
-      "tags": ["guardrails", "gpu", "audit"]
+      "tags": [
+        "guardrails",
+        "gpu",
+        "audit"
+      ]
+    },
+    {
+      "id": "agent-approve",
+      "name": "agent-approve.sh",
+      "path": "~/scripts/agent-approve.sh",
+      "category": "guardrails",
+      "what": "Approve a staged host-change proposal: drift-checks the target, preserves original content, and applies inside the guarded-change dead-man envelope (snapshot \u2192 armed revert \u2192 verify \u2192 24h probation).",
+      "why": "Band-3 human gate \u2014 the model proposes, the human approves, the envelope executes. Also --reject/--list. Not panel-runnable: takes a proposal id.",
+      "created": "2026-10-10",
+      "kind": "script",
+      "runnable": false,
+      "notes": "Usage: agent-approve.sh <p-id> \u2014 ids from rig-notify pings or /trust pending proposals.",
+      "tags": [
+        "guardrails",
+        "proposals",
+        "band3"
+      ]
+    },
+    {
+      "id": "proposal-tools",
+      "name": "proposal_tools_server.py",
+      "path": "~/Projects/aios/services/open-webui/proposal_tools_server.py",
+      "category": "guardrails",
+      "what": "Band-3 proposal channel on :8775 \u2014 stages model-authored file edits under ~/scripts for human approval; allowlist + protected-set + deny.conf overlay + verify-enum at the boundary.",
+      "why": "The only host write path for the model. Approval routes through agent-approve.sh \u2192 guarded-change.sh.",
+      "created": "2026-10-10",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "proposal-tools.service",
+        "scope": "user"
+      },
+      "tags": [
+        "guardrails",
+        "proposals",
+        "band3",
+        "service"
+      ]
+    },
+    {
+      "id": "sandbox-tools",
+      "name": "sandbox_tools_server.py",
+      "path": "~/Projects/aios/services/open-webui/sandbox_tools_server.py",
+      "category": "guardrails",
+      "what": "Band-2 disposable sandbox on :8774 \u2014 bwrap-confined ~/agent-scratch exec for clone/test/repro work.",
+      "why": "Where proposals get proven before staging. Deepdive-armed only.",
+      "created": "2026-10-10",
+      "kind": "service",
+      "runnable": false,
+      "probe": {
+        "type": "systemd",
+        "unit": "sandbox-tools.service",
+        "scope": "user"
+      },
+      "tags": [
+        "guardrails",
+        "sandbox",
+        "band2",
+        "service"
+      ]
     }
   ]
 }

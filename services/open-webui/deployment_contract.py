@@ -58,6 +58,7 @@ HTTP_ENDPOINTS = [
     ("aios_core", "http://127.0.0.1:5680/health"),
     ("idea-factory", "http://127.0.0.1:8772/health"),
     ("sandbox-tools", "http://127.0.0.1:8774/health"),
+    ("proposal-tools", "http://127.0.0.1:8775/health"),
 ]
 
 EXPECTED_CANON_KEYS = {
@@ -65,6 +66,7 @@ EXPECTED_CANON_KEYS = {
     "PROJECT_TOOL_MODELS": "project_models",
     "WORKSPACE_WRITE_MODELS": "write_models",
     "SANDBOX_MODELS": "sandbox_models",
+    "PROPOSAL_MODELS": "proposal_models",
 }
 
 CANON_CONSTANTS = {"META_BUILTINTOOLS", "WEB_SEARCH_MODELS"}
@@ -189,6 +191,7 @@ def check_mcp_native() -> tuple[bool, str]:
     except RuntimeError as e:
         return False, str(e)
     if any(c.get("url", "").startswith("http://127.0.0.1:8775")
+           and (c.get("info") or {}).get("id") != "proposal-tools"
            for c in conns):
         return False, "retired :8775 bridge row still present"
     row = next(
@@ -258,6 +261,30 @@ def check_sandbox_tools() -> tuple[bool, str]:
     if bad:
         return False, "; ".join(bad)
     return True, "confinement live (scratch rw, host hidden)"
+
+
+def check_proposal_tools() -> tuple[bool, str]:
+    """Band-3 boundary canary: an out-of-root proposal must come back
+    denied — proves the allowlist is enforced live, not just that the
+    port answers. Write-free (denied proposals never stage)."""
+    d, _ = _http_json(
+        "http://127.0.0.1:8775/propose_host_change",
+        data=json.dumps({
+            "path": "/etc/hostname",
+            "content": "x",
+            "rationale": "contract canary — must be denied",
+        }).encode(),
+        timeout=8,
+    )
+    if not isinstance(d, dict):
+        return False, f"no response: {str(d)[:80]}"
+    if d.get("ok") is not False or "outside proposal roots" not in (
+            d.get("error") or ""):
+        return False, f"boundary failed open: {str(d)[:140]}"
+    h, _ = _http_json("http://127.0.0.1:8775/health", timeout=4)
+    if not (h or {}).get("state_writable"):
+        return False, "state dir not writable"
+    return True, "allowlist denied /etc canary; state writable"
 
 
 def check_snapshot_fresh() -> tuple[bool, str]:
@@ -350,6 +377,7 @@ def check_filter_valves() -> tuple[bool, str]:
         ("project_tool_ids", {"server:project-tools"}),
         ("write_server_tool_ids", {"server:workspace-tools"}),
         ("sandbox_server_tool_ids", {"server:sandbox-tools"}),
+        ("proposal_server_tool_ids", {"server:proposal-tools"}),
     ):
         live = {x.strip() for x in (valves.get(key) or "").split(",") if x.strip()}
         if live != expect:
@@ -781,6 +809,7 @@ CHECKS = [
     ("local_tools_status", check_local_tools_status),
     ("local_tools_deny", check_local_tools_deny),
     ("sandbox_tools", check_sandbox_tools),
+    ("proposal_tools", check_proposal_tools),
     ("snapshot_fresh", check_snapshot_fresh),
     ("owui_db_hygiene", check_owui_db_hygiene),
     ("filter_valves", check_filter_valves),
