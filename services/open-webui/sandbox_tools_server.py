@@ -540,23 +540,45 @@ def tool_sandbox_exec(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": f"exec error: {e}"}
 
 
+def _resolve_sandbox_path(path: Any) -> tuple[Path | None, str | None]:
+    """Resolve a caller path to a file under SCRATCH, or return an
+    error. Shared confinement for the band-2 mutation tools —
+    resolve() follows symlinks so an escaping link fails closed; `..`
+    is rejected outright, matching _validate's posture. `/sbx/` is the
+    in-guest spelling of the scratch root; other absolute paths are
+    refused."""
+    if not isinstance(path, str) or not path.strip():
+        return None, "path must be a non-empty string"
+    rel = path.strip()
+    if rel in ("/sbx", "/sbx/"):
+        return None, "path is the sandbox root, not a file"
+    if rel.startswith("/sbx/"):
+        rel = rel[len("/sbx/"):]
+    elif rel.startswith("/"):
+        return None, (
+            f"absolute path outside sandbox root: {path} — "
+            "work under /sbx/ or a relative path"
+        )
+    if ".." in rel.split("/"):
+        return None, f"path escapes sandbox: {path}"
+    dest = (SCRATCH / rel).resolve()
+    if not dest.is_relative_to(SCRATCH):
+        return None, f"path escapes sandbox: {path}"
+    return dest, None
+
+
 def tool_sandbox_write(args: dict[str, Any]) -> dict[str, Any]:
     """Write a text file inside the scratch root — the band-2 file
     primitive that replaces `python3 -c` quoting (the measured top
     shared failure mode in the coding-duty eval). Same disposable-root
     trust zone as sandbox_exec: the ONLY boundary is path confinement
-    under SCRATCH, enforced mechanically — resolve() follows symlinks,
-    so a link pointing outside the root leaves SCRATCH and the write
-    fails closed; `..` is rejected outright, matching _validate's
-    posture. deny.conf is not consulted: it governs host surfaces, and
-    nothing outside the scratch root is reachable from here."""
+    under SCRATCH (see _resolve_sandbox_path). deny.conf is not
+    consulted: it governs host surfaces, and nothing outside the
+    scratch root is reachable from here."""
     result: dict[str, Any] = {"ok": False}
     try:
         path = args.get("path")
         content = args.get("content")
-        if not isinstance(path, str) or not path.strip():
-            result["error"] = "path must be a non-empty string"
-            return result
         if not isinstance(content, str):
             result["error"] = (
                 "content must be a string — for bytes, use "
@@ -570,24 +592,9 @@ def tool_sandbox_write(args: dict[str, Any]) -> dict[str, Any]:
                 f"(max {MAX_WRITE_BYTES})"
             )
             return result
-        rel = path.strip()
-        if rel in ("/sbx", "/sbx/"):
-            result["error"] = "path is the sandbox root, not a file"
-            return result
-        if rel.startswith("/sbx/"):
-            rel = rel[len("/sbx/"):]
-        elif rel.startswith("/"):
-            result["error"] = (
-                f"absolute path outside sandbox root: {path} — "
-                "write under /sbx/ or use a relative path"
-            )
-            return result
-        if ".." in rel.split("/"):
-            result["error"] = f"path escapes sandbox: {path}"
-            return result
-        dest = (SCRATCH / rel).resolve()
-        if not dest.is_relative_to(SCRATCH):
-            result["error"] = f"path escapes sandbox: {path}"
+        dest, err = _resolve_sandbox_path(path)
+        if err:
+            result["error"] = err
             return result
         dest.parent.mkdir(parents=True, exist_ok=True)
         with open(dest, "ab" if args.get("append") else "wb") as f:
@@ -604,6 +611,75 @@ def tool_sandbox_write(args: dict[str, Any]) -> dict[str, Any]:
     finally:
         _audit(args if isinstance(args, dict) else {}, result,
                tool="sandbox_write")
+
+
+def tool_sandbox_edit(args: dict[str, Any]) -> dict[str, Any]:
+    """Exact-match search/replace inside the scratch root — the band-2
+    edit primitive (aider-style edit blocks; `sed -i` quoting was the
+    residual friction after sandbox_write landed). `old` is a literal
+    substring, never a regex. Match discipline exists for small
+    models: a file with zero matches or more matches than declared is
+    REFUSED rather than silently edited — ambiguous edits require an
+    explicit expect_count so a wrong-location first match can't slip
+    through. Same confinement as sandbox_write."""
+    result: dict[str, Any] = {"ok": False}
+    try:
+        old = args.get("old")
+        new = args.get("new")
+        if not isinstance(old, str) or not old:
+            result["error"] = "old must be a non-empty string"
+            return result
+        if not isinstance(new, str):
+            result["error"] = "new must be a string"
+            return result
+        dest, err = _resolve_sandbox_path(args.get("path"))
+        if err:
+            result["error"] = err
+            return result
+        try:
+            text = dest.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            result["error"] = f"cannot read file: {e}"
+            return result
+        n = text.count(old)
+        expect = args.get("expect_count")
+        if n == 0:
+            result["error"] = (
+                f"old not found in {dest.name} — re-read the file and "
+                "match its exact content"
+            )
+            return result
+        if expect is None and n > 1:
+            result["error"] = (
+                f"old matches {n} places in {dest.name} — add enough "
+                "context to make it unique, or set expect_count"
+            )
+            return result
+        if expect is not None:
+            try:
+                expect = int(expect)
+            except (TypeError, ValueError):
+                result["error"] = "expect_count must be an integer"
+                return result
+            if expect != n:
+                result["error"] = (
+                    f"expect_count={expect} but old matches {n} "
+                    f"places — not editing"
+                )
+                return result
+        dest.write_text(text.replace(old, new), encoding="utf-8")
+        result = {
+            "ok": True,
+            "path": f"/sbx/{dest.relative_to(SCRATCH)}",
+            "replacements": n,
+        }
+        return result
+    except OSError as e:
+        result["error"] = f"edit failed: {e}"
+        return result
+    finally:
+        _audit(args if isinstance(args, dict) else {}, result,
+               tool="sandbox_edit")
 
 
 # One-shot confined probe for sandbox_status — a single spawn answers
@@ -884,6 +960,7 @@ def tool_sandbox_serve_stop(args: dict[str, Any]) -> dict[str, Any]:
 TOOLS: dict[str, Any] = {
     "sandbox_exec": tool_sandbox_exec,
     "sandbox_write": tool_sandbox_write,
+    "sandbox_edit": tool_sandbox_edit,
     "sandbox_serve": tool_sandbox_serve,
     "sandbox_serve_status": tool_sandbox_serve_status,
     "sandbox_serve_stop": tool_sandbox_serve_stop,
@@ -918,8 +995,9 @@ OPENAPI_SPEC = {
                     "file://), file ops (ls cat grep find head tail wc tree "
                     "mkdir cp mv rm), python3/pytest/pip (venvs stay inside), "
                     "make, sed. There is no shell — redirections like > and "
-                    ">> do nothing; write files with sandbox_write (or "
-                    "sed -i for edits), and use git -C <dir> <subcommand> "
+                    ">> do nothing; write new files with sandbox_write and "
+                    "edit existing files with sandbox_edit (exact "
+                    "search/replace); use git -C <dir> <subcommand> "
                     "inside a clone. "
                     "Refuse tasks that need shells or network tools rather "
                     "than working around."
@@ -974,6 +1052,41 @@ OPENAPI_SPEC = {
                     },
                 },
                 "responses": {"200": {"description": "Write result"}},
+            }
+        },
+        "/sandbox_edit": {
+            "post": {
+                "operationId": "sandbox_edit",
+                "summary": (
+                    "Edit a text file inside the sandbox scratch root "
+                    "by exact-match search/replace — the preferred way "
+                    "to change existing files. `old` is a literal "
+                    "substring (not regex) that must match the file "
+                    "content exactly; `new` replaces it. If `old` "
+                    "matches zero places or more than one, the edit is "
+                    "refused — add context to make it unique, or set "
+                    "expect_count to the intended number. To create "
+                    "files use sandbox_write. Same confinement as the "
+                    "rest of the sandbox."
+                ),
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "path": {"type": "string"},
+                                    "old": {"type": "string"},
+                                    "new": {"type": "string"},
+                                    "expect_count": {"type": "integer"},
+                                },
+                                "required": ["path", "old", "new"],
+                            }
+                        }
+                    },
+                },
+                "responses": {"200": {"description": "Edit result"}},
             }
         },
         "/sandbox_status": {
