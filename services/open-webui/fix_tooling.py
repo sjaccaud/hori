@@ -371,6 +371,22 @@ MODEL_PROMPTS = {
     "qwen-free": IDEATION_PROMPT,
 }
 
+# Voice mode graft (2026-10-11): Agent + Ideas can be asked to write in the
+# user's voice — the same invoke-on-demand pattern as the /voice skill.
+# The model reads the pack itself via read_file, so the pack stays current
+# with zero config re-apply; nothing is injected when unused.
+VOICE_MODE = (
+    "\n\nVoice mode: when the user asks you to write in THEIR voice — a "
+    "post, email, reply, or announcement — read "
+    "~/Projects/voice/spec/voice-spec.md plus 2-3 files under "
+    "~/Projects/voice/exemplars/ (pick the register that matches: essays, "
+    "email, notes, chat) BEFORE drafting. Voice renders THEIR take in "
+    "THEIR words — never invent the position; if they haven't given you "
+    "the take, ask for it."
+)
+for _mid in ("qwen-dsh-medium", "qwen-free"):
+    MODEL_PROMPTS[_mid] = MODEL_PROMPTS[_mid] + VOICE_MODE
+
 # Minimal prompt for the nano SLM — no tools, no search; just fast answers.
 NANO_PROMPT = (
     "You are Nano, a tiny local assistant (Llama-3.2-3B) on Jacko's machine.\n\n"
