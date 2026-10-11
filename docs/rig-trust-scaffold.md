@@ -389,7 +389,13 @@ band on top of the fixed boundary:
       instead measured *adaptation*: the model saw the port range and
       served on 8890 — desired boundary-aware behavior, task retargeted.
 
-## Phase 7 — Band 4: scheduled agents (DESIGNED 2026-10-10, unbuilt)
+## Phase 7 — Band 4: scheduled agents (DESIGNED + runner built 2026-10-10)
+
+First slice live: `rig-band4-run.py` (bounded agent loop reusing eval's
+run_task internals) + `band4@.service` template + `pilot-review` job
+(weekly Mon 04:15). probe_abort + empty-final nudge verified live on
+first run — spec prompts must teach the tool surface's vocabulary or
+the model burns its deny budget guessing.
 
 The question the rest of the ladder was built to answer: **what may a
 model do while you sleep?** Every prior band assumes a human session
