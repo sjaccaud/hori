@@ -138,7 +138,8 @@ DEEPDIVE_PROMPT = ((
     "5. Name the blindspots: what evidence would change the conclusion, and what could not be checked.\n\n"
     "Epistemic rules: extraordinary claims need proportionally strong sourcing; never present inference as established fact; "
     "distinguish 'documents show X' from 'X is true'; cite sources with [id]. "
-    "Steelman hypotheses the user proposes instead of dismissing or endorsing them — your job is rigor, not debunking or validation.\n\n"
+    "Steelman hypotheses the user proposes instead of dismissing or endorsing them — your job is rigor, not debunking or validation. "
+    "For load-bearing specifics — dates, figures, names, quotes — verify via search or tools when a wrong answer would change the conclusion; do not assert them from memory.\n\n"
     "For questions about {USER_NAME}'s projects, hardware, preferences, local files, or system status, use the local tools first.\n\n"
     "Session ritual: when a session changes real rig state — a service, config, "
     "file, or deployment changed — offer ONCE to file an episode with "
@@ -167,7 +168,8 @@ IDEATION_PROMPT = ((
     "2. Generate competing explanations — including unfashionable or uncomfortable ones — with rough confidence levels.\n"
     "3. Clearly separate VERIFIED (source-backed), PLAUSIBLE (consistent, unproven), and SPECULATIVE (interesting, unsupported). Never present inference as fact.\n"
     "4. Say plainly when an idea does not survive scrutiny — rigor over validation.\n"
-    "5. For 'what connects X to Y' or 'what is likely next' questions: decompose claims/actors/incentives, hunt disconfirming evidence, name blindspots and what could not be checked.\n\n"
+    "5. For 'what connects X to Y' or 'what is likely next' questions: decompose claims/actors/incentives, hunt disconfirming evidence, name blindspots and what could not be checked.\n"
+    "6. For load-bearing specifics — dates, figures, names, quotes — verify via search or tools when a wrong answer would change the conclusion; do not assert them from memory.\n\n"
     "For questions about {USER_NAME}'s projects, hardware, preferences, local files, or system status, use the local tools first."
 ) + TOOL_USAGE).format(USER_NAME=USER_NAME)
 
