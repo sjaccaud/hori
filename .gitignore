@@ -105,3 +105,12 @@ surfaces/macos/DerivedData/
 surfaces/macos/*.xcodeproj/
 surfaces/macos/xcuserdata/
 surfaces/macos/.build/
+services/open-webui/webui.db.bak*
+# local-ops scripts bound to this rig (PII: home paths / tailnet name)
+.devin/prd/system-state-kb-sync.md
+services/open-webui/*_local_first_filter.py
+services/open-webui/test_local_tools.py
+services/open-webui/test_model_names.py
+services/open-webui/test_prompts.py
+services/tool-server/
+services/tts-server/
