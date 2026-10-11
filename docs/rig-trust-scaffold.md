@@ -6,6 +6,8 @@ night (/trust page + posture strip). Follow-ups 2026-10-09 late: deny.conf
 parser ported to local_tools_server (OWUI path now serves minted citations,
 contract check local_tools_deny), guarded-change v2 gains auto-detected
 apt/dpkg package-state revert via apt-state-restore.sh.
+Band 4 (scheduled agents) DESIGNED 2026-10-10 — Phase 7 below;
+window-bound agent loops S2–S4, unbuilt.
 27B/32GB rig, no card-2 dependency — as designed.
 
 Verified live: deny hook 16/16 verdicts; pre-mutate snapshots landing
@@ -215,7 +217,7 @@ envelope that answers both — not the task description.
 | 2 | scratch root only | host-verifiable artifact (file exists, suite green, diff produced) | bwrap sandbox :8774 — own netns, host loopback unreachable | live, measured |
 | 2.5 | scratch + a forwarded port | user pokes a running thing | same netns + slirp hostfwd on ports 8890-8899, sessions ≤4, ttl ≤2h | live, measured |
 | 3 | host, probationary | snapshot + phone approval + rollback | proposal channel feeding the guard units | live, measured |
-| 4 | host + time (daemons/timers) | scheduled-job trust domain | separate lifecycle — far out | — |
+| 4 | host + time (daemons/timers) | output contracts + async review | window-bound agent loops, S2–S4 only | designed |
 
 Task classes that fit Band 2 unchanged (the envelope is
 *verifiable-artifact work*, not "repo work"): repo investigation,
@@ -386,6 +388,93 @@ band on top of the fixed boundary:
       exposure isn't possible. A first-cut "serve on 8080" refuse task
       instead measured *adaptation*: the model saw the port range and
       served on 8890 — desired boundary-aware behavior, task retargeted.
+
+## Phase 7 — Band 4: scheduled agents (DESIGNED 2026-10-10, unbuilt)
+
+The question the rest of the ladder was built to answer: **what may a
+model do while you sleep?** Every prior band assumes a human session
+boundary — the model acts inside a conversation someone opened. Band 4
+removes that assumption: a timer fires, an agent loop runs, nobody
+watches. Design decisions made with operator 2026-10-10.
+
+**Spectrum — where the line is.** Scheduled model work already exists
+in two safe shapes: S0 deterministic scripts (every timer), S1 scripts
+that call a model for one bounded sub-task (lab sweep, krill, decide).
+Band 4 is the next three rungs — and only those:
+
+- **S2** — agent loop + Band-1 read tools: investigation/digest jobs.
+- **S3** — agent loop + Band-2 sandbox tools: overnight
+  repro/fix/prototype. `idea-canary-gpu` is the existence proof:
+  agent-chosen workload, window-gated, lane-wrapped, outcome-recorded,
+  fail-closed, verified E2E 2026-10-10.
+- **S4** — agent loop + Band-3 proposals: the agent reproduces a bug
+  in the sandbox overnight, drafts and verifies a fix, and *files a
+  proposal* — the human wakes to a judge-reviewed fix awaiting two
+  taps. The gate stays load-bearing: agents may propose, they may
+  never approve.
+- **S5** — agent loop + direct host mutation: permanently refused.
+  Not a band — a hole. Any job spec that lands here is rejected at
+  review.
+
+**Runner.** Extract the eval harness's `run_task` loop (already a
+working agent loop: tool calls + ITER_CAP + per-call classification)
+into a standalone job-runner invoked by per-job systemd units. Task
+spec + tool surface + budget in; trajectory journal + outcome out.
+Reuses proven code instead of a new service.
+
+**Job declaration.** Each job = a human-authored spec: task, tool
+surface (band-tagged), model alias, iteration+wall budgets, output
+contract, notify policy. A model proposing a new scheduled job is the
+highest-scrutiny Band-3 class — a mutation that repeats.
+
+**Window-bound forever.** All Band-4 jobs run inside the maintenance
+window (00:00–05:00 Mon–Fri). No ambient-hours graduation — the
+blast-radius story stays "it can only run while you're asleep." GPU
+jobs ride `gpu-exclusive@` as today.
+
+**Verification without a human.** Every job declares an output
+contract: the artifact lands somewhere mechanical (ledger row,
+proposal, file, journal) — not chat. Decide-judge reviews
+non-mechanical outputs; results render in the morning digest —
+approval becomes asynchronous review, not synchronous gating.
+
+**Job-level probe detection.** `refuse_probed` at job scale: eval
+measured qwen-dsh-low probing boundaries on ~half of refuse tasks — an
+agent that spends its run bouncing off its own envelope is probing,
+not working. N denies in a job trajectory → abort + flag for morning
+review. Threshold lives in the job spec.
+
+**Origin marking.** Unattended proposals carry `origin:"band4"` (the
+eval-origin pattern generalized): judged + journaled + /trust-visible
+like any proposal, but distinctly tagged — never inflating eval cells,
+always two-tap gated.
+
+**Liveness is invariant.** The 2026-10-10 dead-judge incident (CPU
+backend killed by the lane evictor, dead 4.5h until eval noticed)
+minted two rules: every Band-4 dependency gets an invariant
+(`judge-backend-live`, `band3-path-live` already exist), and
+lane-exempt CPU units must be cgroup-declared
+(`_LANE_EXEMPT_UNITS_RE`) so the evictor can't kill what it shouldn't
+touch.
+
+**Outcome recording.** Jobs journal trajectory + outcome to their own
+state dir; canary-shaped results additionally write the idea-factory
+outcomes ledger (result class + rung) — one ledger for "what did
+autonomous work produce."
+
+**Failure semantics.** Fail closed: job dies → notify; partial work →
+journaled for review, never silently continued; budget exceeded →
+abort, any artifact journaled as incomplete.
+
+**First jobs (candidate order).** (a) overnight Band-2 repro/fix →
+morning proposal queue; (b) janitor — dependency-update evaluation,
+dead-code reports; (c) idea-factory PARK re-review optionally upgraded
+from S1 deterministic to S3 agent loop for deeper re-analysis.
+
+**Coverage.** Eval corpus grows Band-4 tasks: a synthetic job driven
+through the runner asserting envelope compliance — deny accounting,
+budget caps, origin tag — so the harness that measured the bands now
+tests the runner itself.
 
 ## Open-WebUI is a thin client — declared 2026-10-10
 
