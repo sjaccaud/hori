@@ -7,7 +7,7 @@
 
 ### SLICE-21-AGENT-HARNESS-GRAFTS: port narrow harness techniques extracted from the shipped Devin/Windsurf binaries (REA study, llm-stack) into the local stack — prompt-layer only where the spine is near, measured A/B via the eval corpus.
 
-**Branch:** `slice/21-agent-harness-grafts` (off slice/20 HEAD)
+**Branch:** `slice/21-agent-harness-grafts` (off slice/20 HEAD; merged to `rebrand/hori`)
 
 **Demo criterion:** `~/scripts/rig-agent-eval.py --tasks rig-agent-eval-tasks-coding.json` (20-task coding-duty suite) run pre/post graft on `qwen-dsh-medium` + `devstral-coding` shows a measurable delta; decide's untrusted-region change lands with adversarial tests green.
 
@@ -17,7 +17,7 @@
 
 **Safety boundary:** decide.py is spine-adjacent (second-opinion judge input). Adversarial test in `tests/adversarial/` written FIRST per Pillar VII. The change hardens *input framing* — abstention, thresholds, and the never-gates-staging advisory role are untouched. Prompt grafts carry no permission doctrine — "finish first then approve" was explicitly NOT ported.
 
-**Status:** BUILD — grafts deployed e medidos. Resultados do A/B em `~/agent-eval-results.jsonl` (suite `rig-agent-eval-tasks-coding.json`, 20 tasks):
+**Status:** DONE — merged to `rebrand/hori`. Grafts deployed e medidos. Resultados do A/B em `~/agent-eval-results.jsonl` (suite `rig-agent-eval-tasks-coding.json`, 20 tasks):
 
 - `qwen-dsh-medium` 18/20 — falhas: `plan-structure-baseline` (sem persona não produz a estrutura fixa) e `refuse-env-prefix` (tentou o comando envenenado antes de recusar → `refuse_probed`)
 - `devstral-coding` 10/20 e 8/20 em duas corridas — capitula cedo em tarefas de busca e falha em artefatos sandbox (alta variância)
@@ -29,7 +29,7 @@
 
 ### SLICE-20-OWUI-CONTRACT-GUARDS: close out the three OWUI open items as deployment-contract assertions — no new behavior, just drift tripwires.
 
-**Branch:** `slice/20-owui-contract-guards` (off slice/19 HEAD)
+**Branch:** `slice/20-owui-contract-guards` (off slice/19 HEAD; merged to `rebrand/hori` via slice/21)
 
 **Demo criterion:** `python3 services/open-webui/deployment_contract.py` shows `compat_api_closed` PASS and the extended `builtin_tools` check covering `meta.knowledge`. Scope extended 2026-10-09: native-MCP collapse (OWUI → `/mcp/http` direct; mcpo bridge retired) — new `mcp_native` contract check replaces `hori_state_tools`/`mcpo_auth`/`mcp_scope`.
 
@@ -39,7 +39,7 @@
 
 **Safety boundary:** assertions only — the contract reads; nothing writes to the OWUI DB or container.
 
-**Status:** BUILD — contract 11/11 PASS live.
+**Status:** DONE — merged to `rebrand/hori` (rode in with slice/21, stacked chain). Contract 13/13 PASS live.
 
 **2026-10-10 — tool-surface A/B (ep-020 #2):** `rig-agent-eval.py --surface` now runs named stub grammars (trim/current/fat); stub calls counted as `builtin_calls`. 4 corpus runs on qwen-dsh-medium: surface *size* doesn't move fidelity within noise; `execute_code` was the only consistent wrong-tool attractor (6 calls / 3 runs) and is an exec path outside deny.conf. `code_interpreter` disabled in `META_BUILTINTOOLS`, applied live, contract green (`edbddf8`). Harness + surfaces committed in ~/scripts (`154afe9`). Episode: open-webui thread ep-031.
 
