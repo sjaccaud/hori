@@ -20,7 +20,7 @@
 - **A/B on the 9 sandbox-surface tasks:** `qwen-dsh-medium` 9/9 → 6/9 → **8/9** post-tool (within its variance band); `devstral-coding` 5/9 → 4/9 → **7/9** post-tool — its best run yet, consistent with write-path being its capitulation trigger. `sbx-write-and-run` now PASSes in 3 calls/7s on both models (was the python3-c quoting gauntlet).
 - **Residual failure shape (dshm):** `sbx-two-file-bug` failed twice — correct diagnosis, fix not landed/verified. That's a verify-before-done discipline gap, not write friction.
 - **Surface leak noted:** `read_file` on the eval surface let one model read fixture files via the host path instead of cloning — band-1 read-only, intentional, but it means fixture-task diagnosis can bypass sandbox work.
-- n=1 post-tool run per model — repeat runs will firm the devstral delta.
+- **Devstral run 2 post-tool:** 6/9 (pre-tool runs: 5/9, 4/9; post-tool: 7/9, 6/9 — mean 6.5 vs 4.5, n=2, directionally positive). Persistent fails: `sbx-git-workflow` (3/4 runs — branch/commit discipline gap), `sbx-transform-data` (wrote `answer.txt` to scratch root not `csv-repo/` — task prompt was ambiguous about the path, tightened to name `/sbx/csv-repo/answer.txt`), `sbx-two-file-bug` (variance — passed one post-tool run, flailed the next: 16 calls/6 operational).
 
 ### SLICE-21-AGENT-HARNESS-GRAFTS: port narrow harness techniques extracted from the shipped Devin/Windsurf binaries (REA study, llm-stack) into the local stack — prompt-layer only where the spine is near, measured A/B via the eval corpus.
 
