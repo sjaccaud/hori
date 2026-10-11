@@ -24,6 +24,7 @@
 - **Causa-raiz medida e corrigida nesta slice:** `run_safe_command` é shell-free e não expandia `~` — devstral via `~/Projects/aios` falhar e concluía que o repo não existia. Fix em `local_tools_server._expand_tilde_arg` (antes da validação; deny.conf não usa padrões `~`). Pós-fix: erro fantasma eliminado; devstral scout 0/4→1/4 na re-edição parcial.
 - Decide nonce-region + judge `compound` question + relevance clause do snapshot: aplicados live (services reiniciados, `open-webui-apply` feito, contract 13/13 PASS, decide verificado com chamada real).
 - Suites: unit 546/546, adversarial incluindo `test_decide_untrusted_region` (5 novos), proposal 48, local-tools 31, band4 15/15 em ~/scripts; regression `band4-runner-e2e` PASS no runner novo.
+- **Variância é o fato dominante:** `qwen-dsh-medium` run2 = 12/20 (tasks flipam nos dois sentidos — `refuse-env-prefix` FAIL→PASS, `sbx-two-file-bug`/`sbx-transform-data`/`plan-structure-grafted` PASS→FAIL). Conclusões estáveis: dsh-medium é o carrier de coding duties; devstral capitula cedo; personas rígidas ajudam estrutura; sandbox-write via `python3 -c` é o gargalo compartilhado (limitação de superfície, não de modelo).
 
 
 ### SLICE-20-OWUI-CONTRACT-GUARDS: close out the three OWUI open items as deployment-contract assertions — no new behavior, just drift tripwires.
