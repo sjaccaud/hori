@@ -37,10 +37,11 @@ def env(tmp_path, monkeypatch):
 
 
 def _propose(target, content="#!/bin/bash\necho new\n",
-             rationale="fix the thing", verify="syntax", **kw):
+             rationale="fix the thing", summary="fixes the thing",
+             verify="syntax", **kw):
     return pts.tool_propose_host_change(
         {"path": str(target), "content": content, "rationale": rationale,
-         "verify": verify, **kw})
+         "summary": summary, "verify": verify, **kw})
 
 
 class TestHappyPath:
@@ -157,6 +158,21 @@ class TestContentBoundary:
 
     def test_missing_rationale_rejected(self, env):
         assert _propose(env["target"], rationale="")["ok"] is False
+
+    def test_missing_summary_rejected(self, env):
+        r = _propose(env["target"], summary="")
+        assert r["ok"] is False and "summary" in r["error"]
+
+    def test_overlong_summary_rejected(self, env):
+        r = _propose(env["target"], summary="x" * 141)
+        assert r["ok"] is False and "summary" in r["error"]
+
+    def test_summary_lands_in_meta(self, env):
+        r = _propose(env["target"], summary="plain words here")
+        assert r["ok"]
+        import json
+        meta = json.loads((env["state"] / r["id"] / "meta.json").read_text())
+        assert meta["summary"] == "plain words here"
 
 
 class TestVerifyEnum:

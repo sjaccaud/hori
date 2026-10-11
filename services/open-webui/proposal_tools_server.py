@@ -357,6 +357,7 @@ def tool_propose_host_change(args: dict) -> dict:
     path_arg = args.get("path", "")
     content = args.get("content", "")
     rationale = (args.get("rationale") or "").strip()
+    summary = (args.get("summary") or "").strip()
     verify = (args.get("verify") or "health").strip()
     evidence = (args.get("evidence") or "").strip()[:2000]
     origin = (args.get("origin") or "").strip()[:40]
@@ -380,6 +381,12 @@ def tool_propose_host_change(args: dict) -> dict:
     if not rationale:
         return _err("rationale is required — the human reviews it on "
                     "their phone; say what the change does and why")
+    if not summary:
+        return _err("summary is required — one short sentence in plain "
+                    "words (no code symbols) for the phone card")
+    if len(summary) > 140:
+        return _err(f"summary too long ({len(summary)} > 140) — one "
+                    "sentence, plain words")
     if len(rationale) > MAX_RATIONALE:
         return _err(f"rationale too long ({len(rationale)} > {MAX_RATIONALE})")
     if verify not in VERIFY_CHOICES:
@@ -438,6 +445,7 @@ def tool_propose_host_change(args: dict) -> dict:
         "path": str(target),
         "mode": stat.S_IMODE(target.stat().st_mode),
         "rationale": rationale,
+        "summary": summary,
         "evidence": evidence,
         "verify": verify,
         "adds": adds,
@@ -531,7 +539,8 @@ def tool_proposal_status(args: dict) -> dict:
         return err
     out = {k: meta.get(k) for k in
            ("id", "status", "path", "created", "adds", "dels", "verify",
-            "rationale", "guard_id", "settled", "judge", "origin")}
+            "rationale", "summary", "guard_id", "settled", "judge",
+            "origin")}
     return {"ok": True, "proposal": out}
 
 
@@ -600,6 +609,15 @@ TOOL_SPECS = [
                                        "reviewed by the human on their "
                                        "phone",
                     },
+                    "summary": {
+                        "type": "string",
+                        "description": "One short sentence in plain words "
+                                       "— no code symbols — shown as the "
+                                       "card headline on the phone "
+                                       "(e.g. 'fixes the join script so "
+                                       "it stops adding a trailing "
+                                       "space')",
+                    },
                     "verify": {
                         "type": "string",
                         "enum": ["health", "syntax", "pycompile"],
@@ -613,7 +631,7 @@ TOOL_SPECS = [
                                        "(tests passed, repro output)",
                     },
                 },
-                "required": ["path", "content", "rationale"],
+                "required": ["path", "content", "rationale", "summary"],
             },
         },
     },

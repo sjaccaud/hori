@@ -382,6 +382,14 @@ def trust_posture() -> dict:
     except OSError:
         pass
     probation = []
+    deadlines = {}
+    try:
+        for l in (RIG_STATE / "prob-deadlines.log").read_text().splitlines():
+            toks = l.split()
+            if len(toks) >= 2:
+                deadlines[toks[0]] = int(toks[1])
+    except OSError:
+        pass
     try:
         for gid in (RIG_STATE / "probationary.log").read_text().splitlines():
             gid = gid.strip()
@@ -392,7 +400,20 @@ def trust_posture() -> dict:
                     ["systemctl", "is-active",
                      f"agent-guard-{gid}-prob.timer"]
                 ).stdout.strip() == "active" else "expired/reverted")
-            probation.append({"gid": gid, "state": state})
+            entry = {"gid": gid, "state": state,
+                     "deadline": deadlines.get(gid)}
+            # human label: the proposal this guard came from, if any
+            meta_path = PROPOSAL_STATE.glob("*/meta.json")
+            for mp in meta_path:
+                try:
+                    m = json.loads(mp.read_text())
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if m.get("guard_id") == gid:
+                    entry["path"] = m.get("path")
+                    entry["label"] = os.path.basename(m.get("path", ""))
+                    break
+            probation.append(entry)
     except OSError:
         pass
 
@@ -519,8 +540,9 @@ def load_proposals() -> list[dict]:
             continue
         entry = {k: meta.get(k) for k in
                  ("id", "status", "path", "created", "adds", "dels",
-                  "rationale", "verify", "guard_id", "judge", "origin",
-                  "fail_detail", "settled")}
+                  "rationale", "summary", "evidence", "verify",
+                  "guard_id", "judge", "origin", "fail_detail",
+                  "settled")}
         if meta.get("status") == "pending":
             try:
                 diff = (d / "diff.patch").read_text().splitlines()
@@ -863,17 +885,35 @@ button.act:hover{border-color:var(--acc)}
 button.act.go{color:var(--ok)}button.act.stop{color:var(--bad)}
 button.act.arm{color:var(--warn);border-color:var(--warn)}
 button.act:disabled{opacity:.4;cursor:default}
+/* action-first layout (2026-10-11): cards with status left-border,
+   deadline countdowns, audit collapsed under details. Phone-first. */
+.card{background:#151518;border-left:3px solid var(--warn);border-radius:6px;padding:11px 13px;margin-bottom:9px}
+.card.ok{border-left-color:var(--ok)}.card.bad{border-left-color:var(--bad)}
+.card .head{font-size:14.5px;font-weight:600;margin-bottom:3px;line-height:1.3}
+.card .meta{color:var(--dim);font-size:11.5px;margin-bottom:7px}
+.card .deadline{color:var(--warn);font-size:12px;font-weight:600;margin-bottom:7px}
+.card .deadline.over{color:var(--bad)}
+button.act{padding:9px 15px;font-size:13px;margin-left:0;margin-right:8px;border-radius:8px}
+details{margin:4px 0}
+details>summary{cursor:pointer;color:var(--dim);font-size:12px;padding:6px 2px;user-select:none}
+details>summary:hover{color:var(--fg)}
+.jchip{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--border);margin-left:6px}
+.jchip.clean{color:var(--ok);border-color:#1f4a2e}.jchip.flagged{color:var(--bad);border-color:#5b1d22}
+.jchip.abstain,.jchip.unavailable{color:var(--warn);border-color:#4a3a1f}
 </style></head><body>
-<h1>Trust Console <span style="color:var(--dim);font-weight:400">· rig guardrail posture</span></h1>
-<p class="sub">approve surface — promotes/reverts act on LIVE guard units only; enforcement stays in the exec layer. <a href="/">← script panel</a></p>
+<h1>Trust Console <span style="color:var(--dim);font-weight:400">· rig guardrails</span></h1>
+<p class="sub">what needs you, by when — approvals act on live guard units only; enforcement stays in the exec layer. <a href="/">← panel</a></p>
 <div id="verdict" class="verdict dim">loading…</div>
-<section><h2>Pending proposals</h2><div id="props"></div></section>
-<section><h2>Armed revert guards</h2><div id="guards"></div></section>
-<section><h2>Probationary changes</h2><div id="prob"></div></section>
-<section><h2>Invariants</h2><div id="inv"></div></section>
-<section><h2>Deny hits (7d)</h2><div id="deny"></div></section>
-<section><h2>Invariant failures (7d)</h2><div id="invf"></div></section>
-<section><h2>Recent snapshots</h2><div id="snap"></div></section>
+<section><h2>Needs you</h2><div id="needs"></div></section>
+<section><h2>Health</h2><div id="health"></div></section>
+<section><h2>Audit</h2>
+<details><summary>armed revert guards</summary><div id="guards"></div></details>
+<details><summary>probation history</summary><div id="probhist"></div></details>
+<details><summary>failed applies</summary><div id="failed"></div></details>
+<details><summary>deny hits (7d)</summary><div id="deny"></div></details>
+<details><summary>invariant failures (7d)</summary><div id="invf"></div></details>
+<details><summary>recent snapshots</summary><div id="snap"></div></details>
+</section>
 <div style="margin-top:8px"><button class="chip" onclick="load()">↻ refresh</button>
 <span id="stamp" class="dim" style="font-size:11px;margin-left:10px"></span></div>
 <script>
@@ -881,6 +921,19 @@ function esc(t){return String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt
 function fmt(ts){return ts?new Date(ts*1000).toLocaleString():'—';}
 function rows(list,html){return list.length?'<table>'+list.map(html).join('')+'</table>':'<div class="empty">none</div>';}
 function gidOf(u){const m=String(u).match(/agent-guard-(g\d+-\d+)/);return m?m[1]:'';}
+function base(p){return p?p.split('/').pop():'';}
+function left(deadline){
+  if(!deadline)return '';
+  const s=deadline-Math.floor(Date.now()/1000);
+  if(s<=0)return 'overdue — reverts any moment';
+  if(s<3600)return 'auto-reverts in ~'+Math.max(1,Math.round(s/60))+'m';
+  return 'auto-reverts in ~'+Math.round(s/3600)+'h';
+}
+function firstline(t){
+  if(!t)return '';
+  const i=t.search(/[.\n]/);
+  return i>0&&i<160?t.slice(0,i+1):t.slice(0,160);
+}
 async function gact(a,gid,btn){
   btn.disabled=true;
   try{
@@ -912,53 +965,74 @@ async function pact(a,pid,btn){
 async function load(){
   const r=await fetch('/api/trust');const d=await r.json();
   const v=document.getElementById('verdict');
-  const pend=d.probation_pending, arm=d.guards_armed.length;
-  v.className='verdict '+(d.verdict==='PASS'?'ok':'bad');
-  v.textContent='guardrails: denylist='+d.deny_rules+' rules · armed_guards='+arm+
-    ' · probation_pending='+pend+' · proposals_pending='+(d.proposals_pending||0)+
-    ' · invariants='+d.verdict+
-    (d.judge&&d.judge.judged?(' · judge='+(d.judge.settled?
-      d.judge.agreed+'/'+d.judge.settled+' ('+d.judge.agreement+'%)':'awaiting')):'');
+
+  // --- needs you: probation deadlines first (they self-revert), then
+  // pending proposals. Everything else is ambient. ---
+  const probPend=(d.probation||[]).filter(p=>p.state==='pending');
   const pendAll=(d.proposals||[]).filter(p=>p.status==='pending');
-  const pendReal=pendAll.filter(p=>p.origin!=='eval'), pendEval=pendAll.filter(p=>p.origin==='eval');
-  document.getElementById('props').innerHTML=rows(pendReal,
-    p=>`<tr id="prop-${esc(p.id)}"><td class="warn">${esc(p.id)}</td><td>${esc(p.path)} <span class="dim">+${p.adds}/-${p.dels} · ${esc(p.verify||'')}</span></td>`+
-       `<td><button class="act go" onclick="pact('approve','${esc(p.id)}',this)">✓ approve</button>`+
-       `<button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ deny</button></td></tr>`+
-       `<tr><td colspan="3" class="dim" style="font-size:11px">${esc(p.rationale||'')}</td></tr>`+
-       (p.judge?`<tr><td colspan="3" style="font-size:11px">`+
-        `<span class="${p.judge.status==='clean'?'ok':(p.judge.status==='flagged'?'bad':(p.judge.status==='abstain'?'warn':'dim'))}">`+
-        `judge: ${esc(p.judge.status)}</span>`+
-        (p.judge.answers?` <span class="dim">${esc(Object.entries(p.judge.answers).map(([q,a])=>q+'='+(a.abstained?'?':a.chosen)+'('+a.prob+')').join(' · '))}</span>`:'')+
-        (p.judge.error?` <span class="dim">${esc(p.judge.error)}</span>`:'')+
-        `</td></tr>`:'')+
-       (p.diff?`<tr><td colspan="3"><pre style="margin:4px 0;font-size:10.5px;max-height:280px;overflow:auto;background:#0d0d10;padding:8px;border-radius:6px">${esc(p.diff)}${p.diff_truncated?'\n… (truncated)':''}</pre></td></tr>`:''))
-    +(pendEval.length?`<details style="margin-top:6px"><summary class="dim" style="font-size:11px">eval fixtures ×${pendEval.length} — corpus artifacts, not decisions; deny dismisses</summary>`+
+  const pendReal=pendAll.filter(p=>p.origin!=='eval');
+  const pendEval=pendAll.filter(p=>p.origin==='eval');
+  const needs=probPend.length+pendReal.length;
+  v.className='verdict '+(needs===0&&d.verdict==='PASS'?'ok':'bad');
+  v.textContent=needs===0&&d.verdict==='PASS'
+    ?'✓ all quiet — nothing needs you'
+    :`⚠ ${needs} need${needs===1?'s':''} you`+(d.verdict!=='PASS'?' · invariants FAIL':'');
+
+  const probCards=probPend.map(p=>{
+    const dl=left(p.deadline);
+    return `<div class="card warn"><div class="head">probation: ${esc(p.label||p.gid)}</div>`+
+      `<div class="meta">${esc(p.path||p.gid)}</div>`+
+      (dl?`<div class="deadline${dl.startsWith('overdue')?' over':''}">⏳ ${esc(dl)} — promote to keep</div>`:'')+
+      `<button class="act go" onclick="gact('promote','${esc(p.gid)}',this)">✓ promote — keep it</button>`+
+      `<button class="act stop" onclick="gact('revert','${esc(p.gid)}',this)">↩ revert now</button></div>`;
+  }).join('');
+
+  const propCards=pendReal.map(p=>{
+    const headline=p.summary||firstline(p.rationale)||base(p.path);
+    const j=p.judge?`<span class="jchip ${esc(p.judge.status)}">judge: ${esc(p.judge.status)}</span>`:'';
+    return `<div class="card ${p.judge&&p.judge.status==='flagged'?'bad':''}" id="prop-${esc(p.id)}">`+
+      `<div class="head">${esc(headline)}</div>`+
+      `<div class="meta">${esc(base(p.path))} <span class="dim">+${p.adds}/-${p.dels} · ${esc(p.verify||'')}</span>${j}</div>`+
+      `<button class="act go" onclick="pact('approve','${esc(p.id)}',this)">✓ approve</button>`+
+      `<button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ deny</button>`+
+      `<details><summary>why + diff</summary>`+
+      `<div class="dim" style="font-size:11.5px;padding:4px 0">${esc(p.rationale||'')}</div>`+
+      (p.evidence?`<div class="dim" style="font-size:11px;padding:2px 0">evidence: ${esc(p.evidence)}</div>`:'')+
+      (p.judge&&p.judge.answers?`<div class="dim" style="font-size:11px;padding:2px 0">`+
+        `judge: ${esc(Object.entries(p.judge.answers).map(([q,a])=>q+'='+(a.abstained?'?':a.chosen)+'('+a.prob+')').join(' · '))}</div>`:'')+
+      (p.diff?`<pre style="margin:6px 0;font-size:10.5px;max-height:280px;overflow:auto;background:#0d0d10;padding:8px;border-radius:6px">${esc(p.diff)}${p.diff_truncated?'\n… (truncated)':''}</pre>`:'')+
+      `<div class="dim" style="font-size:10.5px">${esc(p.id)} · ${esc(p.path)}</div>`+
+      `</details></div>`;
+  }).join('');
+
+  document.getElementById('needs').innerHTML=
+    (probCards+propCards||'<div class="empty">nothing pending — all quiet</div>')
+    +(pendEval.length?`<details style="margin-top:6px"><summary class="dim">eval fixtures ×${pendEval.length} — corpus artifacts, not decisions; deny dismisses</summary>`+
       rows(pendEval,
-        p=>`<tr><td class="dim">${esc(p.id)}</td><td class="dim">${esc(p.path)} <span class="dim">+${p.adds}/-${p.dels}`+
-           (p.judge?` · judge:${esc(p.judge.status)}`:'')+`</span></td>`+
-           `<td><button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ dismiss</button></td></tr>`+
-           `<tr><td colspan="3" class="dim" style="font-size:11px">${esc(p.rationale||'')}</td></tr>`)
-      +`</details>`:'')
-    // Settled failures stay visible — a failed approve used to drop the
-    // proposal out of the pending list with no trace of why.
-    +(function(){
-      const failed=(d.proposals||[]).filter(p=>p.status==='apply_failed');
-      return failed.length?`<details style="margin-top:6px"><summary class="dim" style="font-size:11px">failed applies ×${failed.length}</summary>`+
-        rows(failed,
-          p=>`<tr><td class="bad">${esc(p.id)}</td><td>${esc(p.path)}</td><td class="bad">apply_failed</td></tr>`+
-             `<tr><td colspan="3" class="dim" style="font-size:11px;white-space:pre-wrap">${esc(p.fail_detail||'(no detail recorded)')}</td></tr>`)+
-        `</details>`:'';
-    })();
+        p=>`<tr><td class="dim">${esc(p.id)}</td><td class="dim">${esc(base(p.path))}</td>`+
+           `<td><button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ dismiss</button></td></tr>`)
+      +`</details>`:'');
+
+  // --- health: a line, not a wall. Failures surface; passes compress. ---
+  const invFails=(d.invariants.checks||[]).filter(c=>!/^ok/.test(c));
+  const healthBits=[`<span class="${invFails.length?'bad':'ok'}">invariants ${invFails.length?'FAIL ('+invFails.length+')':'✓ all pass'}</span>`,
+    `<span class="dim">deny hits: ${d.deny_hits.length} (7d)</span>`];
+  if(d.judge&&d.judge.judged)healthBits.push(`<span class="dim">judge: ${d.judge.settled?d.judge.agreed+'/'+d.judge.settled+' ('+d.judge.agreement+'%)':'awaiting'}</span>`);
+  healthBits.push(`<span class="dim">${d.deny_rules} deny rules · ${d.guards_armed.length} armed</span>`);
+  document.getElementById('health').innerHTML=
+    healthBits.join(' · ')+
+    (invFails.length?rows(invFails,c=>`<tr><td class="bad">${esc(c)}</td></tr>`):'');
+
+  // --- audit: collapsed by default ---
   document.getElementById('guards').innerHTML=rows(d.guards_armed,
     g=>`<tr><td class="warn">${esc(g.unit)}</td><td class="dim">fires ${esc(g.fires)}</td>`+
        `<td><button class="act stop" onclick="gact('revert',gidOf('${esc(g.unit)}'),this)">↩ revert now</button></td></tr>`);
-  document.getElementById('prob').innerHTML=rows(d.probation,
-    p=>`<tr><td>${esc(p.gid)}</td><td class="${p.state==='pending'?'warn':(p.state==='promoted'?'ok':'dim')}">${esc(p.state)}</td>`+
-       (p.state==='pending'?`<td><button class="act go" onclick="gact('promote','${esc(p.gid)}',this)">✓ promote</button>`+
-       `<button class="act stop" onclick="gact('revert','${esc(p.gid)}',this)">↩ revert now</button></td>`:'<td></td>')+`</tr>`);
-  document.getElementById('inv').innerHTML=rows(d.invariants.checks,
-    c=>`<tr><td class="${/^ok/.test(c)?'ok':'bad'}">${esc(c)}</td></tr>`);
+  const probHist=(d.probation||[]).filter(p=>p.state!=='pending');
+  document.getElementById('probhist').innerHTML=rows(probHist,
+    p=>`<tr><td>${esc(p.label||p.gid)}</td><td class="${p.state==='promoted'?'ok':'dim'}">${esc(p.state)}</td></tr>`);
+  const failed=(d.proposals||[]).filter(p=>p.status==='apply_failed');
+  document.getElementById('failed').innerHTML=rows(failed,
+    p=>`<tr><td class="bad">${esc(base(p.path))}</td><td class="dim" style="font-size:11px;white-space:pre-wrap">${esc(p.fail_detail||'(no detail recorded)')}</td></tr>`);
   document.getElementById('deny').innerHTML=rows(d.deny_hits.slice().reverse(),
     h=>`<tr><td class="dim" style="white-space:nowrap">${fmt(h.ts)}</td><td class="bad">${esc(h.msg)}</td></tr>`);
   document.getElementById('invf').innerHTML=rows(d.invariant_failures.slice().reverse(),
