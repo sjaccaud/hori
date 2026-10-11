@@ -414,3 +414,109 @@ def test_run_safe_command_no_duplicate_flag_when_output_changes(tmp_path):
     second = jlt.tool_run_safe_command(args)
     assert "duplicate" not in second
     assert "newfile.txt" in second["stdout"]
+
+
+# --- youtube_transcript ---
+
+def test_openapi_declares_youtube_transcript():
+    assert "/youtube_transcript" in jlt.OPENAPI_SPEC["paths"]
+
+
+def test_transcript_rejects_non_youtube_url():
+    r = jlt.tool_youtube_transcript({"url": "https://example.com/v"})
+    assert not r["ok"] and "youtube" in r["error"]
+
+
+def test_transcript_rejects_empty_url():
+    r = jlt.tool_youtube_transcript({})
+    assert not r["ok"]
+
+
+_VTT = """WEBVTT
+Kind: captions
+Language: en
+
+00:00:00.000 --> 00:00:02.000
+hello world
+
+00:00:02.000 --> 00:00:04.000
+hello world
+
+00:00:04.000 --> 00:00:06.000
+second <c>line</c> &amp; entities
+"""
+
+
+def _fake_ytdlp(meta):
+    def _run(cmd, timeout=5):
+        return json.dumps(meta), 0
+    return _run
+
+
+def _fake_urlopen(payload):
+    class R:
+        def read(self):
+            return payload if isinstance(payload, bytes) else payload.encode()
+        def __enter__(self, *a):
+            return self
+        def __exit__(self, *a):
+            return False
+    return lambda url, timeout=None: R()
+
+
+def test_transcript_happy_path_prefers_manual(monkeypatch):
+    meta = {
+        "title": "T", "channel": "C", "duration": 60,
+        "upload_date": "20261010",
+        "subtitles": {"en": [{"ext": "vtt", "url": "http://x/vtt"}]},
+        "automatic_captions": {"en": [{"ext": "vtt", "url": "http://x/avtt"}]},
+    }
+    monkeypatch.setattr(jlt, "_run", _fake_ytdlp(meta))
+    monkeypatch.setattr(jlt.urllib.request, "urlopen", _fake_urlopen(_VTT))
+    r = jlt.tool_youtube_transcript({"url": "https://youtu.be/abc123XYZ"})
+    assert r["ok"] and r["caption_kind"] == "manual" and r["lang"] == "en"
+    assert "hello world second line" in r["transcript"]  # dedup + tag strip
+    assert r["title"] == "T" and not r["truncated"]
+
+
+def test_transcript_falls_back_to_auto(monkeypatch):
+    meta = {"title": "T", "subtitles": {},
+            "automatic_captions": {"en-US": [{"ext": "vtt", "url": "u"}]}}
+    monkeypatch.setattr(jlt, "_run", _fake_ytdlp(meta))
+    monkeypatch.setattr(jlt.urllib.request, "urlopen", _fake_urlopen(_VTT))
+    r = jlt.tool_youtube_transcript({"url": "youtu.be/abc123", "lang": "en"})
+    assert r["ok"] and r["caption_kind"] == "auto" and r["lang"] == "en-US"
+
+
+def test_transcript_no_captions_reports_title(monkeypatch):
+    monkeypatch.setattr(jlt, "_run", _fake_ytdlp({"title": "NoCaps"}))
+    r = jlt.tool_youtube_transcript({"url": "youtu.be/abc123"})
+    assert not r["ok"] and r["title"] == "NoCaps" and "captions" in r["error"]
+
+
+def test_transcript_ytdlp_failure(monkeypatch):
+    monkeypatch.setattr(jlt, "_run", lambda cmd, timeout=5: ("", 1))
+    r = jlt.tool_youtube_transcript({"url": "youtu.be/abc123"})
+    assert not r["ok"] and "yt-dlp" in r["error"]
+
+
+def test_transcript_windows_long_text(monkeypatch):
+    big_vtt = "WEBVTT\n\n" + "\n".join(
+        f"00:00:{i:02d}.000 --> 00:00:{i:02d}.500\nword{i}" for i in range(40))
+    meta = {"title": "T",
+            "subtitles": {"en": [{"ext": "vtt", "url": "u"}]}}
+    monkeypatch.setattr(jlt, "_run", _fake_ytdlp(meta))
+    monkeypatch.setattr(jlt.urllib.request, "urlopen", _fake_urlopen(big_vtt))
+    r = jlt.tool_youtube_transcript(
+        {"url": "youtu.be/abc123", "max_chars": 60})
+    assert r["ok"] and r["truncated"] and "start_char=" in r["note"]
+    r2 = jlt.tool_youtube_transcript(
+        {"url": "youtu.be/abc123", "start_char": r["chars_total"] - 10})
+    assert r2["ok"] and not r2["truncated"]
+
+
+def test_vtt_parse_json3_and_srv3():
+    assert jlt._vtt_to_text(
+        '{"events":[{"segs":[{"utf8":"a "},{"utf8":"b\\n"}]}]}') == "a b"
+    srv3 = '<timedtext><body><p t="0">hi &amp; bye</p><p t="1">yo</p></body></timedtext>'
+    assert jlt._vtt_to_text(srv3) == "hi & bye yo"

@@ -37,6 +37,7 @@ TOOL_USAGE = (
     "For workstream/project state — 'where did we leave X', 'what is open on Y', recent decisions — the hori-state tools (thread_list, thread_read, episode_search) are the authoritative source; prefer them over guessing.\n"
     "- For small known files, you may call read_file up to 4 times in parallel. For large outputs or exploration, issue one focused call, read the result, then decide the next step.\n"
     "- read_file auto-summarizes files larger than its max_bytes cap via the local nano model (the result has summarized=true); pass summarize=false or an explicit max_bytes when you need exact raw content.\n"
+    "- youtube_transcript ({USER_NAME} Local Tools) fetches a YouTube video's captions as text — use it for any youtube.com/youtu.be link the user shares or references; do not try transcript-service websites or guess at video content.\n"
     "- Workspace write tools (when attached) are confirmation-gated: call "
     "propose_workspace_write with relative paths under the configured Projects "
     "workspace, show the manifest to the user, and only call "
@@ -1130,7 +1131,7 @@ def main():
             if url == 'http://127.0.0.1:8766':
                 conn_cfg['config'] = conn_cfg.get('config', {})
                 conn_cfg['config']['enable'] = True
-                conn_cfg['config']['function_name_filter_list'] = 'read_file,run_safe_command,get_status'
+                conn_cfg['config']['function_name_filter_list'] = 'read_file,run_safe_command,get_status,youtube_transcript'
                 conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info']['id'] = 'local-tools'
                 conn_cfg['info']['name'] = 'Local Tools'
@@ -1217,7 +1218,7 @@ def main():
                             "url": "http://127.0.0.1:8766",
                             "config": {
                                 "enable": True,
-                                "function_name_filter_list": "read_file,run_safe_command,get_status",
+                                "function_name_filter_list": "read_file,run_safe_command,get_status,youtube_transcript",
                             },
                             "info": {"id": "local-tools", "name": "Local Tools"},
                         },

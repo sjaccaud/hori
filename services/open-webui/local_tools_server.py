@@ -24,11 +24,13 @@ from __future__ import annotations
 import contextvars
 import fnmatch
 import glob
+import html
 import json
 import logging
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -910,6 +912,132 @@ def _docker_container_states(containers: list[str]) -> dict[str, str]:
     return states
 
 
+_YT_URL_RE = re.compile(
+    r"^(?:https?://)?(?:www\.|m\.|music\.)?"
+    r"(?:youtube\.com/(?:watch\?[^ ]*v=|shorts/|live/|embed/)|youtu\.be/)"
+    r"[A-Za-z0-9_-]{6,20}"
+)
+_YT_TAG_RE = re.compile(r"<[^>]+>")
+_YT_P_RE = re.compile(r"<p[^>]*>(.*?)</p>", re.DOTALL)
+TRANSCRIPT_MAX_CHARS = 60_000
+
+
+def _vtt_to_text(raw: str) -> str:
+    """VTT/srv3 -> deduped plain text. Auto-captions repeat each line
+    across rolling cues, so only consecutive duplicates are dropped."""
+    if raw.lstrip().startswith("{"):  # json3
+        try:
+            events = json.loads(raw).get("events", [])
+            text = "".join(
+                seg.get("utf8", "")
+                for ev in events for seg in ev.get("segs", [])
+            )
+        except json.JSONDecodeError:
+            return ""
+        return re.sub(r"\s+", " ", text).strip()
+    if "<p " in raw[:2000] or "<p>" in raw[:2000]:  # srv3 (xml)
+        lines = [
+            re.sub(r"\s+", " ", _YT_TAG_RE.sub("", html.unescape(t))).strip()
+            for t in _YT_P_RE.findall(raw)
+        ]
+        return " ".join(t for t in lines if t).strip()
+    lines, prev = [], None  # vtt
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith(("WEBVTT", "Kind:", "Language:")) \
+                or "-->" in line:
+            continue
+        clean = re.sub(
+            r"\s+", " ", _YT_TAG_RE.sub("", html.unescape(line))
+        ).strip()
+        if clean and clean != prev:
+            lines.append(clean)
+            prev = clean
+    return " ".join(lines).strip()
+
+
+def _pick_track(tracks: dict, lang_pref: str) -> tuple[str, list] | tuple[None, None]:
+    """Choose (lang, formats) preferring exact lang, then prefix, then any."""
+    for key in (lang_pref, next(
+            (k for k in tracks if k.startswith(lang_pref)), None), None):
+        if key is not None and key in tracks:
+            return key, tracks[key]
+    for key, fmts in tracks.items():
+        return key, fmts
+    return None, None
+
+
+def tool_youtube_transcript(args: dict[str, Any]) -> dict[str, Any]:
+    url = str(args.get("url") or "").strip()
+    if not _YT_URL_RE.match(url):
+        return {"ok": False,
+                "error": "url must be a youtube.com or youtu.be link"}
+    lang_pref = str(args.get("lang") or "en")
+    max_chars = min(int(args.get("max_chars") or TRANSCRIPT_MAX_CHARS),
+                    TRANSCRIPT_MAX_CHARS)
+    start_char = max(0, int(args.get("start_char") or 0))
+
+    # The service PATH lacks ~/.local/bin where yt-dlp is installed.
+    ytdlp = shutil.which("yt-dlp") or os.path.expanduser(
+        "~/.local/bin/yt-dlp")
+    out, rc = _run(
+        [ytdlp, "--no-playlist", "--skip-download", "-J", url], timeout=60)
+    if rc != 0 or not out.strip():
+        return {"ok": False, "error": (
+            "yt-dlp could not read this URL — the video may be private, "
+            "region-locked, or removed")}
+    try:
+        meta = json.loads(out)
+    except json.JSONDecodeError:
+        return {"ok": False, "error": "yt-dlp returned unparseable metadata"}
+
+    kind, tracks = "manual", meta.get("subtitles") or {}
+    lang, fmts = _pick_track(tracks, lang_pref)
+    if not fmts:
+        kind, tracks = "auto", meta.get("automatic_captions") or {}
+        lang, fmts = _pick_track(tracks, lang_pref)
+    if not fmts:
+        return {"ok": False, "title": meta.get("title"),
+                "error": "no captions available for this video"}
+
+    fmt = next(
+        (f for ext in ("vtt", "srv3", "json3")
+         for f in fmts if f.get("ext") == ext and f.get("url")),
+        None,
+    )
+    if not fmt:
+        return {"ok": False, "error": "no fetchable caption format found"}
+    try:
+        with urllib.request.urlopen(fmt["url"], timeout=30) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+    except (urllib.error.URLError, OSError) as e:
+        return {"ok": False, "error": f"caption fetch failed: {e}"}
+
+    text = _vtt_to_text(raw)
+    if not text:
+        return {"ok": False, "error": "captions fetched but parsed empty"}
+    window = text[start_char:start_char + max_chars]
+    truncated = start_char + len(window) < len(text)
+    result = {
+        "ok": True,
+        "title": meta.get("title"),
+        "channel": meta.get("channel") or meta.get("uploader"),
+        "duration_s": meta.get("duration"),
+        "upload_date": meta.get("upload_date"),
+        "lang": lang,
+        "caption_kind": kind,
+        "chars_total": len(text),
+        "start_char": start_char,
+        "truncated": truncated,
+        "transcript": window,
+    }
+    if truncated:
+        result["note"] = (
+            f"transcript continues — call again with "
+            f"start_char={start_char + len(window)} for the next window")
+    return result
+
+
 def tool_get_status(_args: dict[str, Any]) -> dict[str, Any]:
     """Fetch a concise AIOS system status snapshot.
 
@@ -963,6 +1091,7 @@ TOOLS = {
     "read_file": tool_read_file,
     "run_safe_command": tool_run_safe_command,
     "get_status": tool_get_status,
+    "youtube_transcript": tool_youtube_transcript,
 }
 
 
@@ -1078,6 +1207,42 @@ OPENAPI_SPEC: dict[str, Any] = {
                 "responses": {
                     "200": {
                         "description": "Command output or error",
+                        "content": {"application/json": {"schema": {"type": "object"}}},
+                    }
+                },
+            }
+        },
+        "/youtube_transcript": {
+            "post": {
+                "operationId": "youtube_transcript",
+                "summary": (
+                    "Fetch a YouTube video's captions as plain text (title, "
+                    "channel, duration, upload date included). Manual subs "
+                    "preferred over auto-captions; picks the requested "
+                    "language, a variant, or the first available. Long "
+                    "transcripts are windowed — continue with start_char. "
+                    "YouTube URLs only (youtube.com, youtu.be)."
+                ),
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "url": {"type": "string"},
+                                    "lang": {"type": "string"},
+                                    "start_char": {"type": "integer"},
+                                    "max_chars": {"type": "integer"},
+                                },
+                                "required": ["url"],
+                            }
+                        }
+                    },
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transcript + video metadata or error",
                         "content": {"application/json": {"schema": {"type": "object"}}},
                     }
                 },
