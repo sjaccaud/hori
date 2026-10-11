@@ -5,6 +5,18 @@
 
 ## Current Slice
 
+### SLICE-22-SANDBOX-WRITE-TOOL: close the measured sandbox-write gap — a `sandbox_write` tool on :8774 that writes text files inside the scratch root directly, replacing the `python3 -c` quoting gauntlet that was the dominant shared failure mode in the SLICE-21 A/B.
+
+**Branch:** `slice/22-sandbox-write-tool` (off rebrand/hori HEAD)
+
+**Demo criterion:** `sandbox_write` accepts relative + `/sbx/`-prefixed paths, refuses traversal/symlink-escape/oversize/non-string-content (adversarial suite green), lands on the eval surface, and re-running the `sbx-*` tasks on `qwen-dsh-medium` + `devstral-coding` shows the write-friction failures drop.
+
+**What it resolves:** the SLICE-21 eval measured models producing correct content then losing it to `python3 -c` quoting — a surface limitation, not a model one. The flagship harness ships a real file-write primitive for exactly this reason.
+
+**Safety boundary:** spine-adjacent — new write primitive on the band-2 surface. Confinement is mechanical: path resolves under `SCRATCH` (`resolve()` + `is_relative_to`), `..` rejected outright, absolute paths outside root rejected, symlinks followed by resolve() so escapes fail closed. Same disposable-root trust zone as `sandbox_exec` — deny.conf governs the host, not the sandbox. Adversarial tests FIRST per Pillar VII.
+
+**Status:** BUILD — tests being written first.
+
 ### SLICE-21-AGENT-HARNESS-GRAFTS: port narrow harness techniques extracted from the shipped Devin/Windsurf binaries (REA study, llm-stack) into the local stack — prompt-layer only where the spine is near, measured A/B via the eval corpus.
 
 **Branch:** `slice/21-agent-harness-grafts` (off slice/20 HEAD; merged to `rebrand/hori`)

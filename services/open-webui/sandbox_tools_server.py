@@ -56,6 +56,11 @@ SCRATCH = Path(
     )
 ).resolve()
 MAX_OUTPUT = int(os.environ.get("SANDBOX_TOOLS_MAX_OUTPUT", "60000"))
+# sandbox_write content cap — bounded under MAX_HTTP_BODY_BYTES (256 KiB)
+# so a legal request always fits the HTTP envelope.
+MAX_WRITE_BYTES = int(
+    os.environ.get("SANDBOX_TOOLS_MAX_WRITE", str(128 * 1024))
+)
 DEFAULT_TIMEOUT = int(os.environ.get("SANDBOX_TOOLS_TIMEOUT", "60"))
 MAX_TIMEOUT = 300
 AUDIT_LOG = os.environ.get(
@@ -478,19 +483,20 @@ def _audit(args: dict[str, Any], result: dict[str, Any],
            tool: str = "sandbox_exec") -> None:
     try:
         Path(AUDIT_LOG).parent.mkdir(parents=True, exist_ok=True)
+        cmd = " ".join(
+            shlex.quote(str(c))
+            for c in [args.get("command"), *(args.get("args") or [])]
+            if c
+        )
         entry = {
             "ts": int(time.time()),
             "tool": tool,
-            "command": " ".join(
-                shlex.quote(str(c))
-                for c in [args.get("command"), *(args.get("args") or [])]
-                if c
-            ),
+            "command": cmd or str(args.get("path", "")),
             "ok": result.get("ok"),
             "rc": result.get("returncode"),
             "stdout_len": len(result.get("stdout", "")),
         }
-        for k in ("event", "sid", "port", "ttl"):
+        for k in ("event", "sid", "port", "ttl", "path"):
             if k in result:
                 entry[k] = result[k]
         with open(AUDIT_LOG, "a", encoding="utf-8") as f:
@@ -532,6 +538,72 @@ def tool_sandbox_exec(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": f"command not found: {cmd[0]}"}
     except Exception as e:
         return {"ok": False, "error": f"exec error: {e}"}
+
+
+def tool_sandbox_write(args: dict[str, Any]) -> dict[str, Any]:
+    """Write a text file inside the scratch root — the band-2 file
+    primitive that replaces `python3 -c` quoting (the measured top
+    shared failure mode in the coding-duty eval). Same disposable-root
+    trust zone as sandbox_exec: the ONLY boundary is path confinement
+    under SCRATCH, enforced mechanically — resolve() follows symlinks,
+    so a link pointing outside the root leaves SCRATCH and the write
+    fails closed; `..` is rejected outright, matching _validate's
+    posture. deny.conf is not consulted: it governs host surfaces, and
+    nothing outside the scratch root is reachable from here."""
+    result: dict[str, Any] = {"ok": False}
+    try:
+        path = args.get("path")
+        content = args.get("content")
+        if not isinstance(path, str) or not path.strip():
+            result["error"] = "path must be a non-empty string"
+            return result
+        if not isinstance(content, str):
+            result["error"] = (
+                "content must be a string — for bytes, use "
+                "python3 -c inside sandbox_exec"
+            )
+            return result
+        data = content.encode("utf-8")
+        if len(data) > MAX_WRITE_BYTES:
+            result["error"] = (
+                f"content too large: {len(data)} bytes "
+                f"(max {MAX_WRITE_BYTES})"
+            )
+            return result
+        rel = path.strip()
+        if rel in ("/sbx", "/sbx/"):
+            result["error"] = "path is the sandbox root, not a file"
+            return result
+        if rel.startswith("/sbx/"):
+            rel = rel[len("/sbx/"):]
+        elif rel.startswith("/"):
+            result["error"] = (
+                f"absolute path outside sandbox root: {path} — "
+                "write under /sbx/ or use a relative path"
+            )
+            return result
+        if ".." in rel.split("/"):
+            result["error"] = f"path escapes sandbox: {path}"
+            return result
+        dest = (SCRATCH / rel).resolve()
+        if not dest.is_relative_to(SCRATCH):
+            result["error"] = f"path escapes sandbox: {path}"
+            return result
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with open(dest, "ab" if args.get("append") else "wb") as f:
+            f.write(data)
+        result = {
+            "ok": True,
+            "path": f"/sbx/{dest.relative_to(SCRATCH)}",
+            "bytes": len(data),
+        }
+        return result
+    except (UnicodeEncodeError, OSError) as e:
+        result["error"] = f"write failed: {e}"
+        return result
+    finally:
+        _audit(args if isinstance(args, dict) else {}, result,
+               tool="sandbox_write")
 
 
 # One-shot confined probe for sandbox_status — a single spawn answers
@@ -811,6 +883,7 @@ def tool_sandbox_serve_stop(args: dict[str, Any]) -> dict[str, Any]:
 
 TOOLS: dict[str, Any] = {
     "sandbox_exec": tool_sandbox_exec,
+    "sandbox_write": tool_sandbox_write,
     "sandbox_serve": tool_sandbox_serve,
     "sandbox_serve_status": tool_sandbox_serve_status,
     "sandbox_serve_stop": tool_sandbox_serve_stop,
@@ -845,8 +918,9 @@ OPENAPI_SPEC = {
                     "file://), file ops (ls cat grep find head tail wc tree "
                     "mkdir cp mv rm), python3/pytest/pip (venvs stay inside), "
                     "make, sed. There is no shell — redirections like > and "
-                    ">> do nothing; write files with python3 -c or sed -i, "
-                    "and use git -C <dir> <subcommand> inside a clone. "
+                    ">> do nothing; write files with sandbox_write (or "
+                    "sed -i for edits), and use git -C <dir> <subcommand> "
+                    "inside a clone. "
                     "Refuse tasks that need shells or network tools rather "
                     "than working around."
                 ),
@@ -870,6 +944,36 @@ OPENAPI_SPEC = {
                     },
                 },
                 "responses": {"200": {"description": "Exec result"}},
+            }
+        },
+        "/sandbox_write": {
+            "post": {
+                "operationId": "sandbox_write",
+                "summary": (
+                    "Write a text file inside the sandbox scratch root "
+                    "— the preferred way to create files. path is "
+                    "relative to the sandbox root (or /sbx/-prefixed); "
+                    "parent dirs are created. append=true appends. "
+                    "Content is UTF-8 text, max ~128 KiB. Paths outside "
+                    "the root, '..', and escaping symlinks are refused."
+                ),
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "path": {"type": "string"},
+                                    "content": {"type": "string"},
+                                    "append": {"type": "boolean"},
+                                },
+                                "required": ["path", "content"],
+                            }
+                        }
+                    },
+                },
+                "responses": {"200": {"description": "Write result"}},
             }
         },
         "/sandbox_status": {
