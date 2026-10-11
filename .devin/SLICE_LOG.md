@@ -7,7 +7,7 @@
 
 ### SLICE-23-SANDBOX-EDIT-TOOL: `sandbox_edit` — exact-match search/replace edit primitive on :8774, the other half of the measured write-path gap (editing existing files still required `sed -i` quoting acrobatics).
 
-**Branch:** `slice/23-sandbox-edit-tool` (off rebrand/hori HEAD)
+**Branch:** `slice/23-sandbox-edit-tool` (off rebrand/hori HEAD; merged back)
 
 **Demo criterion:** `sandbox_edit` replaces an exact `old` substring with `new` inside a scratch-confined path, refuses ambiguous matches (unless explicitly allowed), same mechanical confinement as `sandbox_write` (shared helper), adversarial suite green, eval surface wired, sbx-* re-run shows edit-related friction drop.
 
@@ -15,7 +15,10 @@
 
 **Safety boundary:** spine-adjacent — mutates band-2 surface files. Reuses the SLICE-22 confinement helper verbatim (resolve + is_relative_to + no `..`). Reads then writes inside the disposable root — nothing outside is reachable. deny.conf governs the host, not the sandbox. Adversarial tests FIRST per Pillar VII.
 
-**Status:** BUILD — tests first.
+**Status:** DONE — implemented, adversarial-first (14 cases: match discipline + same confinement battery), 60/60 sandbox+adversarial green, deployed + live-verified (exact replace works, ambiguous match refused with instructive error). Eval wired in ~/scripts (`f9098a3`): route + spec + all 9 sandbox tasks armed, PLUS two measured-failure fixes — verify-before-done clause in the shared sandbox system text, and every clone prompt now names the destination dir (models were cloning fixtures under arbitrary names like `/sbx/repo` and verify_cmd graded correct work as FAIL — second task-ambiguity-as-model-fail case after answer.txt).
+
+- **Post-edit A/B on the 9 sandbox-surface tasks:** `qwen-dsh-medium` **9/9** (prior: 9/9, 6/9, 8/9); `devstral-coding` **7/9** (prior: 5/9, 4/9, 7/9, 6/9). Devstral residuals: `sbx-git-workflow` (persistent — branch/commit discipline, fails 4/5 runs) and `report-shape` (1-call "Task completed" with no structured report — didn't adopt the report contract).
+- Models adopt both primitives naturally — `sandbox_edit` calls appear in audit trails un-prompted.
 
 ### SLICE-22-SANDBOX-WRITE-TOOL: close the measured sandbox-write gap — a `sandbox_write` tool on :8774 that writes text files inside the scratch root directly, replacing the `python3 -c` quoting gauntlet that was the dominant shared failure mode in the SLICE-21 A/B.
 
