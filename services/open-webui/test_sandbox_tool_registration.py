@@ -12,14 +12,15 @@ def _load_fix_tooling():
     return mod
 
 
-def test_sandbox_tools_are_attached_only_to_deepdive():
+def test_sandbox_tools_are_attached_only_to_armed_models():
     mod = _load_fix_tooling()
-    assert mod.SANDBOX_MODELS == {"qwen-deepdive"}
-    assert mod.sandbox_server_tool_ids_for("qwen-deepdive") == [
-        "server:sandbox-tools"
-    ]
+    assert mod.SANDBOX_MODELS == {"qwen-deepdive", "qwen-dsh-medium"}
+    for model_id in mod.SANDBOX_MODELS:
+        assert mod.sandbox_server_tool_ids_for(model_id) == [
+            "server:sandbox-tools"
+        ]
     for model_id in mod.ALL_QWEN_DEVSTRAL:
-        if model_id != "qwen-deepdive":
+        if model_id not in mod.SANDBOX_MODELS:
             assert mod.sandbox_server_tool_ids_for(model_id) == []
 
 
@@ -31,7 +32,8 @@ def test_sandbox_tools_connection_and_filter_are_canonical():
     assert conn["config"]["enable"] is True
     assert conn["config"]["function_name_filter_list"] == (
         "sandbox_exec,sandbox_status,sandbox_serve,"
-        "sandbox_serve_status,sandbox_serve_stop"
+        "sandbox_serve_status,sandbox_serve_stop,"
+        "sandbox_write,sandbox_edit"
     )
     for needle in ("sandbox_models", "sandbox_server_tool_ids"):
         assert needle in mod.TOOL_SERVER_FILTER_SOURCE

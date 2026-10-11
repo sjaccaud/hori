@@ -275,7 +275,7 @@ MODEL_DESCRIPTIONS = {
     "devstral-coding": "Coding and command execution (Devstral 24B).",
     "qwen-dsh-fast": "Agentic coding, no reasoning — fastest.",
     "qwen-dsh-low": "Agentic coding, light reasoning — best output.",
-    "qwen-dsh-medium": "Agentic coding, medium reasoning — quick.",
+    "qwen-dsh-medium": "Agentic coding, medium reasoning — sandbox-armed.",
     "qwen-deepdive": "Multi-source research: hypotheses, falsification, blindspots.",
     "qwen-free": "Uncensored ideation — abliterated weights, same rigor loop.",
     "nano": "Tiny 3B on a dedicated server — instant answers, no tools.",
@@ -591,16 +591,20 @@ def workspace_server_tool_ids_for(model_id: str) -> list[str]:
 
 
 # Disposable sandbox exec (bwrap-confined ~/agent-scratch on :8774). Armed on
-# the same deliberate-agent model as workspace writes: Band 2 of the trust
-# ladder — disposable by construction, still behind the deny overlay.
-SANDBOX_MODELS = {"qwen-deepdive"}
+# the deliberate-agent model and the measured agentic carrier: Band 2 of the
+# trust ladder — disposable by construction, still behind the deny overlay.
+# qwen-dsh-medium earned the surface 2026-10-11 (rig-agent-eval ep-024:
+# 17/17 do-tasks on the 22-task coding suite, best measured carrier);
+# deepdive keeps it for deliberate research work.
+SANDBOX_MODELS = {"qwen-deepdive", "qwen-dsh-medium"}
 SANDBOX_TOOLS_CONNECTION = {
     "url": "http://127.0.0.1:8774",
     "config": {
         "enable": True,
         "function_name_filter_list": (
             "sandbox_exec,sandbox_status,sandbox_serve,"
-            "sandbox_serve_status,sandbox_serve_stop"
+            "sandbox_serve_status,sandbox_serve_stop,"
+            "sandbox_write,sandbox_edit"
         ),
     },
     "info": {"id": "sandbox-tools", "name": "Sandbox Tools"},
@@ -608,7 +612,7 @@ SANDBOX_TOOLS_CONNECTION = {
 
 
 def sandbox_server_tool_ids_for(model_id: str) -> list[str]:
-    """Sandbox tool ids attached only to the deliberate-agent model."""
+    """Sandbox tool ids attached only to the deliberate/agentic models."""
     if model_id in SANDBOX_MODELS:
         return ["server:sandbox-tools"]
     return []
