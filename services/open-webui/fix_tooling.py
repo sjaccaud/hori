@@ -1413,7 +1413,10 @@ def main():
         "chat.context_compaction.token_threshold": 140000,
         "web.search.result_count": 5,
         "web.search.concurrent_requests": 3,
-        "web.search.searxng_query_url": "http://127.0.0.1:8081/search?q=<query>",
+        # 2026-10-11: :8085 is the searchrouter-api FastAPI layer — tries
+        # searxng (:8081) first, falls back to ddgs browser-grade scrape
+        # backends (bing/yahoo) when engines are rate-limited. Keys optional.
+        "web.search.searxng_query_url": "http://127.0.0.1:8085/search?q=<query>",
         # Nano server (llama-nano.service) registered as a second OpenAI base
         # URL so `nano` shows up alongside the router presets.
         "openai.api_base_urls": [

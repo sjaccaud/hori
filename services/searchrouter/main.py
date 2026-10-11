@@ -195,10 +195,24 @@ async def _search_searxng(client: httpx.AsyncClient, q: str, count: int):
     return r.json()
 
 
+# Scrape backends in fallback order — these hit engine endpoints the way a
+# browser does, no API keys. Verified on this host 2026-10-11: bing + yahoo
+# answer; duckduckgo is upstream-blocked (connection reset); brave/mojeek
+# return empty through ddgs.
+_SCRAPE_BACKENDS = ("bing", "yahoo", "duckduckgo")
+
+
 async def _search_duckduckgo(q: str, count: int):
     def _run():
         with DDGS() as ddgs:
-            return list(ddgs.text(q, max_results=count))
+            for backend in _SCRAPE_BACKENDS:
+                try:
+                    rs = list(ddgs.text(q, backend=backend, max_results=count))
+                except Exception:
+                    continue
+                if rs:
+                    return rs
+        return []
     return await asyncio.to_thread(_run)
 
 
