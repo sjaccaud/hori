@@ -312,7 +312,18 @@ async def _call_local_tool(tool_name: str, arguments: dict[str, Any]) -> dict[st
             json=arguments,
             timeout=30.0,
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            # local-tools returns the reason (deny.conf citation, policy
+            # error) in the error body — surface it so the model sees WHY
+            # instead of a bare status code it can't act on.
+            try:
+                detail = resp.json().get("error") or resp.text
+            except Exception:
+                detail = resp.text
+            raise RuntimeError(
+                f"{tool_name} refused ({resp.status_code}): "
+                f"{str(detail)[:400]}"
+            )
         return resp.json()
 
 
@@ -612,6 +623,16 @@ async def _handle_mcp_message(
     if method in ("initialized", "notifications/initialized"):
         return None
 
+    # Any message carrying a method but no `id` is a JSON-RPC
+    # notification: fire-and-forget — never emit a response, even for
+    # unknown methods (monkey-tested live: notifications/cancelled
+    # produced a stray -32601). A methodless object is a malformed
+    # Request — -32600 with null id.
+    if method is not None and "id" not in msg:
+        return None
+    if method is None:
+        return _mcp_error(msg_id, -32600, "Invalid Request")
+
     if method == "initialize":
         return _mcp_response(msg_id, {
             "protocolVersion": "2024-11-05",
@@ -682,3 +703,44 @@ async def mcp_messages_endpoint(
         await session["queue"].put(response)
 
     return Response(status_code=202)
+
+
+async def mcp_streamable_endpoint(
+    request: Request,
+    scope: str = Depends(mcp_auth_dependency),
+):
+    """POST /mcp/http — MCP streamable-HTTP transport (2025-03-26 spec).
+
+    Native MCP clients (Open-WebUI >=0.6.31's streamablehttp_client) talk
+    to a single POST endpoint. Stateless by design: no mcp-session-id is
+    issued, and scope is re-resolved from the bearer on EVERY request —
+    strictly stronger than the SSE lane's connect-time session binding.
+
+    Per spec: a POST carrying only notifications gets 202 empty; a POST
+    with requests gets application/json with the response(s) — batch
+    input yields a batch response. GET/DELETE are 405 (no session stream
+    exists to read or tear down).
+    """
+    body = await request.body()
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}") from exc
+
+    batch = isinstance(payload, list)
+    messages = payload if batch else [payload]
+    responses = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            responses.append(_mcp_error(None, -32600, "Invalid Request"))
+            continue
+        resp = await _handle_mcp_message(msg, scope=scope)
+        if resp is not None:
+            responses.append(resp)
+
+    if not responses:
+        return Response(status_code=202)
+    out = responses if batch else responses[0]
+    from starlette.responses import JSONResponse
+
+    return JSONResponse(out, media_type="application/json")

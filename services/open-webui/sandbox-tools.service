@@ -1,0 +1,25 @@
+[Unit]
+Description=Sandbox Tools — bwrap-confined disposable workspace for agent tasks
+Documentation=https://127.0.0.1:8774/openapi.json
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/Projects/aios/venv/bin/python3 %h/Projects/aios/services/open-webui/sandbox_tools_server.py
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=%h/Projects/aios
+
+# No mount-namespace hardening (ProtectHome/ProtectSystem/PrivateTmp/
+# NoNewPrivileges): each makes systemd wrap the service in a userns, and
+# apparmor_restrict_unprivileged_userns blocks bwrap's nested userns
+# creation from inside it — verified 2026-10-10 via systemd-run bisect.
+# Confinement is bwrap's job; this unit is a plain launcher.
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+Environment=SANDBOX_TOOLS_HOST=127.0.0.1
+Environment=SANDBOX_TOOLS_PORT=8774
+Environment=SANDBOX_SCRATCH=%h/agent-scratch
+
+[Install]
+WantedBy=default.target

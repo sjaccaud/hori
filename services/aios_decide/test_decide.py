@@ -138,7 +138,9 @@ def test_shared_prefix_across_questions():
     ]
     decide_questions(TEXT, qs, _completion(_letters(-0.1, -1.0, -2.0), calls))
     assert len(calls) == 2
-    prefix = build_prefix(TEXT)
+    # every question in a request shares one byte-identical prefix
+    # (prompt-cache reuse) — the nonce is per-request, not per-question
+    prefix = calls[0]["prompt"].split("Question:")[0]
     for c in calls:
         assert c["prompt"].startswith(prefix)
         assert c["n_predict"] == 1 and c["n_probs"] == N_PROBS

@@ -428,3 +428,186 @@ def test_call_tool_memory_search_and_store(admin_token, monkeypatch):
     data = json.loads(result.content[0].text)
     assert len(data) == 1
     assert data[0]["content"] == "prior memory"
+
+
+# ---------------------------------------------------------------------------
+# Streamable-HTTP transport (/mcp/http) — native OWUI MCP client target.
+# ---------------------------------------------------------------------------
+
+READ_HDR = {"Authorization": "Bearer test-read-token"}
+ADMIN_HDR = {"Authorization": "Bearer test-admin-token"}
+
+
+def test_streamable_requires_auth(read_token):
+    """No token -> 401, wrong token -> 403. Fail-closed like the SSE lane."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={"jsonrpc": "2.0", "id": 1,
+                                     "method": "ping", "params": {}})
+    assert r.status_code == 401
+    r = client.post("/mcp/http", json={"jsonrpc": "2.0", "id": 1,
+                                       "method": "ping", "params": {}},
+                    headers={"Authorization": "Bearer wrong"})
+    assert r.status_code == 403
+
+
+def test_streamable_initialize_and_list(read_token):
+    """initialize handshake then tools/list under read scope — the exact
+    sequence OWUI's streamablehttp_client performs."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={
+        "jsonrpc": "2.0", "id": 0, "method": "initialize",
+        "params": {"protocolVersion": "2025-03-26",
+                   "capabilities": {},
+                   "clientInfo": {"name": "open-webui", "version": "0"}},
+    }, headers=READ_HDR)
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    body = r.json()
+    assert body["result"]["serverInfo"]["name"] == "aios-mcp"
+    assert body["result"]["capabilities"]["tools"] == {}
+
+    r = client.post("/mcp/http", json={"jsonrpc": "2.0", "id": 1,
+                                       "method": "tools/list", "params": {}},
+                    headers=READ_HDR)
+    names = {t["name"] for t in r.json()["result"]["tools"]}
+    assert {"thread_list", "thread_read", "episode_search",
+            "memory_search"} <= names
+    assert {"memory_store", "episode_append"}.isdisjoint(names)
+
+
+def test_streamable_notification_returns_202(read_token):
+    """notifications/initialized (no id) -> 202, empty body."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={
+        "jsonrpc": "2.0", "method": "notifications/initialized",
+    }, headers=READ_HDR)
+    assert r.status_code == 202
+
+
+def test_streamable_write_tool_denied_read_scope(read_token):
+    """read scope cannot invoke write tools — refused before dispatch."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={
+        "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+        "params": {"name": "memory_store",
+                   "arguments": {"content": "x", "conversation_id": "c"}},
+    }, headers=READ_HDR)
+    assert r.status_code == 200
+    assert "error" in r.json()
+
+
+def test_streamable_admin_scope_gets_writes(admin_token):
+    """admin token on the same endpoint sees the full catalog."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={"jsonrpc": "2.0", "id": 1,
+                                       "method": "tools/list", "params": {}},
+                    headers=ADMIN_HDR)
+    names = {t["name"] for t in r.json()["result"]["tools"]}
+    assert {"memory_store", "episode_append"} <= names
+
+
+def test_streamable_bad_json_400(read_token):
+    client = TestClient(app)
+    r = client.post("/mcp/http", content=b"{not json", headers=READ_HDR)
+    assert r.status_code == 400
+
+
+def test_streamable_get_method_not_allowed(read_token):
+    """No session stream on the stateless lane — GET is refused."""
+    client = TestClient(app)
+    r = client.get("/mcp/http", headers=READ_HDR)
+    assert r.status_code == 405
+
+
+def test_streamable_unknown_notification_swallowed(read_token):
+    """JSON-RPC: a notification (no id) never gets a response — not even
+    for a method the server doesn't know. Found live by monkey test:
+    notifications/cancelled produced a -32601 with id:null."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={
+        "jsonrpc": "2.0", "method": "notifications/cancelled",
+        "params": {"requestId": 9},
+    }, headers=READ_HDR)
+    assert r.status_code == 202
+    assert r.content in (b"", b"null")
+
+
+def test_streamable_notification_only_batch_202(read_token):
+    """A batch of pure notifications -> 202, empty body."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json=[
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "method": "notifications/cancelled",
+         "params": {"requestId": 1}},
+    ], headers=READ_HDR)
+    assert r.status_code == 202
+
+
+def test_streamable_batch_non_dict_item_errored(read_token):
+    """Batch members that aren't objects get -32600, not a 500."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json=[
+        {"jsonrpc": "2.0", "id": 1, "method": "ping"},
+        42,
+        "garbage",
+    ], headers=READ_HDR)
+    assert r.status_code == 200
+    arr = r.json()
+    assert len(arr) == 3
+    assert arr[0]["result"] == {}
+    assert arr[1]["error"]["code"] == -32600
+    assert arr[2]["error"]["code"] == -32600
+
+
+def test_streamable_garbage_object_invalid_request(read_token):
+    """A JSON object with no method isn't a notification — -32600."""
+    client = TestClient(app)
+    r = client.post("/mcp/http", json={"foo": "bar"}, headers=READ_HDR)
+    assert r.status_code == 200
+    assert r.json()["error"]["code"] == -32600
+
+
+def test_handle_message_notification_no_response():
+    """Dispatcher level (shared with the SSE lane): unknown notification
+    methods must return None — fire-and-forget, never an error frame."""
+    from services.aios_core import mcp_server as ms
+    assert asyncio.run(ms._handle_mcp_message(
+        {"jsonrpc": "2.0", "method": "notifications/cancelled"}
+    )) is None
+    assert asyncio.run(ms._handle_mcp_message(
+        {"jsonrpc": "2.0", "method": "bogus/unknown.method"}
+    )) is None
+
+
+def test_call_local_tool_surfaces_error_body(monkeypatch):
+    """local-tools returns its reason (deny.conf citation, policy error)
+    in the 422 body — the MCP wrapper must surface it, not a bare
+    '422 Unprocessable Content' the model can't act on."""
+    import httpx
+    from services.aios_core import mcp_server as ms
+
+    class _Resp:
+        status_code = 422
+        text = '{"error": "denied by deny.conf rule rig-deny-i2c"}'
+
+        def json(self):
+            return {"error": "denied by deny.conf rule rig-deny-i2c"}
+
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError("422", request=None, response=None)
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, *a, **kw):
+            return _Resp()
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: _Client())
+    result = asyncio.run(ms.call_mcp_tool("run_safe_command", {"command": "x"}))
+    text = json.dumps(result.model_dump())
+    assert result.is_error
+    assert "deny.conf" in text

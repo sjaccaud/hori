@@ -167,6 +167,22 @@ def test_run_safe_command_rejects_shell_metacharacters():
         assert not result["ok"], f"should have rejected shell metachars in {cmd}: {result}"
 
 
+def test_run_safe_command_expands_tilde_in_args():
+    """Shell-free exec does not expand ~ — the server must, the same way
+    read_file already does via Path.expanduser(). Models frequently emit
+    ~/... paths; without expansion they see a phantom 'No such file'
+    and conclude the filesystem is absent."""
+    result = jlt.tool_run_safe_command({"command": "ls ~/Projects/aios"})
+    assert result["ok"], result
+    assert "services" in result["stdout"]
+
+
+def test_run_safe_command_expands_bare_tilde():
+    result = jlt.tool_run_safe_command({"command": "ls ~"})
+    assert result["ok"], result
+    assert "Projects" in result["stdout"] or "scripts" in result["stdout"]
+
+
 def test_run_safe_command_accepts_safe_find():
     home = os.path.expanduser("~")
     result = jlt.tool_run_safe_command(

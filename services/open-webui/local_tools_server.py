@@ -21,6 +21,7 @@ companion, while the safety spine stays untouched.
 """
 from __future__ import annotations
 
+import contextvars
 import fnmatch
 import glob
 import json
@@ -93,6 +94,95 @@ def _path_under_read_roots(path: str) -> bool:
     except (OSError, ValueError):
         return False
     return any(p == root or root in p.parents for root in READ_ROOTS)
+
+# rig deny.conf — canonical minted-incident denylist for ALL agent exec
+# paths (docs/rig-trust-scaffold.md). The Devin path enforces it via
+# ~/scripts/agent-deny-check.py; this parser ports the same rules so the
+# OWUI surface denies with identical citations and picks up newly minted
+# rules without a service restart. Format: <scope>|<reason>|<regex> —
+# scope exec|read|write|any; 'write' has no tool here so it never matches.
+RIG_DENY_CONF = Path(os.environ.get(
+    "LOCAL_TOOLS_DENY_CONF",
+    os.path.expanduser("~/.config/rig/deny.conf"),
+))
+
+# Compiled-in floor — mirrors agent-deny-check.py's FLOOR. If deny.conf is
+# missing/corrupt the Sep-07/08 i2c incident class still carries its
+# citation instead of degrading to a bare allowlist rejection.
+_RIG_DENY_FLOOR = (
+    (r"\bddcutil\b", "any",
+     "i2c/DDC probe — RAS events + freezes (system-stability Sep-07/08)"),
+    (r"\bi2cdetect\b|\bi2cdump\b|\bi2cget\b|\bi2cset\b", "exec",
+     "i2c bus probe — same incident class"),
+    (r"/dev/i2c", "any", "direct i2c access — same incident class"),
+    (r"\bflashrom\b", "exec", "firmware flashing — human-only"),
+)
+
+
+def _rig_deny_rules() -> list[tuple[str, str, str]]:
+    """Re-parse deny.conf each call — rules minted after an incident take
+    effect immediately, matching agent-deny-check.py semantics."""
+    rules = list(_RIG_DENY_FLOOR)
+    try:
+        for line in RIG_DENY_CONF.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("|", 2)  # scope|reason|pattern (pattern may contain |)
+            if len(parts) != 3:
+                continue
+            scope, reason, pat = parts
+            rules.append((pat.strip(), scope.strip(), reason.strip()))
+    except OSError:
+        pass
+    return rules
+
+
+def _rig_deny_check(subject: str, scope: str) -> str:
+    """Return the citation if subject hits a deny.conf rule for this scope
+    (exec matches exec+any, read matches read+any; empty scope = universal),
+    else ''."""
+    for pat, rule_scope, reason in _rig_deny_rules():
+        if rule_scope and rule_scope not in (scope, "any"):
+            continue
+        try:
+            if re.search(pat, subject):
+                return reason
+        except re.error:
+            continue
+    return ""
+
+
+# Synthetic-deny suppression: callers that deliberately probe the deny
+# layer (the deployment contract's local_tools_deny check rides the 5-min
+# state snapshot) pass "probe": true in the tool args. The deny fires
+# identically — same 422 + citation — but journals under agent-deny-probe
+# and skips the phone push, so a health check can't masquerade as an
+# incident (~250 pings/day before this landed). Suppression only mutes
+# the notification; the block and the journal record are unchanged.
+_PROBE_REQUEST = contextvars.ContextVar("_probe_request", default=False)
+
+
+def _report_rig_deny(scope: str, subject: str, reason: str) -> None:
+    """Journal + notify a deny hit — deny → log + citation, never silent
+    (scaffold Phase-1 contract). Same 'agent-deny' journal tag the Devin
+    hook uses, so OWUI-path hits show up in the /trust deny-hits panel.
+    Synthetic probes journal under 'agent-deny-probe' instead and do not
+    push. Fire-and-forget: reporting must never break the deny itself."""
+    probe = _PROBE_REQUEST.get()
+    try:
+        subprocess.run(
+            ["logger", "-t", "agent-deny-probe" if probe else "agent-deny",
+             f"BLOCKED[local-tools:{scope}] {reason} :: {subject[:160]}"],
+            check=False, timeout=5)
+        if not probe:
+            subprocess.run(
+                [os.path.expanduser("~/scripts/rig-notify.sh"), "deny", "600",
+                 f"blocked[{scope}] {subject[:80]} — {reason[:80]}"],
+                check=False, timeout=10)
+    except Exception:
+        pass
+
 
 # Patterns that are always denied for reading — via read_file AND (as of
 # 2026-09-23) via run_safe_command path arguments, which previously let
@@ -220,19 +310,63 @@ FORBIDDEN_ARGS = frozenset(
     }
 )
 
+# Flags that consume the NEXT argument as their value — skipped (with the
+# value) when locating a subcommand, so 'systemctl --user list-units' and
+# 'docker --format x ps' reach their real subcommand. Deliberately NOT
+# listed: -M/--machine/-H/--host/--context/--config/--url — target- or
+# network-selecting flags keep their value visible so 'systemctl
+# --machine x@.host restart y' still checks 'x@.host' as the subcommand
+# (fail-safe: unknown value flags can only false-deny, never false-allow).
+_SUBCMD_VALUE_FLAGS = frozenset(
+    "-o,--output,-t,--type,-p,--property,-j,--jobs,--state,"
+    "--signal,-s,--kill-who,--kill-signal,--root,--image,--drop-in,"
+    "--message,--preset-mode,-u,--unit,--boot-loader-menu,"
+    "--boot-loader-entry,--format,--log-level,--log-opt".split(",")
+)
+
+
+def _subcommand_index(cmd: list[str], start: int = 1) -> int:
+    """Index of the real subcommand: the first arg that isn't a flag and
+    isn't a known value-flag's value. len(cmd) if none exists."""
+    i = start
+    while i < len(cmd):
+        a = cmd[i]
+        if a == "-" or not a.startswith("-"):
+            return i
+        if "=" not in a and a in _SUBCMD_VALUE_FLAGS:
+            i += 1  # value flag: consume its argument too
+        i += 1
+    return len(cmd)
+
 _SHELL_METACHAR_RE = re.compile(r"[;&|`$\n\r\x00<>\"'\\]|\$\(")
 _GLOB_CHARS_RE = re.compile(r"[*?\[\]]")
 _GLOB_EXPANSION_LIMIT = 256
+
+
+def _expand_tilde_arg(arg: str) -> str:
+    """Expand a leading ~ (~/x, ~user/x) or a flag value (=~/x). Exec is
+    shell-free, so without this a literal '~' reaches the process and the
+    model sees a phantom 'No such file or directory' — read_file already
+    expands via Path.expanduser(); this keeps the two tools consistent.
+    Validation and deny checks run after this, on the canonical path."""
+    if arg.startswith("~"):
+        return os.path.expanduser(arg)
+    if arg.startswith("-") and "=~" in arg:
+        key, _, value = arg.partition("=")
+        return f"{key}={os.path.expanduser(value)}"
+    return arg
 
 
 def _expand_glob_args(argv: list[str]) -> tuple[list[str] | None, str]:
     """Expand args containing glob metachars (* ? [ ]) against the filesystem.
 
     Shell-free expansion; unmatched patterns return an error so the caller can
-    adapt instead of the command failing on a literal '*'.
+    adapt instead of the command failing on a literal '*'. Tilde args are
+    expanded first so the glob sees the canonical path.
     """
     out: list[str] = []
     for arg in argv:
+        arg = _expand_tilde_arg(arg)
         if _GLOB_CHARS_RE.search(arg):
             pattern = arg if os.path.isabs(arg) else str(COMMAND_CWD / arg)
             matches = sorted(glob.glob(pattern))
@@ -282,6 +416,11 @@ def _is_path_allowed(path: str) -> tuple[bool, str]:
         p = _resolve_path(path)
     except (OSError, ValueError) as e:
         return False, f"invalid path: {e}"
+
+    reason = _rig_deny_check(str(p), "read")
+    if reason:
+        _report_rig_deny("read", str(p), reason)
+        return False, f"blocked by rig deny.conf: {reason}"
 
     for pat in READ_DENY_PATTERNS:
         if pat and fnmatch.fnmatch(str(p), pat):
@@ -476,6 +615,13 @@ def _validate_command(cmd: list[str]) -> tuple[bool, str]:
 
     base = os.path.basename(cmd[0])
 
+    # deny.conf content first: a minted incident citation beats a bare
+    # allowlist rejection — the model learns WHY, with the episode pointer.
+    reason = _rig_deny_check(" ".join(cmd), "exec")
+    if reason:
+        _report_rig_deny("exec", " ".join(cmd), reason)
+        return False, f"blocked by rig deny.conf: {reason}"
+
     if base in ("bash", "sh", "zsh", "fish", "csh", "ksh", "tcsh", "sudo", "su", "pkexec", "doas"):
         return False, f"forbidden interpreter/escalator: {base}"
 
@@ -533,8 +679,15 @@ def _validate_command(cmd: list[str]) -> tuple[bool, str]:
 
     sub_filter = SUBCOMMAND_FILTERS.get(base)
     if sub_filter is not None:
-        if len(cmd) <= sub_idx or cmd[sub_idx] not in sub_filter:
-            return False, f"forbidden subcommand for {base}: {cmd[sub_idx] if len(cmd) > sub_idx else '(none)'}"
+        # Accept either the immediate arg (flag-style "subcommands" like
+        # 'smartctl -a', 'fdisk -l') or the first non-flag arg scanned
+        # past flags and value-flag pairs.
+        direct_ok = sub_idx < len(cmd) and cmd[sub_idx] in sub_filter
+        idx = _subcommand_index(cmd, sub_idx)
+        scan_ok = idx < len(cmd) and cmd[idx] in sub_filter
+        if not (direct_ok or scan_ok):
+            shown = cmd[idx] if idx < len(cmd) else "(none)"
+            return False, f"forbidden subcommand for {base}: {shown}"
 
     return True, ""
 
@@ -964,6 +1117,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         log.info("POST /%s command=%s", tool_name, args.get("command", "<read>"))
+        _PROBE_REQUEST.set(bool(args.get("probe")))
         result = TOOLS[tool_name](args)
         _audit(tool_name, args, result)
         self._send_json(200 if result.get("ok") else 422, result)

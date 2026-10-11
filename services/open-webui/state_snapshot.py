@@ -10,8 +10,9 @@ Design notes:
 - This is *injection*, not retrieval — the filter inserts the file as a
   system message in every request, so current state cannot be missed the
   way a knowledge/RAG document can.
-- The snapshot self-reports outages: it probes the :8775 filtered spec so
-  a dead mcpo shows up as "DOWN" in the prompt instead of silent absence.
+- The snapshot self-reports outages: it probes the native MCP endpoint
+  so a dead aios_core shows up as "DOWN" in the prompt instead of silent
+  absence.
 - Stdlib only; every probe is best-effort so partial failures still render.
 """
 
@@ -39,7 +40,7 @@ SERVICES_SYSTEM = [
     "project-tools-adaptive",
     "aios_core",
 ]
-SERVICES_USER = ["hori-mcpo", "hori-mcpo-watchdog.timer", "idea-factory-web", "script-panel"]
+SERVICES_USER = ["idea-factory-web", "script-panel"]
 CONTAINERS = [
     "open_webui_aios",
     "searchrouter_aios",
@@ -144,13 +145,24 @@ def _rig() -> list[str]:
 
 
 def _hori_state_tools() -> str:
-    spec = _http("http://127.0.0.1:8775/openapi.json", 3)
-    if spec is None:
-        return "hori_state_tools=DOWN (no :8775 spec — mcpo dead?)"
-    n = len(spec.get("paths") or {})
-    if n == 0:
-        return "hori_state_tools=DOWN (empty spec — mcpo lost MCP session)"
-    return f"hori_state_tools=OK ({n} paths)"
+    # Native MCP lane (replaced the mcpo->:8775 bridge 2026-10-09): an
+    # unauthenticated POST must be refused — a 401/403 proves the
+    # endpoint is up and gated; a connection error means aios_core's MCP
+    # surface is down.
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:5680/mcp/http",
+            data=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=3)
+        return "hori_state_tools=DOWN (unauth MCP call answered — auth dead)"
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return "hori_state_tools=OK (native /mcp/http)"
+        return f"hori_state_tools=DOWN (unexpected {e.code})"
+    except Exception as e:
+        return f"hori_state_tools=DOWN ({type(e).__name__} — aios_core dead?)"
 
 
 def _resources() -> str:
@@ -188,7 +200,7 @@ def _deployment_contract() -> str:
     script = Path(__file__).with_name("deployment_contract.py")
     try:
         p = subprocess.run(
-            [sys.executable, str(script), "--oneline"],
+            [sys.executable, str(script), "--oneline", "--fast"],
             capture_output=True, text=True, timeout=45,
         )
         return p.stdout.strip() or "deployment_contract=ERROR (no output)"

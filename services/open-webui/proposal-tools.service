@@ -1,0 +1,27 @@
+# proposal-tools.service — Band-3 proposal channel on 127.0.0.1:8775
+#
+# Stages model-authored host-change proposals for human approval
+# (docs/rig-trust-scaffold.md). The server only validates + stages —
+# approval runs through guarded-change.sh (snapshot → dead-man revert →
+# probation), triggered by agent-approve.sh / the /trust console.
+#
+# Unlike sandbox-tools this unit IS hardened: no nested bwrap userns is
+# needed (the earlier bisect's constraint doesn't apply), so
+# ProtectHome=read-only bounds the service's write reach to exactly the
+# state dirs it owns — the proposal channel can't scribble elsewhere.
+[Unit]
+Description=Band-3 host-change proposal channel (proposal-tools :8775)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 %h/Projects/aios/services/open-webui/proposal_tools_server.py
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+ProtectHome=read-only
+ReadWritePaths=%h/.local/state/proposals %h/.local/share/proposal-tools %h/.local/state/rig-guard
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

@@ -450,10 +450,15 @@ WEB_SEARCH_MODELS = set(ALL_QWEN_DEVSTRAL) - {"qwen-256k-batch"}
 # 2026-09-26: knowledge/memory/chats OFF — the retrieval safaris (search_chats
 # pulling stale cross-chat docs, memory×7 looping, knowledge×5 on dead
 # collections) were the brittleness source. files stays on (manual attach).
+# 2026-10-10: code_interpreter OFF — eval A/B (rig-agent-eval --surface):
+# execute_code was the ONLY consistent wrong-tool attractor (6 calls across
+# 3 surface runs, picked over run_safe_command for exec tasks). On this box
+# it's also an unaudited exec path — no backend configured, so a call is a
+# dead end, or Pyodide-in-browser: exec outside deny.conf + audit journal.
 META_BUILTINTOOLS = {
     "knowledge": False,
     "time": True,
-    "code_interpreter": True,
+    "code_interpreter": False,
     "web_search": False,
     "memory": False,
     "files": True,
@@ -527,16 +532,39 @@ PROJECT_TOOL_MODELS = {
     "qwen-dsh-medium",
 }
 
-# Read-only HORI state tools (threads/episodes/memory) via the mcpo bridge
-# behind the :8775 allowlist filter. get_status is deliberately absent — it
-# is owned by local-tools so the model sees exactly one status tool.
+def _hori_mcp_read_token() -> str:
+    """Read-scoped HORI MCP bearer for the native-MCP connection row.
+
+    Read from the host mcpo config at apply time — the token must never be
+    committed (hori-mcpo.service reads the same file upstream). Returns ''
+    when unavailable; the row is written anyway so a later apply can
+    re-inject once the token exists.
+    """
+    try:
+        import pathlib
+
+        cfg = json.loads(
+            (pathlib.Path.home() / ".config/mcpo/hori.json").read_text()
+        )
+        auth = cfg["mcpServers"]["hori"]["headers"]["Authorization"]
+        return auth.split(" ", 1)[1] if " " in auth else auth
+    except Exception:
+        return ""
+
+
+# Read-only HORI state tools (threads/episodes/memory) via native MCP on
+# aios_core: OWUI's streamablehttp client -> POST /mcp/http, read-scoped
+# bearer. Retired the mcpo -> :8775 filter OpenAPI bridge (2026-10-09).
+# function_name_filter_list still caps the OWUI surface at the 4 state
+# tools — get_status stays local-tools-owned so the model sees exactly
+# one status tool.
 HORI_STATE_CONNECTION = {
-    "url": "http://127.0.0.1:8775",
-    "path": "openapi.json",
-    "type": "openapi",
-    "auth_type": "none",
+    "url": "http://127.0.0.1:5680/mcp/http",
+    "path": "",
+    "type": "mcp",
+    "auth_type": "bearer",
     "headers": {},
-    "key": "",
+    "key": _hori_mcp_read_token(),
     "config": {
         "enable": True,
         "function_name_filter_list": (
@@ -551,11 +579,63 @@ HORI_STATE_CONNECTION = {
     },
 }
 
+# Retired bridge URL — the row is stripped wherever it appears.
+HORI_STATE_RETIRED_URL = "http://127.0.0.1:8775"
+
 
 def workspace_server_tool_ids_for(model_id: str) -> list[str]:
     """Extra server tool ids attached only to explicitly write-enabled models."""
     if model_id in WORKSPACE_WRITE_MODELS:
         return ["server:workspace-tools"]
+    return []
+
+
+# Disposable sandbox exec (bwrap-confined ~/agent-scratch on :8774). Armed on
+# the same deliberate-agent model as workspace writes: Band 2 of the trust
+# ladder — disposable by construction, still behind the deny overlay.
+SANDBOX_MODELS = {"qwen-deepdive"}
+SANDBOX_TOOLS_CONNECTION = {
+    "url": "http://127.0.0.1:8774",
+    "config": {
+        "enable": True,
+        "function_name_filter_list": (
+            "sandbox_exec,sandbox_status,sandbox_serve,"
+            "sandbox_serve_status,sandbox_serve_stop"
+        ),
+    },
+    "info": {"id": "sandbox-tools", "name": "Sandbox Tools"},
+}
+
+
+def sandbox_server_tool_ids_for(model_id: str) -> list[str]:
+    """Sandbox tool ids attached only to the deliberate-agent model."""
+    if model_id in SANDBOX_MODELS:
+        return ["server:sandbox-tools"]
+    return []
+
+
+# Host-change proposal channel (:8775). Band 3 of the trust ladder: the
+# model stages sandbox-verified content as a proposal; a human approves
+# (/trust or agent-approve) and the guarded-change envelope applies it.
+# Deliberate-agent posture — same gating as sandbox/workspace writes.
+PROPOSAL_MODELS = {"qwen-deepdive"}
+PROPOSAL_TOOLS_CONNECTION = {
+    "url": "http://127.0.0.1:8775",
+    "config": {
+        "enable": True,
+        "function_name_filter_list": (
+            "propose_host_change,list_proposals,proposal_status,"
+            "retract_proposal"
+        ),
+    },
+    "info": {"id": "proposal-tools", "name": "Proposal Tools"},
+}
+
+
+def proposal_server_tool_ids_for(model_id: str) -> list[str]:
+    """Proposal-channel tool ids attached only to the deliberate model."""
+    if model_id in PROPOSAL_MODELS:
+        return ["server:proposal-tools"]
     return []
 
 
@@ -588,8 +668,8 @@ class Filter:
             description="Comma-separated model ids to attach local tool servers to.",
         )
         server_tool_ids: str = Field(
-            default="server:local-tools,server:hori-state",
-            description="Comma-separated 'server:<id>' tool_ids to attach (server-side execution).",
+            default="server:local-tools,server:mcp:hori-state",
+            description="Comma-separated 'server:<id>' tool_ids to attach (server-side execution). MCP connections resolve via 'server:mcp:<id>'.",
         )
         project_models: str = Field(
             default="qwen-128k,qwen-deepdive,qwen-dsh-fast,qwen-dsh-low,qwen-dsh-medium",
@@ -606,6 +686,22 @@ class Filter:
         write_server_tool_ids: str = Field(
             default="server:workspace-tools",
             description="Comma-separated write-capable 'server:<id>' tool_ids for write_models.",
+        )
+        sandbox_models: str = Field(
+            default="qwen-deepdive",
+            description="Comma-separated model ids allowed to use the disposable sandbox exec tools.",
+        )
+        sandbox_server_tool_ids: str = Field(
+            default="server:sandbox-tools",
+            description="Comma-separated 'server:<id>' tool_ids for sandbox_models.",
+        )
+        proposal_models: str = Field(
+            default="qwen-deepdive",
+            description="Comma-separated model ids allowed to use the host-change proposal channel (Band 3).",
+        )
+        proposal_server_tool_ids: str = Field(
+            default="server:proposal-tools",
+            description="Comma-separated 'server:<id>' tool_ids for proposal_models.",
         )
         state_file: str = Field(
             default="/app/backend/data/aios-state-snapshot.md",
@@ -688,6 +784,22 @@ class Filter:
             if model_id in write_models:
                 write_ids = getattr(self.valves, "write_server_tool_ids", "") or ""
                 server_ids.update(t.strip() for t in write_ids.split(",") if t.strip())
+            sandbox_models = {
+                m.strip()
+                for m in (getattr(self.valves, "sandbox_models", "") or "").split(",")
+                if m.strip()
+            }
+            if model_id in sandbox_models:
+                sbx_ids = getattr(self.valves, "sandbox_server_tool_ids", "") or ""
+                server_ids.update(t.strip() for t in sbx_ids.split(",") if t.strip())
+            proposal_models = {
+                m.strip()
+                for m in (getattr(self.valves, "proposal_models", "") or "").split(",")
+                if m.strip()
+            }
+            if model_id in proposal_models:
+                prop_ids = getattr(self.valves, "proposal_server_tool_ids", "") or ""
+                server_ids.update(t.strip() for t in prop_ids.split(",") if t.strip())
             server_tool_ids = ",".join(sorted(server_ids))
 
             for tool_id in server_ids:
@@ -730,6 +842,10 @@ class Filter:
                 stale = max_age and age > max_age
                 header = (
                     "[AIOS state snapshot — generated on host %ds ago%s. "
+                    "Use this ONLY when directly relevant to the user's "
+                    "request — if the request is unrelated to current "
+                    "system state, ignore this block entirely and never "
+                    "quote or mention it. "
                     "This ALREADY satisfies the current-state check: do NOT "
                     "re-probe with run_safe_command to rediscover services, "
                     "loaded model, workstreams, or resources listed here. "
@@ -887,12 +1003,20 @@ def main():
     row = c.execute("SELECT value FROM config WHERE key='tool_server.connections'").fetchone()
     if row:
         conns = json.loads(row[0])
+        # Drop the retired mcpo->filter bridge row wherever it sits.
+        # :8775 is RECLAIMED by proposal-tools (Band 3) — purge the port
+        # only when the row isn't the proposal connection itself.
+        conns = [conn for conn in conns
+                 if conn.get('url', '') != HORI_STATE_RETIRED_URL
+                 or (conn.get('info') or {}).get('id') == 'proposal-tools']
         # Ensure project-tools/workspace-tools/hori-state are present and
         # local-tools is clean.
         urls = {conn_cfg.get('url', '') for conn_cfg in conns}
         for tool_conn in (
             project_tools_conn,
             WORKSPACE_TOOLS_CONNECTION,
+            SANDBOX_TOOLS_CONNECTION,
+            PROPOSAL_TOOLS_CONNECTION,
             HORI_STATE_CONNECTION,
         ):
             if tool_conn['url'] not in urls:
@@ -914,6 +1038,12 @@ def main():
                 conn_cfg['info']['id'] = 'project-tools'
                 conn_cfg['info']['name'] = 'Project Tools'
             elif url == HORI_STATE_CONNECTION['url']:
+                # Native-MCP row: normalize type/auth/token each apply so
+                # token rotation propagates from the host config.
+                conn_cfg['type'] = 'mcp'
+                conn_cfg['auth_type'] = 'bearer'
+                if HORI_STATE_CONNECTION['key']:
+                    conn_cfg['key'] = HORI_STATE_CONNECTION['key']
                 conn_cfg['config'] = conn_cfg.get('config', {})
                 conn_cfg['config']['enable'] = True
                 conn_cfg['config']['function_name_filter_list'] = (
@@ -930,6 +1060,24 @@ def main():
                 conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info']['id'] = 'workspace-tools'
                 conn_cfg['info']['name'] = 'Workspace Tools'
+            elif url == SANDBOX_TOOLS_CONNECTION['url']:
+                conn_cfg['config'] = conn_cfg.get('config', {})
+                conn_cfg['config']['enable'] = True
+                conn_cfg['config']['function_name_filter_list'] = (
+                    SANDBOX_TOOLS_CONNECTION['config']['function_name_filter_list']
+                )
+                conn_cfg['info'] = conn_cfg.get('info', {})
+                conn_cfg['info']['id'] = 'sandbox-tools'
+                conn_cfg['info']['name'] = 'Sandbox Tools'
+            elif url == PROPOSAL_TOOLS_CONNECTION['url']:
+                conn_cfg['config'] = conn_cfg.get('config', {})
+                conn_cfg['config']['enable'] = True
+                conn_cfg['config']['function_name_filter_list'] = (
+                    PROPOSAL_TOOLS_CONNECTION['config']['function_name_filter_list']
+                )
+                conn_cfg['info'] = conn_cfg.get('info', {})
+                conn_cfg['info']['id'] = 'proposal-tools'
+                conn_cfg['info']['name'] = 'Proposal Tools'
             elif url in ('http://127.0.0.1:8767', 'http://127.0.0.1:8768'):
                 # OaK tool servers are not running; keep them disabled to reduce bloat.
                 conn_cfg.setdefault('config', {})['enable'] = False
@@ -957,6 +1105,8 @@ def main():
                         },
                         project_tools_conn,
                         WORKSPACE_TOOLS_CONNECTION,
+                        SANDBOX_TOOLS_CONNECTION,
+                        PROPOSAL_TOOLS_CONNECTION,
                         HORI_STATE_CONNECTION,
                     ],
                     ensure_ascii=False,
@@ -1049,11 +1199,15 @@ def main():
             json.dumps(
                 {
                     "models": ",".join(ALL_QWEN_DEVSTRAL),
-                    "server_tool_ids": "server:local-tools,server:hori-state",
+                    "server_tool_ids": "server:local-tools,server:mcp:hori-state",
                     "project_models": ",".join(sorted(PROJECT_TOOL_MODELS)),
                     "project_tool_ids": "server:project-tools",
                     "write_models": ",".join(sorted(WORKSPACE_WRITE_MODELS)),
                     "write_server_tool_ids": "server:workspace-tools",
+                    "sandbox_models": ",".join(sorted(SANDBOX_MODELS)),
+                    "sandbox_server_tool_ids": "server:sandbox-tools",
+                    "proposal_models": ",".join(sorted(PROPOSAL_MODELS)),
+                    "proposal_server_tool_ids": "server:proposal-tools",
                 },
                 ensure_ascii=False,
             ),

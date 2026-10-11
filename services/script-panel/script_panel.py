@@ -7,25 +7,31 @@ catalog UI plus a gated "run" endpoint for scripts explicitly marked
 
 Endpoints:
   GET  /                  HTML UI (with guardrail posture strip)
-  GET  /trust             trust console — read-only rig guardrail posture
+  GET  /trust             trust console — guardrail posture + approve buttons
   GET  /api/catalog       catalog entries + live status + last-run merged
   GET  /api/runs          recent run history (tail of runs.jsonl)
   GET  /api/trust         guardrail posture JSON (denylist/guards/probation)
   POST /api/run/<id>      execute an allowlisted script, record the result
+  POST /api/guard/<act>?gid=  approve/deny a LIVE guard unit (promote|revert)
 
 Safety model (mirrors local_tools_server.py):
-  - Binds 127.0.0.1 only.
+  - Binds 127.0.0.1 only; tailnet exposure is via `tailscale serve` —
+    every tailnet device is the owner's (ACL decision 2026-09-23).
   - No shell: scripts execute as argv arrays; no user-supplied args.
   - Only catalog entries with runnable:true can execute; sudo-flagged
     entries are never runnable from the panel regardless.
+  - Guard actions only touch LIVE agent-guard-* units, verified server-side
+    before dispatch — stale notification links and id sprays settle to
+    "already settled", never act on arbitrary units.
   - confirm:true entries still execute on request — the *UI* shows the
-    confirm dialog; the API just runs. Keep the panel localhost-only.
+    confirm dialog; the API just runs.
   - Every launch is appended to ~/.local/share/script-panel/runs.jsonl.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -326,6 +332,8 @@ def run_script(entry: dict) -> dict:
 # --------------------------------------------------------------------------
 
 RIG_STATE = Path(os.path.expanduser("~/.local/state/rig-guard"))
+PROPOSAL_STATE = Path(
+    os.path.expanduser("~/.local/state/proposals"))
 RIG_DENY_CONF = Path(os.path.expanduser("~/.config/rig/deny.conf"))
 RIG_SCRIPTS = Path(os.path.expanduser("~/scripts"))
 
@@ -405,11 +413,21 @@ def trust_posture() -> dict:
     inv_fails = [j for j in _journal_tag("rig-invariant") if "FAIL" in j["msg"]]
     pending = [p for p in probation if p["state"] == "pending"]
 
+    proposals = load_proposals()
+    prop_pending = [p for p in proposals
+                    if p["status"] == "pending"
+                    and p.get("origin") not in SYNTHETIC_ORIGINS]
+    judge = judge_agreement(
+        proposals, {p["gid"]: p["state"] for p in probation})
+
     return {
         "deny_rules": deny_rules,
         "guards_armed": guards,
         "probation": probation,
         "probation_pending": len(pending),
+        "proposals": proposals,
+        "judge": judge,
+        "proposals_pending": len(prop_pending),
         "invariants": {"rc": inv.returncode, "checks": inv_checks},
         "snapshots": snapshots,
         "deny_hits": deny_hits,
@@ -417,6 +435,189 @@ def trust_posture() -> dict:
         "verdict": "PASS" if inv.returncode == 0 else "FAIL",
         "warnings": len(guards) + len(pending) + len(inv_fails),
     }
+
+
+_GID_RE = re.compile(r"g\d+-\d+")
+_PID_RE = re.compile(r"p-\d+-[a-z0-9]{6}")
+_PROP_DIFF_LINES = 120
+# Proposals tagged by synthetic callers (the eval harness marks
+# fixtures "eval") are measurement artifacts, not human decisions:
+# excluded from the open-decision count, the agreement stats, and the
+# phone surface — they render under a collapsed /trust section.
+SYNTHETIC_ORIGINS = frozenset({"eval"})
+
+
+def judge_agreement(proposals: list[dict],
+                    probation_states: dict) -> dict:
+    """Correlate judge verdicts with human outcomes — is the second
+    opinion measuring anything?
+
+    Outcome join: rejected/expired-reverted = negative (the change
+    died), promoted = positive (approved and kept). pending /
+    probation-pending / retracted (model-side) are unsettled — only
+    human verdicts count. Abstain/unavailable/disabled verdicts carry
+    no signal either way.
+
+    Cells: clean+positive or flagged+negative = agreed;
+    clean+negative = missed (judge said fine, it wasn't);
+    flagged+positive = cried_wolf (judge balked, human kept it).
+    """
+    out = {"judged": 0, "settled": 0, "agreed": 0, "missed": 0,
+           "cried_wolf": 0, "agreement": None, "cells": []}
+    for p in proposals:
+        if p.get("origin") in SYNTHETIC_ORIGINS:
+            continue                     # eval fixtures aren't ground truth
+        js = (p.get("judge") or {}).get("status")
+        if js not in ("clean", "flagged"):
+            continue
+        out["judged"] += 1
+        outcome = None
+        status = p.get("status")
+        if status == "rejected":
+            outcome = "negative"
+        elif status in ("probation", "approved"):
+            st = probation_states.get(p.get("guard_id"), "")
+            if st == "promoted":
+                outcome = "positive"
+            elif st and st != "pending":
+                outcome = "negative"
+            # pending timer / unknown guard -> still unsettled
+        if outcome is None:
+            continue
+        out["settled"] += 1
+        cell = {"id": p["id"], "judge": js, "outcome": outcome}
+        if (js == "clean") == (outcome == "positive"):
+            out["agreed"] += 1
+            cell["verdict"] = "agreed"
+        elif js == "clean":
+            out["missed"] += 1
+            cell["verdict"] = "missed"
+        else:
+            out["cried_wolf"] += 1
+            cell["verdict"] = "cried_wolf"
+        out["cells"].append(cell)
+    if out["settled"]:
+        out["agreement"] = round(100 * out["agreed"] / out["settled"])
+    return out
+
+
+def load_proposals() -> list[dict]:
+    """Pending/settled proposals from the proposal-tools state dir —
+    Band-3 staged host changes awaiting human approve/deny."""
+    out = []
+    try:
+        dirs = sorted(
+            (d for d in PROPOSAL_STATE.iterdir()
+             if d.is_dir() and (d / "meta.json").exists()),
+            key=lambda d: d.name, reverse=True)[:15]
+    except OSError:
+        return out
+    for d in dirs:
+        try:
+            meta = json.loads((d / "meta.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        entry = {k: meta.get(k) for k in
+                 ("id", "status", "path", "created", "adds", "dels",
+                  "rationale", "verify", "guard_id", "judge", "origin")}
+        if meta.get("status") == "pending":
+            try:
+                diff = (d / "diff.patch").read_text().splitlines()
+                entry["diff"] = "\n".join(diff[:_PROP_DIFF_LINES])
+                entry["diff_truncated"] = len(diff) > _PROP_DIFF_LINES
+            except OSError:
+                entry["diff"] = ""
+        out.append(entry)
+    return out
+
+
+def proposal_action(pid: str, action: str) -> dict:
+    """Human approve/deny on a PENDING proposal (Band-3 approve-from-phone).
+
+    Safety model mirrors guard_action: the id must match the strict
+    proposal-id shape AND have a pending meta on disk — sprayed ids
+    can't act on anything. approve runs agent-approve.sh, which feeds
+    the staged content through guarded-change (the scaffold's own
+    envelope — snapshot, dead-man revert, probation). deny marks it
+    rejected. Neither path touches mutation code beyond the scaffold's.
+    """
+    if action not in ("approve", "deny"):
+        return {"ok": False, "error": f"unknown action {action!r}"}
+    if not pid or not _PID_RE.fullmatch(pid):
+        return {"ok": False, "error": "bad proposal id"}
+    meta_path = PROPOSAL_STATE / pid / "meta.json"
+    try:
+        meta = json.loads(meta_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {"ok": False, "error": f"no proposal {pid}"}
+    if meta.get("status") != "pending":
+        return {"ok": False,
+                "error": f"{pid} is {meta.get('status')} — not pending"}
+
+    if action == "deny":
+        cp = _run_probe(
+            [str(RIG_SCRIPTS / "agent-approve.sh"), "--reject", pid],
+            timeout=15)
+    else:
+        # approve → guarded-change: restic snapshot + apply + verify +
+        # probation arm; this takes tens of seconds, not milliseconds.
+        cp = _run_probe(
+            [str(RIG_SCRIPTS / "agent-approve.sh"), pid], timeout=180)
+    ok = cp.returncode == 0
+    detail = (cp.stdout or cp.stderr).strip()[-300:]
+
+    sys.stderr.write(
+        f"[proposal-action] {action} {pid} -> {'ok' if ok else 'FAIL'} {detail[:120]}\n")
+    _run_probe(["logger", "-t", "proposal-action",
+                f"{action} {pid} ok={ok} :: {detail[:120]}"])
+    return {"ok": ok, "action": action, "id": pid, "detail": detail}
+
+
+def guard_action(gid: str, action: str) -> dict:
+    """Human approve/deny on a LIVE guard unit (Phase 4.5 approve-from-phone).
+
+    Safety model: the gid must match the strict guard-id shape AND have a
+    live systemd unit — a stale notification or sprayed id can't act on
+    anything. promote disarms the probation timer (change stays); revert
+    fires the armed revert payload NOW by starting its sibling .service.
+    Both are the scaffold's own mechanisms, not new mutation code.
+    """
+    if action not in ("promote", "revert"):
+        return {"ok": False, "error": f"unknown action {action!r}"}
+    if not gid or not _GID_RE.fullmatch(gid):
+        return {"ok": False, "error": "bad guard id"}
+
+    prob_active = _run_probe(
+        ["systemctl", "is-active", f"agent-guard-{gid}-prob.timer"]
+    ).stdout.strip() == "active"
+    ttl_active = _run_probe(
+        ["systemctl", "is-active", f"agent-guard-{gid}.timer"]
+    ).stdout.strip() == "active"
+    if not (prob_active or ttl_active):
+        return {"ok": False, "error": f"no live guard for {gid} — already settled"}
+
+    if action == "promote":
+        if not prob_active:
+            return {"ok": False, "error": f"{gid} is armed, not in probation"}
+        cp = _run_probe([str(RIG_SCRIPTS / "agent-promote.sh"), gid], timeout=20)
+        ok = cp.returncode == 0
+        detail = (cp.stdout or cp.stderr).strip()[:200]
+    else:  # revert — fire the armed payload now, then disarm the pending
+        # timer so it doesn't fire a second revert. Order matters: stopping
+        # the timer first garbage-collects the sibling .service.
+        timer = (f"agent-guard-{gid}-prob.timer" if prob_active
+                 else f"agent-guard-{gid}.timer")
+        unit = timer[:-len(".timer")] + ".service"
+        cp = _run_probe(["sudo", "-n", "systemctl", "start", unit], timeout=20)
+        _run_probe(["sudo", "-n", "systemctl", "stop", timer], timeout=10)
+        ok = cp.returncode == 0
+        detail = f"fired {unit}" if ok else (cp.stderr or cp.stdout).strip()[:200]
+
+    sys.stderr.write(
+        f"[guard-action] {action} {gid} -> {'ok' if ok else 'FAIL'} {detail}\n")
+    _run_probe(["logger", "-t", "guard-action",
+                    f"{action} {gid} ok={ok} :: {detail[:120]}"])
+    return {"ok": ok, "action": action, "gid": gid, "detail": detail}
 
 
 # --------------------------------------------------------------------------
@@ -656,10 +857,16 @@ tr:first-child td{border-top:0}
 .empty{color:var(--dim);font-size:12px;font-style:italic}
 button.chip{background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:5px 10px;border-radius:14px;cursor:pointer;font:inherit;font-size:12px}
 button.chip:hover{color:var(--fg);border-color:var(--acc)}
+button.act{background:#1a1d23;border:1px solid var(--border);color:var(--fg);padding:3px 10px;border-radius:6px;cursor:pointer;font:inherit;font-size:11.5px;margin-left:6px}
+button.act:hover{border-color:var(--acc)}
+button.act.go{color:var(--ok)}button.act.stop{color:var(--bad)}
+button.act.arm{color:var(--warn);border-color:var(--warn)}
+button.act:disabled{opacity:.4;cursor:default}
 </style></head><body>
 <h1>Trust Console <span style="color:var(--dim);font-weight:400">· rig guardrail posture</span></h1>
-<p class="sub">read-only — enforcement lives in the exec layer; this only reports. <a href="/">← script panel</a></p>
+<p class="sub">approve surface — promotes/reverts act on LIVE guard units only; enforcement stays in the exec layer. <a href="/">← script panel</a></p>
 <div id="verdict" class="verdict dim">loading…</div>
+<section><h2>Pending proposals</h2><div id="props"></div></section>
 <section><h2>Armed revert guards</h2><div id="guards"></div></section>
 <section><h2>Probationary changes</h2><div id="prob"></div></section>
 <section><h2>Invariants</h2><div id="inv"></div></section>
@@ -672,17 +879,73 @@ button.chip:hover{color:var(--fg);border-color:var(--acc)}
 function esc(t){return String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fmt(ts){return ts?new Date(ts*1000).toLocaleString():'—';}
 function rows(list,html){return list.length?'<table>'+list.map(html).join('')+'</table>':'<div class="empty">none</div>';}
+function gidOf(u){const m=String(u).match(/agent-guard-(g\d+-\d+)/);return m?m[1]:'';}
+async function gact(a,gid,btn){
+  btn.disabled=true;
+  try{
+    const r=await fetch('/api/guard/'+a+'?gid='+encodeURIComponent(gid),{method:'POST'});
+    const d=await r.json();
+    if(!d.ok)alert((d.error||'action failed'));
+  }catch(e){alert('request failed: '+e);}
+  load();
+}
+async function pact(a,pid,btn){
+  // approve is the load-bearing tap — first tap arms for 8s, second
+  // confirms. deny stays one-tap: a rejected proposal is recoverable
+  // (the model re-proposes), an applied host change is the blast radius.
+  if(a==='approve'&&!btn.dataset.armed){
+    btn.dataset.armed='1';const t=btn.textContent;
+    btn.textContent='confirm apply?';btn.className='act arm';
+    setTimeout(()=>{btn.dataset.armed='';btn.textContent=t;btn.className='act go';},8000);
+    return;
+  }
+  btn.disabled=true;
+  try{
+    const r=await fetch('/api/proposal/'+a+'?id='+encodeURIComponent(pid),{method:'POST'});
+    const d=await r.json();
+    if(!d.ok)alert((d.error||'action failed'));
+    else if(d.detail)alert(d.action+' '+d.id+': '+d.detail.slice(0,200));
+  }catch(e){alert('request failed: '+e);}
+  load();
+}
 async function load(){
   const r=await fetch('/api/trust');const d=await r.json();
   const v=document.getElementById('verdict');
   const pend=d.probation_pending, arm=d.guards_armed.length;
   v.className='verdict '+(d.verdict==='PASS'?'ok':'bad');
   v.textContent='guardrails: denylist='+d.deny_rules+' rules · armed_guards='+arm+
-    ' · probation_pending='+pend+' · invariants='+d.verdict;
+    ' · probation_pending='+pend+' · proposals_pending='+(d.proposals_pending||0)+
+    ' · invariants='+d.verdict+
+    (d.judge&&d.judge.judged?(' · judge='+(d.judge.settled?
+      d.judge.agreed+'/'+d.judge.settled+' ('+d.judge.agreement+'%)':'awaiting')):'');
+  const pendAll=(d.proposals||[]).filter(p=>p.status==='pending');
+  const pendReal=pendAll.filter(p=>p.origin!=='eval'), pendEval=pendAll.filter(p=>p.origin==='eval');
+  document.getElementById('props').innerHTML=rows(pendReal,
+    p=>`<tr id="prop-${esc(p.id)}"><td class="warn">${esc(p.id)}</td><td>${esc(p.path)} <span class="dim">+${p.adds}/-${p.dels} · ${esc(p.verify||'')}</span></td>`+
+       `<td><button class="act go" onclick="pact('approve','${esc(p.id)}',this)">✓ approve</button>`+
+       `<button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ deny</button></td></tr>`+
+       `<tr><td colspan="3" class="dim" style="font-size:11px">${esc(p.rationale||'')}</td></tr>`+
+       (p.judge?`<tr><td colspan="3" style="font-size:11px">`+
+        `<span class="${p.judge.status==='clean'?'ok':(p.judge.status==='flagged'?'bad':(p.judge.status==='abstain'?'warn':'dim'))}">`+
+        `judge: ${esc(p.judge.status)}</span>`+
+        (p.judge.answers?` <span class="dim">${esc(Object.entries(p.judge.answers).map(([q,a])=>q+'='+(a.abstained?'?':a.chosen)+'('+a.prob+')').join(' · '))}</span>`:'')+
+        (p.judge.error?` <span class="dim">${esc(p.judge.error)}</span>`:'')+
+        `</td></tr>`:'')+
+       (p.diff?`<tr><td colspan="3"><pre style="margin:4px 0;font-size:10.5px;max-height:280px;overflow:auto;background:#0d0d10;padding:8px;border-radius:6px">${esc(p.diff)}${p.diff_truncated?'\n… (truncated)':''}</pre></td></tr>`:''))
+    +(pendEval.length?`<details style="margin-top:6px"><summary class="dim" style="font-size:11px">eval fixtures ×${pendEval.length} — corpus artifacts, not decisions; deny dismisses</summary>`+
+      rows(pendEval,
+        p=>`<tr><td class="dim">${esc(p.id)}</td><td class="dim">${esc(p.path)} <span class="dim">+${p.adds}/-${p.dels}`+
+           (p.judge?` · judge:${esc(p.judge.status)}`:'')+`</span></td>`+
+           `<td><button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ dismiss</button></td></tr>`+
+           `<tr><td colspan="3" class="dim" style="font-size:11px">${esc(p.rationale||'')}</td></tr>`)
+      +`</details>`:'');
   document.getElementById('guards').innerHTML=rows(d.guards_armed,
-    g=>`<tr><td class="warn">${esc(g.unit)}</td><td class="dim">fires ${esc(g.fires)}</td></tr>`);
+    g=>`<tr><td class="warn">${esc(g.unit)}</td><td class="dim">fires ${esc(g.fires)}</td>`+
+       `<td><button class="act stop" onclick="gact('revert',gidOf('${esc(g.unit)}'),this)">↩ revert now</button></td></tr>`);
   document.getElementById('prob').innerHTML=rows(d.probation,
-    p=>`<tr><td>${esc(p.gid)}</td><td class="${p.state==='pending'?'warn':(p.state==='promoted'?'ok':'dim')}">${esc(p.state)}</td></tr>`);
+    p=>`<tr><td>${esc(p.gid)}</td><td class="${p.state==='pending'?'warn':(p.state==='promoted'?'ok':'dim')}">${esc(p.state)}</td>`+
+       (p.state==='pending'?`<td><button class="act go" onclick="gact('promote','${esc(p.gid)}',this)">✓ promote</button>`+
+       `<button class="act stop" onclick="gact('revert','${esc(p.gid)}',this)">↩ revert now</button></td>`:'<td></td>')+`</tr>`);
   document.getElementById('inv').innerHTML=rows(d.invariants.checks,
     c=>`<tr><td class="${/^ok/.test(c)?'ok':'bad'}">${esc(c)}</td></tr>`);
   document.getElementById('deny').innerHTML=rows(d.deny_hits.slice().reverse(),
@@ -738,6 +1001,29 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path.startswith("/api/proposal/"):
+            from urllib.parse import parse_qs, urlparse
+            u = urlparse(self.path)
+            action = u.path[len("/api/proposal/"):]
+            pid = parse_qs(u.query).get("id", [""])[0]
+            result = proposal_action(pid, action)
+            self._json(result, 200 if result["ok"] else 409)
+            return
+        if self.path.startswith("/api/guard/"):
+            from urllib.parse import parse_qs, urlparse
+            u = urlparse(self.path)
+            action = u.path[len("/api/guard/"):]
+            gid = parse_qs(u.query).get("gid", [""])[0]
+            if not gid:
+                try:
+                    body = self.rfile.read(
+                        int(self.headers.get("Content-Length", 0) or 0))
+                    gid = (json.loads(body) or {}).get("gid", "")
+                except (json.JSONDecodeError, ValueError):
+                    gid = ""
+            result = guard_action(gid, action)
+            self._json(result, 200 if result["ok"] else 409)
+            return
         if not self.path.startswith("/api/run/"):
             self._json({"error": "not found"}, 404)
             return
