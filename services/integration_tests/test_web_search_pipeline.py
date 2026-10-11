@@ -57,7 +57,7 @@ OWUI_BASE = "http://127.0.0.1:3000"
 SEARXNG_URL = "http://127.0.0.1:8081/search"
 LLAMA_BASE = "http://127.0.0.1:8080"
 OWUI_CONTAINER = os.environ.get("OPENWEBUI_CONTAINER", "open_webui_aios")
-PILOT_MODEL = "qwen-dsh-low"
+PILOT_MODEL = "qwen-dsh-medium"
 COMPOSE_FILE = os.path.join(AIOS_DIR, "services", "open-webui", "docker-compose.yml")
 FIX_TOOLING = os.path.join(AIOS_DIR, "services", "open-webui", "fix_tooling.py")
 

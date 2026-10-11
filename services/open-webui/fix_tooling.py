@@ -220,8 +220,14 @@ SEARCH_BEHAVIOR_BY_MODEL = {
 # /api/v1/models by patch_openai_model_names.py.
 # Contract: test_web_search_pipeline.py::test_model_display_names_are_short.
 MODEL_NAMES = {
-    "qwen-fast": "Fast Chat 128k",
-    "qwen-128k": "Deep Plan 192k",
+    # Selector-visible (2026-10-11 simplified surface — job-first names):
+    "qwen-dsh-medium": "Agent 192k",
+    "qwen-fast": "Fast 192k",
+    "qwen-deepdive": "Deep 192k",
+    "qwen-free": "Ideas 192k",
+    # Selector-hidden but API-alive:
+    "nano": "Nano Chat 32k",
+    "qwen-128k": "Legacy Plan 192k",
     "qwen-256k-batch": "Batch Only 256k",
     "qwen-think": "Think Mode 128k",
     "qwen-balanced": "Balanced 128k",
@@ -229,56 +235,47 @@ MODEL_NAMES = {
     "devstral-coding": "Devstral Code 64k",
     "qwen-dsh-fast": "Agentic Fast 128k",
     "qwen-dsh-low": "Agentic Best 128k",
-    "qwen-dsh-medium": "Agentic Mid 128k",
-    "qwen-deepdive": "Deep Dive 128k",
-    "qwen-free": "Free Think 128k",
-    "nano": "Nano Chat 32k",
 }
 
 # Aliases kept in MODEL_NAMES (API-usable rows) but hidden from the
 # interactive selector and ui.model_order_list.
-# qwen-256k-batch retired from the selector 2026-09-17: a misclick costs a
-# ~12 min 256k prefill plus eviction of the resident model under
-# --models-max 1. The router alias stays live for deliberate API use.
-SELECTOR_HIDDEN = {"qwen-256k-batch"}
+# 2026-10-11 alias cleanup: the 12-entry picker collapsed to 4 jobs.
+# All selector-visible presets now run the same 192k ceiling, which made
+# qwen-fast and qwen-128k the same underlying preset — merged under Fast.
+# The rest are dial points of the same weights (dsh-fast/low, think),
+# marginal quant tiers (balanced, quality), demoted (devstral), internal
+# (nano), or batch-only (256k) — all stay API-usable, none in the picker.
+SELECTOR_HIDDEN = {
+    "nano", "qwen-128k", "qwen-256k-batch", "qwen-think", "qwen-balanced",
+    "qwen-quality", "devstral-coding", "qwen-dsh-fast", "qwen-dsh-low",
+}
 
-# Canonical selector order (ui.model_order_list): everyday chat first,
-# then reasoning, long-context docs/planning, quality tiers, coding,
-# and agentic variants. Covers MODEL_NAMES minus SELECTOR_HIDDEN.
+# Canonical selector order (ui.model_order_list): the daily driver first,
+# then zero-reasoning chat, deliberate research, uncensored ideation.
+# Covers MODEL_NAMES minus SELECTOR_HIDDEN.
 MODEL_ORDER = [
-    "nano",
-    "qwen-fast",
-    "qwen-think",
-    "qwen-128k",
-    "qwen-balanced",
-    "qwen-quality",
-    "devstral-coding",
-    "qwen-dsh-fast",
     "qwen-dsh-medium",
-    "qwen-dsh-low",
+    "qwen-fast",
     "qwen-deepdive",
     "qwen-free",
-    # qwen-256k-batch intentionally absent: API-only alias (not in selector).
-    # A misclick costs a ~12 min 256k prefill plus eviction of the resident
-    # model under --models-max 1. Retired from the selector 2026-09-17.
 ]
 
 # Short use-case hints shown as selector subtitles / in Admin -> Models.
 # Kept canonical here so `apply-model-config` restores them.
 MODEL_DESCRIPTIONS = {
-    "qwen-fast": "Everyday chat and long documents — the fast default (128k ctx).",
-    "qwen-128k": "Big planning, roadmaps, and audits (192k ctx).",
+    "qwen-dsh-medium": "The daily driver — chat, code, tools; measured best carrier (192k).",
+    "qwen-fast": "Instant answers — no thinking, lowest latency (192k).",
+    "qwen-deepdive": "Deliberate research + host-change proposals (192k).",
+    "qwen-free": "Uncensored ideation — abliterated weights, same rigor loop (192k).",
+    "qwen-128k": "API fallback — same preset as Fast (192k ctx).",
     "qwen-256k-batch": "Bulk ingestion only — not interactive.",
-    "qwen-think": "Shows explicit step-by-step reasoning.",
-    "qwen-balanced": "Quality/VRAM balance for code and research.",
-    "qwen-quality": "Highest accuracy for high-stakes code (Q8_0).",
-    "devstral-coding": "Coding and command execution (Devstral 24B).",
-    "qwen-dsh-fast": "Agentic coding, no reasoning — fastest.",
-    "qwen-dsh-low": "Agentic coding, light reasoning — best output.",
-    "qwen-dsh-medium": "Agentic coding, medium reasoning — sandbox-armed.",
-    "qwen-deepdive": "Multi-source research: hypotheses, falsification, blindspots.",
-    "qwen-free": "Uncensored ideation — abliterated weights, same rigor loop.",
-    "nano": "Tiny 3B on a dedicated server — instant answers, no tools.",
+    "qwen-think": "API fallback — max reasoning effort.",
+    "qwen-balanced": "API fallback — Q6 quality tier.",
+    "qwen-quality": "API fallback — highest accuracy, Q8_0, 16k ctx.",
+    "devstral-coding": "API fallback — secondary coder, cleanest refuser.",
+    "qwen-dsh-fast": "API fallback — agentic, reasoning off.",
+    "qwen-dsh-low": "API fallback — agentic, light reasoning.",
+    "nano": "Internal sidecar — instant answers, no tools.",
 }
 
 # Completion cap per alias — keep in sync with `max_tokens` in
@@ -980,13 +977,19 @@ def main():
         else:
             print(f"model {target} already exists")
 
-    # qwen-256k-batch retired from the selector 2026-09-17: the alias stays
-    # live on the router for API/batch jobs, but the OWUI row is hidden so a
-    # misclick can't trigger a ~12 min 256k prefill + model eviction.
-    c.execute(
-        "UPDATE model SET is_active = 0, updated_at = ? WHERE id = 'qwen-256k-batch'",
-        (now(),),
-    )
+    # Selector visibility is canonical in SELECTOR_HIDDEN: hidden rows keep
+    # their router aliases alive for API/batch use but drop out of the OWUI
+    # picker; visible rows are re-activated so apply is self-healing.
+    for mid in SELECTOR_HIDDEN:
+        c.execute(
+            "UPDATE model SET is_active = 0, updated_at = ? WHERE id = ?",
+            (now(), mid),
+        )
+    for mid in MODEL_ORDER:
+        c.execute(
+            "UPDATE model SET is_active = 1, updated_at = ? WHERE id = ?",
+            (now(), mid),
+        )
 
     # 1. Update tool_server connection function_name_filter_list
     project_tools_conn = {
@@ -1283,8 +1286,14 @@ def main():
     canonical_config = {
         "task.model.default": "",
         "task.model.params": {"max_tokens": 1024},
+        "ui.default_models": "qwen-dsh-medium",
         "ui.default_pinned_models": MODEL_ORDER,
         "ui.model_order_list": MODEL_ORDER,
+        # Compaction was mashing chats at 12k tokens — ~9% of the 128k
+        # window, reachable in 2-3 tool-heavy turns, retaining only 40%.
+        # Trigger near the real 192k ceiling instead; the summary cap and
+        # retention are unchanged. (2026-10-11, "chat turns to mush" fix.)
+        "chat.context_compaction.token_threshold": 140000,
         "web.search.result_count": 5,
         "web.search.concurrent_requests": 3,
         "web.search.searxng_query_url": "http://127.0.0.1:8081/search?q=<query>",
