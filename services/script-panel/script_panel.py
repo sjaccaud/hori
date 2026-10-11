@@ -519,7 +519,8 @@ def load_proposals() -> list[dict]:
             continue
         entry = {k: meta.get(k) for k in
                  ("id", "status", "path", "created", "adds", "dels",
-                  "rationale", "verify", "guard_id", "judge", "origin")}
+                  "rationale", "verify", "guard_id", "judge", "origin",
+                  "fail_detail", "settled")}
         if meta.get("status") == "pending":
             try:
                 diff = (d / "diff.patch").read_text().splitlines()
@@ -938,7 +939,17 @@ async function load(){
            (p.judge?` · judge:${esc(p.judge.status)}`:'')+`</span></td>`+
            `<td><button class="act stop" onclick="pact('deny','${esc(p.id)}',this)">✗ dismiss</button></td></tr>`+
            `<tr><td colspan="3" class="dim" style="font-size:11px">${esc(p.rationale||'')}</td></tr>`)
-      +`</details>`:'');
+      +`</details>`:'')
+    // Settled failures stay visible — a failed approve used to drop the
+    // proposal out of the pending list with no trace of why.
+    +(function(){
+      const failed=(d.proposals||[]).filter(p=>p.status==='apply_failed');
+      return failed.length?`<details style="margin-top:6px"><summary class="dim" style="font-size:11px">failed applies ×${failed.length}</summary>`+
+        rows(failed,
+          p=>`<tr><td class="bad">${esc(p.id)}</td><td>${esc(p.path)}</td><td class="bad">apply_failed</td></tr>`+
+             `<tr><td colspan="3" class="dim" style="font-size:11px;white-space:pre-wrap">${esc(p.fail_detail||'(no detail recorded)')}</td></tr>`)+
+        `</details>`:'';
+    })();
   document.getElementById('guards').innerHTML=rows(d.guards_armed,
     g=>`<tr><td class="warn">${esc(g.unit)}</td><td class="dim">fires ${esc(g.fires)}</td>`+
        `<td><button class="act stop" onclick="gact('revert',gidOf('${esc(g.unit)}'),this)">↩ revert now</button></td></tr>`);
