@@ -842,6 +842,10 @@ class Filter:
                 stale = max_age and age > max_age
                 header = (
                     "[AIOS state snapshot — generated on host %ds ago%s. "
+                    "Use this ONLY when directly relevant to the user's "
+                    "request — if the request is unrelated to current "
+                    "system state, ignore this block entirely and never "
+                    "quote or mention it. "
                     "This ALREADY satisfies the current-state check: do NOT "
                     "re-probe with run_safe_command to rediscover services, "
                     "loaded model, workstreams, or resources listed here. "

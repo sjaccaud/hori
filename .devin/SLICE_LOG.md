@@ -5,6 +5,21 @@
 
 ## Current Slice
 
+### SLICE-21-AGENT-HARNESS-GRAFTS: port narrow harness techniques extracted from the shipped Devin/Windsurf binaries (REA study, llm-stack) into the local stack — prompt-layer only where the spine is near, measured A/B via the eval corpus.
+
+**Branch:** `slice/21-agent-harness-grafts` (off slice/20 HEAD)
+
+**Demo criterion:** `~/scripts/rig-agent-eval.py --tasks rig-agent-eval-tasks-coding.json` (20-task coding-duty suite) run pre/post graft on `qwen-dsh-medium` + `devstral-coding` shows a measurable delta; decide's untrusted-region change lands with adversarial tests green.
+
+**What it resolves:** the Devin binary prompt-stack extraction showed the flagship "feel" is substantially harness — compaction, env-health grounding, untrusted-region isolation, structured reports. This slice grafts the portable pieces onto the rig WITHOUT touching the safety doctrine (LLM proposes, architecture executes, fail-closed stays).
+
+**Changes (aios side):** (a) state-snapshot injection header gains the relevance clause — injected state is ignored when unrelated to the request (one line in the `TOOL_SERVER_FILTER` source in `services/open-webui/fix_tooling.py`); (b) `services/aios_decide/decide.py` wraps the untrusted TEXT in a per-request nonce-tagged region and states the data-not-instructions rule — closes the `"""`-delimited injection surface on the judge's input channel; (c) `services/open-webui/proposal_tools_server.py` judge gains a compound-condition question (every changed hunk must be safe, not just the diff overall). Non-aios side (~/scripts repo): band4 runner gains env-health + stand-alone-report contract in DEFAULT_SYSTEM, a repeated-failure grounding nudge, and trajectory compaction with a Devin-style `<summary>` template; new 20-task coding-duty eval suite.
+
+**Safety boundary:** decide.py is spine-adjacent (second-opinion judge input). Adversarial test in `tests/adversarial/` written FIRST per Pillar VII. The change hardens *input framing* — abstention, thresholds, and the never-gates-staging advisory role are untouched. Prompt grafts carry no permission doctrine — "finish first then approve" was explicitly NOT ported.
+
+**Status:** BUILD — band4 grafts + tests done in ~/scripts (15/15); baseline eval running; aios edits starting.
+
+
 ### SLICE-20-OWUI-CONTRACT-GUARDS: close out the three OWUI open items as deployment-contract assertions — no new behavior, just drift tripwires.
 
 **Branch:** `slice/20-owui-contract-guards` (off slice/19 HEAD)

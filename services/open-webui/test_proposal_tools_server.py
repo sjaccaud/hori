@@ -198,7 +198,7 @@ def _decide_stub(answers, request_id="req-1"):
     def post(payload):
         assert "DIFF:" in payload["text"]
         assert "RATIONALE:" in payload["text"]
-        assert len(payload["questions"]) == 3
+        assert len(payload["questions"]) == 4
         return {"request_id": request_id, "decisions": [
             {"id": qid, "type": "noul", "result": "answered",
              "probabilities": {chosen: 0.9},
@@ -234,6 +234,9 @@ class TestJudge:
           "risk": ("low", False)}, "scope=yes"),
         ({"fit": ("yes", False), "scope": ("no", False),
           "risk": ("high", False)}, "risk=high"),
+        ({"fit": ("yes", False), "scope": ("no", False),
+          "risk": ("low", False), "compound": ("no", False)},
+         "compound=no"),
     ])
     def test_flagged_verdicts(self, env, monkeypatch, answers, flag):
         _judge_on(monkeypatch, _decide_stub(answers))
