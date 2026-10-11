@@ -686,11 +686,28 @@ OPENAPI = {
     "openapi": "3.1.0",
     "info": {"title": "proposal-tools", "version": "1.0.0"},
     "paths": {
-        "/propose_host_change": {"post": {"operationId":
-                                          "propose_host_change"}},
-        "/list_proposals": {"post": {"operationId": "list_proposals"}},
-        "/proposal_status": {"post": {"operationId": "proposal_status"}},
-        "/retract_proposal": {"post": {"operationId": "retract_proposal"}},
+        "/" + spec["function"]["name"]: {
+            "post": {
+                "operationId": spec["function"]["name"],
+                "summary": spec["function"]["description"],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": spec["function"]["parameters"],
+                        },
+                    },
+                },
+                "responses": {
+                    "200": {
+                        "description": "Tool result",
+                        "content": {"application/json":
+                                    {"schema": {"type": "object"}}},
+                    }
+                },
+            },
+        }
+        for spec in TOOL_SPECS
     },
 }
 

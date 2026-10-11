@@ -354,3 +354,25 @@ class TestOrigin:
             "risk": ("low", False)}))
         r = _propose(env["target"], origin="eval")
         assert r["judge"]["status"] == "clean"  # measurement unaffected
+
+
+class TestOpenapiSpec:
+    """The /openapi.json doc is what OWUI fetches to build the model-visible
+    tool contracts — it must carry real parameter schemas, not bare
+    operationIds (a sparse spec shipped once and models had to guess args)."""
+
+    def test_every_tool_has_request_schema(self):
+        for spec in pts.TOOL_SPECS:
+            name = spec["function"]["name"]
+            path = pts.OPENAPI["paths"][f"/{name}"]["post"]
+            assert path["operationId"] == name
+            assert path["summary"]
+            schema = (path["requestBody"]["content"]
+                      ["application/json"]["schema"])
+            assert schema == spec["function"]["parameters"]
+
+    def test_propose_schema_includes_summary(self):
+        schema = (pts.OPENAPI["paths"]["/propose_host_change"]["post"]
+                  ["requestBody"]["content"]["application/json"]["schema"])
+        assert "summary" in schema["required"]
+        assert "summary" in schema["properties"]
