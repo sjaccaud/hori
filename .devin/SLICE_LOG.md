@@ -5,6 +5,18 @@
 
 ## Current Slice
 
+### SLICE-23-SANDBOX-EDIT-TOOL: `sandbox_edit` — exact-match search/replace edit primitive on :8774, the other half of the measured write-path gap (editing existing files still required `sed -i` quoting acrobatics).
+
+**Branch:** `slice/23-sandbox-edit-tool` (off rebrand/hori HEAD)
+
+**Demo criterion:** `sandbox_edit` replaces an exact `old` substring with `new` inside a scratch-confined path, refuses ambiguous matches (unless explicitly allowed), same mechanical confinement as `sandbox_write` (shared helper), adversarial suite green, eval surface wired, sbx-* re-run shows edit-related friction drop.
+
+**What it resolves:** sandbox_write (SLICE-22) covered file *creation*; real coding duty is mostly *editing*. `sed -i` inside sandbox_exec is the remaining friction — small models butcher sed quoting. Exact-match search/replace is the proven small-model edit format (aider's edit blocks, flagship apply-patch).
+
+**Safety boundary:** spine-adjacent — mutates band-2 surface files. Reuses the SLICE-22 confinement helper verbatim (resolve + is_relative_to + no `..`). Reads then writes inside the disposable root — nothing outside is reachable. deny.conf governs the host, not the sandbox. Adversarial tests FIRST per Pillar VII.
+
+**Status:** BUILD — tests first.
+
 ### SLICE-22-SANDBOX-WRITE-TOOL: close the measured sandbox-write gap — a `sandbox_write` tool on :8774 that writes text files inside the scratch root directly, replacing the `python3 -c` quoting gauntlet that was the dominant shared failure mode in the SLICE-21 A/B.
 
 **Branch:** `slice/22-sandbox-write-tool` (off rebrand/hori HEAD; merged back)
