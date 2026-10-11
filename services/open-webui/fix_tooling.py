@@ -138,7 +138,12 @@ DEEPDIVE_PROMPT = ((
     "Epistemic rules: extraordinary claims need proportionally strong sourcing; never present inference as established fact; "
     "distinguish 'documents show X' from 'X is true'; cite sources with [id]. "
     "Steelman hypotheses the user proposes instead of dismissing or endorsing them — your job is rigor, not debunking or validation.\n\n"
-    "For questions about {USER_NAME}'s projects, hardware, preferences, local files, or system status, use the local tools first."
+    "For questions about {USER_NAME}'s projects, hardware, preferences, local files, or system status, use the local tools first.\n\n"
+    "Session ritual: when a session changes real rig state — a service, config, "
+    "file, or deployment changed — offer ONCE to file an episode with "
+    "episode_append (thread, title, summary, files_touched, verified_by, "
+    "open_issues). One offer, no nagging; if the user declines or it's pure "
+    "Q&A, drop it."
 ) + TOOL_USAGE).format(USER_NAME=USER_NAME)
 
 # Uncensored ideation persona — runs on the abliterated Qwen3.8-27B weights.
@@ -549,6 +554,29 @@ def _hori_mcp_read_token() -> str:
         return ""
 
 
+def _hori_admin_token() -> str:
+    """Admin-scoped HORI MCP bearer for the episode-write connection.
+
+    The admin scope can call the write tools (episode_append,
+    memory_store); the read scope cannot. Sourced from the Devin MCP
+    client config at apply time — /etc/aios/secrets.env is root-only,
+    and the token must never be committed anyway. Returns '' when
+    unavailable; the row is written so a later apply can re-inject.
+    """
+    try:
+        import pathlib
+
+        cfg = json.loads(
+            (pathlib.Path.home() / ".config/devin/mcp_config.json").read_text()
+        )
+        auth = (cfg.get("mcpServers", {}).get("hori", {})
+                or cfg.get("servers", {}).get("hori", {}))
+        auth = auth["headers"]["Authorization"]
+        return auth.split(" ", 1)[1] if " " in auth else auth
+    except Exception:
+        return ""
+
+
 # Read-only HORI state tools (threads/episodes/memory) via native MCP on
 # aios_core: OWUI's streamablehttp client -> POST /mcp/http, read-scoped
 # bearer. Retired the mcpo -> :8775 filter OpenAPI bridge (2026-10-09).
@@ -575,6 +603,39 @@ HORI_STATE_CONNECTION = {
         "description": "Read-only rig/agent state: threads, episodes, memory",
     },
 }
+
+# Episode-write surface (2026-10-11): same native MCP endpoint, admin-scoped
+# bearer — the read token cannot invoke episode_append/memory_store. A
+# separate connection entry keeps the write surface gated per-model: only
+# EPISODE_MODELS get server:mcp:hori-episodes attached (see the filter's
+# episode_models valve). The write tools stay OFF every other model.
+EPISODE_MODELS = {"qwen-deepdive"}
+HORI_EPISODES_CONNECTION = {
+    "url": "http://127.0.0.1:5680/mcp/http",
+    "path": "",
+    "type": "mcp",
+    "auth_type": "bearer",
+    "headers": {},
+    "key": _hori_admin_token(),
+    "config": {
+        "enable": True,
+        "function_name_filter_list": "episode_append",
+    },
+    "spec_type": "url",
+    "info": {
+        "id": "hori-episodes",
+        "name": "HORI Episodes",
+        "description": "Write rig journal episodes (thread append-only)",
+    },
+}
+
+
+def episode_server_tool_ids_for(model_id: str) -> list[str]:
+    """Episode-write tool ids attached only to EPISODE_MODELS."""
+    if model_id in EPISODE_MODELS:
+        return ["server:mcp:hori-episodes"]
+    return []
+
 
 # Retired bridge URL — the row is stripped wherever it appears.
 HORI_STATE_RETIRED_URL = "http://127.0.0.1:8775"
@@ -704,6 +765,14 @@ class Filter:
             default="server:proposal-tools",
             description="Comma-separated 'server:<id>' tool_ids for proposal_models.",
         )
+        episode_models: str = Field(
+            default="qwen-deepdive",
+            description="Comma-separated model ids allowed to append episodes to the rig journal (HORI episode_append).",
+        )
+        episode_server_tool_ids: str = Field(
+            default="server:mcp:hori-episodes",
+            description="Comma-separated 'server:<id>' tool_ids for episode_models.",
+        )
         state_file: str = Field(
             default="/app/backend/data/aios-state-snapshot.md",
             description="Snapshot file injected as a system message into every allowed model request (written by aios-state-snapshot.timer on the host).",
@@ -801,6 +870,14 @@ class Filter:
             if model_id in proposal_models:
                 prop_ids = getattr(self.valves, "proposal_server_tool_ids", "") or ""
                 server_ids.update(t.strip() for t in prop_ids.split(",") if t.strip())
+            episode_models = {
+                m.strip()
+                for m in (getattr(self.valves, "episode_models", "") or "").split(",")
+                if m.strip()
+            }
+            if model_id in episode_models:
+                ep_ids = getattr(self.valves, "episode_server_tool_ids", "") or ""
+                server_ids.update(t.strip() for t in ep_ids.split(",") if t.strip())
             server_tool_ids = ",".join(sorted(server_ids))
 
             for tool_id in server_ids:
@@ -1017,16 +1094,20 @@ def main():
                  if conn.get('url', '') != HORI_STATE_RETIRED_URL
                  or (conn.get('info') or {}).get('id') == 'proposal-tools']
         # Ensure project-tools/workspace-tools/hori-state are present and
-        # local-tools is clean.
-        urls = {conn_cfg.get('url', '') for conn_cfg in conns}
+        # local-tools is clean. Presence is keyed on info.id, not URL —
+        # hori-state and hori-episodes share the MCP endpoint.
+        conn_ids = {
+            (conn_cfg.get('info') or {}).get('id') for conn_cfg in conns
+        }
         for tool_conn in (
             project_tools_conn,
             WORKSPACE_TOOLS_CONNECTION,
             SANDBOX_TOOLS_CONNECTION,
             PROPOSAL_TOOLS_CONNECTION,
             HORI_STATE_CONNECTION,
+            HORI_EPISODES_CONNECTION,
         ):
-            if tool_conn['url'] not in urls:
+            if (tool_conn.get('info') or {}).get('id') not in conn_ids:
                 conns.append(tool_conn)
         for conn_cfg in conns:
             url = conn_cfg.get('url', '')
@@ -1044,7 +1125,8 @@ def main():
                 conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info']['id'] = 'project-tools'
                 conn_cfg['info']['name'] = 'Project Tools'
-            elif url == HORI_STATE_CONNECTION['url']:
+            elif url == HORI_STATE_CONNECTION['url'] and \
+                    (conn_cfg.get('info') or {}).get('id') == 'hori-state':
                 # Native-MCP row: normalize type/auth/token each apply so
                 # token rotation propagates from the host config.
                 conn_cfg['type'] = 'mcp'
@@ -1056,8 +1138,21 @@ def main():
                 conn_cfg['config']['function_name_filter_list'] = (
                     HORI_STATE_CONNECTION['config']['function_name_filter_list']
                 )
-                conn_cfg['info'] = conn_cfg.get('info', {})
                 conn_cfg['info'].update(HORI_STATE_CONNECTION['info'])
+            elif url == HORI_EPISODES_CONNECTION['url'] and \
+                    (conn_cfg.get('info') or {}).get('id') == 'hori-episodes':
+                # The episode-write sibling row: same endpoint, admin
+                # bearer — normalize identically (rotation propagates).
+                conn_cfg['type'] = 'mcp'
+                conn_cfg['auth_type'] = 'bearer'
+                if HORI_EPISODES_CONNECTION['key']:
+                    conn_cfg['key'] = HORI_EPISODES_CONNECTION['key']
+                conn_cfg['config'] = conn_cfg.get('config', {})
+                conn_cfg['config']['enable'] = True
+                conn_cfg['config']['function_name_filter_list'] = (
+                    HORI_EPISODES_CONNECTION['config']['function_name_filter_list']
+                )
+                conn_cfg['info'].update(HORI_EPISODES_CONNECTION['info'])
             elif url == WORKSPACE_TOOLS_CONNECTION['url']:
                 conn_cfg['config'] = conn_cfg.get('config', {})
                 conn_cfg['config']['enable'] = True
@@ -1115,6 +1210,7 @@ def main():
                         SANDBOX_TOOLS_CONNECTION,
                         PROPOSAL_TOOLS_CONNECTION,
                         HORI_STATE_CONNECTION,
+                        HORI_EPISODES_CONNECTION,
                     ],
                     ensure_ascii=False,
                 ),
@@ -1215,6 +1311,8 @@ def main():
                     "sandbox_server_tool_ids": "server:sandbox-tools",
                     "proposal_models": ",".join(sorted(PROPOSAL_MODELS)),
                     "proposal_server_tool_ids": "server:proposal-tools",
+                    "episode_models": ",".join(sorted(EPISODE_MODELS)),
+                    "episode_server_tool_ids": "server:mcp:hori-episodes",
                 },
                 ensure_ascii=False,
             ),
