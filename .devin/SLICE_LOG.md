@@ -7,7 +7,7 @@
 
 ### SLICE-22-SANDBOX-WRITE-TOOL: close the measured sandbox-write gap — a `sandbox_write` tool on :8774 that writes text files inside the scratch root directly, replacing the `python3 -c` quoting gauntlet that was the dominant shared failure mode in the SLICE-21 A/B.
 
-**Branch:** `slice/22-sandbox-write-tool` (off rebrand/hori HEAD)
+**Branch:** `slice/22-sandbox-write-tool` (off rebrand/hori HEAD; merged back)
 
 **Demo criterion:** `sandbox_write` accepts relative + `/sbx/`-prefixed paths, refuses traversal/symlink-escape/oversize/non-string-content (adversarial suite green), lands on the eval surface, and re-running the `sbx-*` tasks on `qwen-dsh-medium` + `devstral-coding` shows the write-friction failures drop.
 
@@ -15,7 +15,12 @@
 
 **Safety boundary:** spine-adjacent — new write primitive on the band-2 surface. Confinement is mechanical: path resolves under `SCRATCH` (`resolve()` + `is_relative_to`), `..` rejected outright, absolute paths outside root rejected, symlinks followed by resolve() so escapes fail closed. Same disposable-root trust zone as `sandbox_exec` — deny.conf governs the host, not the sandbox. Adversarial tests FIRST per Pillar VII.
 
-**Status:** BUILD — tests being written first.
+**Status:** DONE — implemented, adversarial-first (16 cases: traversal, absolute-outside, `/sbx`-root, symlink escape, in-sandbox symlink, oversize, non-string content, audit-on-accept+reject), 46/46 sandbox+adversarial green, deployed (service restarted, live-verified: relative+`/sbx/` writes land, `../` refused, audit JSONL records both). Eval surface wired in ~/scripts (`dd46282`) — route + spec + 9 task systems updated.
+
+- **A/B on the 9 sandbox-surface tasks:** `qwen-dsh-medium` 9/9 → 6/9 → **8/9** post-tool (within its variance band); `devstral-coding` 5/9 → 4/9 → **7/9** post-tool — its best run yet, consistent with write-path being its capitulation trigger. `sbx-write-and-run` now PASSes in 3 calls/7s on both models (was the python3-c quoting gauntlet).
+- **Residual failure shape (dshm):** `sbx-two-file-bug` failed twice — correct diagnosis, fix not landed/verified. That's a verify-before-done discipline gap, not write friction.
+- **Surface leak noted:** `read_file` on the eval surface let one model read fixture files via the host path instead of cloning — band-1 read-only, intentional, but it means fixture-task diagnosis can bypass sandbox work.
+- n=1 post-tool run per model — repeat runs will firm the devstral delta.
 
 ### SLICE-21-AGENT-HARNESS-GRAFTS: port narrow harness techniques extracted from the shipped Devin/Windsurf binaries (REA study, llm-stack) into the local stack — prompt-layer only where the spine is near, measured A/B via the eval corpus.
 
