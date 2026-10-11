@@ -271,10 +271,10 @@ MODEL_ORDER = [
 # Short use-case hints shown as selector subtitles / in Admin -> Models.
 # Kept canonical here so `apply-model-config` restores them.
 MODEL_DESCRIPTIONS = {
-    "qwen-dsh-medium": "The daily driver — chat, code, tools; measured best carrier (192k).",
-    "qwen-fast": "Instant answers — no thinking, lowest latency (192k).",
-    "qwen-deepdive": "Deliberate research + host-change proposals (192k).",
-    "qwen-free": "Uncensored ideation — abliterated weights, same rigor loop (192k).",
+    "qwen-dsh-medium": "The daily driver — chat, code, tools; voice mode + video transcripts (192k).",
+    "qwen-fast": "Instant answers — no thinking, lowest latency; reads video links (192k).",
+    "qwen-deepdive": "Deliberate research + proposals — reads videos, verifies claims, files episodes (192k).",
+    "qwen-free": "Uncensored ideation — voice mode, video transcripts, verifies claims (192k).",
     "qwen-128k": "API fallback — same preset as Fast (192k ctx).",
     "qwen-256k-batch": "Bulk ingestion only — not interactive.",
     "qwen-think": "API fallback — max reasoning effort.",
