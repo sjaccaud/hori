@@ -343,14 +343,30 @@ _GLOB_CHARS_RE = re.compile(r"[*?\[\]]")
 _GLOB_EXPANSION_LIMIT = 256
 
 
+def _expand_tilde_arg(arg: str) -> str:
+    """Expand a leading ~ (~/x, ~user/x) or a flag value (=~/x). Exec is
+    shell-free, so without this a literal '~' reaches the process and the
+    model sees a phantom 'No such file or directory' — read_file already
+    expands via Path.expanduser(); this keeps the two tools consistent.
+    Validation and deny checks run after this, on the canonical path."""
+    if arg.startswith("~"):
+        return os.path.expanduser(arg)
+    if arg.startswith("-") and "=~" in arg:
+        key, _, value = arg.partition("=")
+        return f"{key}={os.path.expanduser(value)}"
+    return arg
+
+
 def _expand_glob_args(argv: list[str]) -> tuple[list[str] | None, str]:
     """Expand args containing glob metachars (* ? [ ]) against the filesystem.
 
     Shell-free expansion; unmatched patterns return an error so the caller can
-    adapt instead of the command failing on a literal '*'.
+    adapt instead of the command failing on a literal '*'. Tilde args are
+    expanded first so the glob sees the canonical path.
     """
     out: list[str] = []
     for arg in argv:
+        arg = _expand_tilde_arg(arg)
         if _GLOB_CHARS_RE.search(arg):
             pattern = arg if os.path.isabs(arg) else str(COMMAND_CWD / arg)
             matches = sorted(glob.glob(pattern))
