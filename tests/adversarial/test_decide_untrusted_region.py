@@ -39,8 +39,6 @@ SLICE-21 graft of the shipped-artifact nonce-region pattern.
 
 import re
 
-import pytest
-
 from services.aios_decide.decide import (
     Question,
     build_prefix,
